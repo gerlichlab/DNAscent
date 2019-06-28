@@ -1,0 +1,16 @@
+#object files and binaries
+bin/DNAscent
+*.o
+
+#directories we don't want to track
+build/
+examples/
+
+#backups
+.*swp
+.*swo
+.*swm
+
+#libraries
+hdf5-1.8.14/
+hdf5-1.8.14.tar.gz
