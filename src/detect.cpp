@@ -548,6 +548,7 @@ void parseIndex( std::string indexFilename, std::map< std::string, std::string >
 
 void countRecords( htsFile *bam_fh, hts_idx_t *bam_idx, bam_hdr_t *bam_hdr, int &numOfRecords, int minQ, int minL ){
 
+	std::cout << "Scanning bam file...";
 	hts_itr_t* itr = sam_itr_querys(bam_idx,bam_hdr,".");
 	int result;
 
@@ -560,6 +561,7 @@ void countRecords( htsFile *bam_fh, hts_idx_t *bam_idx, bam_hdr_t *bam_hdr, int 
 
 	//cleanup
 	sam_itr_destroy(itr);
+	std::cout << "ok." << std::endl;
 }
 
 
@@ -567,7 +569,7 @@ std::vector< unsigned int > getPOIs( std::string &refSeq, std::map< std::string,
 
 	std::vector< unsigned int > POIs;
 
-	for ( unsigned int i = windowLength; i < refSeq.length() - 2*windowLength; i++ ){
+	for ( unsigned int i = 2*windowLength; i < refSeq.length() - 2*windowLength; i++ ){
 
 		if ( analogueModel.count( refSeq.substr(i, 6) ) > 0 ) POIs.push_back(i);
 	}
@@ -581,15 +583,20 @@ void llAcrossRead( read &r, unsigned int windowLength, std::map< std::string, st
 	std::vector< unsigned int > POIs = getPOIs( r.referenceSeqMappedTo, analogueModel, windowLength );
 
 	std::string strand;
+	unsigned int readHead;
 	if ( r.isReverse ){
 
 		strand = "rev";
+		readHead = (r.eventAlignment).size() - 1;
 		std::reverse( POIs.begin(), POIs.end() );
 	}
-	else strand = "fwd";
+	else{
+		
+		strand = "fwd";
+		readHead = 0;
+	}
 
 	ss << ">" << r.readID << " " << r.referenceMappedTo << " " << r.refStart << " " << r.refEnd << " " << strand << std::endl;
-
 
 	for ( unsigned int i = 0; i < POIs.size(); i++ ){
 
@@ -635,57 +642,100 @@ void llAcrossRead( read &r, unsigned int windowLength, std::map< std::string, st
 		if ( spanOnQuery > 2.5*windowLength or spanOnQuery < 1.5*windowLength ) continue;
 
 		/*get the events that correspond to the read snippet */
-		//double alignmentScore = 0.0;
-		for ( unsigned int j = 0; j < (r.eventAlignment).size(); j++ ){
+		bool first = true;
+		if ( r.isReverse ){
 
-			/*if an event has been aligned to a position in the window, add it */
-			if ( (r.eventAlignment)[j].second >= (r.refToQuery)[posOnRef - windowLength] and (r.eventAlignment)[j].second < (r.refToQuery)[posOnRef + windowLength - 5] ){
+			for ( unsigned int j = readHead; j >= 0; j-- ){
 
-				eventSnippet.push_back( (r.normalisedEvents)[(r.eventAlignment)[j].first] );
+				/*if an event has been aligned to a position in the window, add it */
+				if ( (r.eventAlignment)[j].second >= (r.refToQuery)[posOnRef - windowLength] and (r.eventAlignment)[j].second < (r.refToQuery)[posOnRef + windowLength - 5] ){
 
-				//alignmentScore += r.posToScore[j];
+					if (first){
+						readHead = j;
+						first = false;
+						//std::cout << "READHEAD:" << j << " " << readHead << std::endl;
+					}
 
-				//TESTING - print the event snippet
-				//double ev = (r.normalisedEvents)[(r.eventAlignment)[j].first];
-				//std::cout << (ev - r.scalings.shift) / r.scalings.scale << std::endl;
-				//END TESTING
+					eventSnippet.push_back( (r.normalisedEvents)[(r.eventAlignment)[j].first] );
+					//std::cout << "snippet size: " << eventSnippet.size() << std::endl;
+
+					//TESTING - print the event snippet
+					//std::cout << j << " " << (r.eventAlignment)[j].first << " " << (r.eventAlignment)[j].second << std::endl;
+					//double ev = (r.normalisedEvents)[(r.eventAlignment)[j].first];
+					//std::cout << (ev - r.scalings.shift) / r.scalings.scale << std::endl;
+					//END TESTING
+				}
+
+				/*stop once we get to the end of the window */
+				if ( (r.eventAlignment)[j].second < (r.refToQuery)[posOnRef - windowLength] ){
+
+					break;
+					std::reverse(eventSnippet.begin(), eventSnippet.end());
+				}
 			}
-
-			/*stop once we get to the end of the window */
-			if ( (r.eventAlignment)[j].second > (r.refToQuery)[posOnRef + windowLength] ) break;
 		}
-		//alignmentScore /= eventSnippet.size();
+		else{
+			for ( unsigned int j = readHead; j < (r.eventAlignment).size(); j++ ){
+
+				/*if an event has been aligned to a position in the window, add it */
+				if ( (r.eventAlignment)[j].second >= (r.refToQuery)[posOnRef - windowLength] and (r.eventAlignment)[j].second < (r.refToQuery)[posOnRef + windowLength - 5] ){
+
+					if (first){
+						readHead = j;
+						first = false;
+						//std::cout << "READHEAD:" << j << " " << readHead << std::endl;
+					}
+
+					eventSnippet.push_back( (r.normalisedEvents)[(r.eventAlignment)[j].first] );
+					//std::cout << "snippet size: " << eventSnippet.size() << std::endl;
+
+					//TESTING - print the event snippet
+					//std::cout << j << " " << (r.eventAlignment)[j].first << " " << (r.eventAlignment)[j].second << std::endl;
+					//double ev = (r.normalisedEvents)[(r.eventAlignment)[j].first];
+					//std::cout << (ev - r.scalings.shift) / r.scalings.scale << std::endl;
+					//END TESTING
+				}
+
+				/*stop once we get to the end of the window */
+				if ( (r.eventAlignment)[j].second >= (r.refToQuery)[posOnRef + windowLength - 5] ) break;
+			}
+		}
 
 		//catch abnormally few or many events
 		if ( eventSnippet.size() > 8*windowLength or eventSnippet.size() < windowLength ) continue;
-
+	
 		//figure out where the T's are
 		//std::cout << ">--------------" << std::endl;
 		std::string sixOI = (r.referenceSeqMappedTo).substr(posOnRef,6);
 		//std::cout << sixOI << std::endl;
 		std::vector<double> BrdUscores;
-		for ( unsigned int j = 0; j < sixOI.length(); j++ ){
+		double logProbAnalogue = sequenceProbability( eventSnippet, readSnippet, windowLength, true, analogueModel, r.scalings, windowLength );
+		//for ( unsigned int j = 0; j < sixOI.length(); j++ ){
 
-			if ( sixOI.substr(j,1) == "T" ){
+		//	if ( sixOI.substr(j,1) == "T" ){
 			
-				double logProbAnalogue = sequenceProbability( eventSnippet, readSnippet, windowLength, true, analogueModel, r.scalings, j+windowLength );
-				BrdUscores.push_back(logProbAnalogue);
+				//double logProbAnalogue = sequenceProbability( eventSnippet, readSnippet, windowLength, true, analogueModel, r.scalings, j+windowLength );
+		//		BrdUscores.push_back(logProbAnalogue);
 				//std::cout << logProbAnalogue << std::endl;
-			}
-		}
+		//	}
+		//}
 
-		double BrdUmax = BrdUscores[0];
-		for ( unsigned int j = 1; j < BrdUscores.size(); j++ ){
+		double BrdUmax = logProbAnalogue;//BrdUscores[0];
+		//for ( unsigned int j = 1; j < BrdUscores.size(); j++ ){
 
-			if (BrdUscores[j] > BrdUmax) BrdUmax = BrdUscores[j];
-		}
+		//	if (BrdUscores[j] > BrdUmax) BrdUmax = BrdUscores[j];
+		//}
+
+
+
 		//std::cout << "max: " << BrdUmax << std::endl;
-		double old = sequenceProbability_old( eventSnippet, readSnippet, windowLength, true, analogueModel, r.scalings );
+		//double old = sequenceProbability_old( eventSnippet, readSnippet, windowLength, true, analogueModel, r.scalings );
 		//std::cout << "BrdU old calc: " << old << std::endl;
 		//double logProbAnalogue = sequenceProbability( eventSnippet, readSnippet, windowLength, true, analogueModel, r.scalings );
 		double logProbThymidine = sequenceProbability( eventSnippet, readSnippet, windowLength, false, analogueModel, r.scalings, 0 );
 		//std::cout << "thym: " << logProbThymidine << std::endl;
 		double logLikelihoodRatio = BrdUmax - logProbThymidine;
+		//std::cout << logLikelihoodRatio << std::endl;
 		//double logLikelihoodRatio = logProbAnalogue - logProbThymidine;
 
 		//calculate where we are on the assembly - if we're a reverse complement, we're moving backwards down the reference genome
