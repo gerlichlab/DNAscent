@@ -493,13 +493,13 @@ int annotate_main( int argc, char** argv ){
 				{
 					outFile << ss.rdbuf();
 					prog++;
-					pb.displayProgress( prog, failed );
+					pb.displayProgress( prog, failed, 0 );
 				}
 			}
 			for ( unsigned int i = 0; i < buffer.size(); i++ ) bam_destroy1(buffer[i]);
 			buffer.clear();
 		}
-		pb.displayProgress( prog, failed );	
+		pb.displayProgress( prog, failed, 0 );	
 	} while (result > 0);
 	sam_itr_destroy(itr);
 	std::cout << std::endl;

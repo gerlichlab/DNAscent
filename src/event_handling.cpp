@@ -53,6 +53,7 @@ void bulk_getEvents( std::string fast5Filename, std::string readID, std::vector<
 
 	//open the file
 	hid_t hdf5_file = H5Fopen(fast5Filename.c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
+	if (hdf5_file < 0) throw IOerror(fast5Filename.c_str());
 
 	//get the channel parameters
 	std::string scaling_path = "/read_" + readID + "/channel_id";
@@ -98,6 +99,7 @@ void getEvents( std::string fast5Filename, std::vector<double> &raw ){
 
 	//open the file
 	hid_t hdf5_file = H5Fopen(fast5Filename.c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
+	if (hdf5_file < 0) throw IOerror(fast5Filename.c_str());
 
 	//get the channel parameters
 	const char *scaling_path = "/UniqueGlobalKey/channel_id";
@@ -679,7 +681,7 @@ void normaliseEvents( read &r ){
 
 	for ( unsigned int i = 0; i < et.n; i++ ){
 
-		events_mu.push_back( et.event[i].mean );
+		if (et.event[i].mean > 0) events_mu.push_back( et.event[i].mean );
 	}
 	r.normalisedEvents = events_mu;
 	free(et.event);

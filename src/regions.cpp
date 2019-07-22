@@ -316,7 +316,7 @@ int regions_main( int argc, char** argv ){
 			if ( line.substr(0,1) == ">" ){
 
 				progress++;
-				pb.displayProgress( progress, 0 );
+				pb.displayProgress( progress, 0, 0 );
 				continue;
 			}
 
@@ -379,7 +379,7 @@ int regions_main( int argc, char** argv ){
 		if ( line.substr(0,1) == ">" ){
 
 			progress++;
-			pb.displayProgress( progress, 0 );
+			pb.displayProgress( progress, 0, 0 );
 
 			if ( buffer.size() > 5 and args.callReplication ){
 

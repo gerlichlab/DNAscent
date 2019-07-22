@@ -40,7 +40,7 @@ class progressBar{
 			_startTime = std::chrono::steady_clock::now();
 			_withFail = withFail;
 		}
-		void displayProgress( unsigned int currentNumber, unsigned int failed ){
+		void displayProgress( unsigned int currentNumber, unsigned int failed, int failedEvents ){
 
 			_currentTime = std::chrono::steady_clock::now();
 			 std::chrono::duration<double> elapsedTime = _currentTime - _startTime;
@@ -69,7 +69,8 @@ class progressBar{
 				if (_withFail){
 
 					std::cout << std::right << std::setw(2) << hours << "hr" << std::setw(2) << mins << "min" << std::setw(2) << secs << "sec  ";
-					std::cout << "f: " << std::right << std::setw(_digits) << failed << std::setw(3) << "\r";
+					std::cout << "fr: " << std::right << std::setw(_digits) << failed << std::setw(3);
+					std::cout << "  fe: " << std::right << std::setw(_digits) << failedEvents << std::setw(3) << "\r";
 				}
 				else{
 

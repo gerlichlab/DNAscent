@@ -260,7 +260,7 @@ int index_main( int argc, char** argv ){
 
 			outFile << idpair->first << "\t" << fast52fullpath.at(idpair->second) << std::endl;
 			progress++;
-			pb.displayProgress( progress, 0 );
+			pb.displayProgress( progress, 0, 0 );
 		}
 	}
 	else{ //otherwise we're going to have to brute force open each fast5 file and pull out the readID
@@ -274,6 +274,7 @@ int index_main( int argc, char** argv ){
 			std::string path = pathpair -> second;
 
 			hid_t hdf5_file = H5Fopen(path.c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
+			if (hdf5_file < 0) throw IOerror(path.c_str());
 			std::vector<std::string> readIDs = fast5_get_multi_read_groups(hdf5_file);
 		
 			std::string prefix = "read_";
@@ -285,7 +286,7 @@ int index_main( int argc, char** argv ){
 			}
 		
 			progress++;
-			pb.displayProgress( progress, 0 );
+			pb.displayProgress( progress, 0, 0 );
 		}
 	}
 	outFile.close();
