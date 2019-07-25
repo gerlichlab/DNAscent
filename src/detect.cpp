@@ -157,132 +157,6 @@ static double externalI2M1 = 0.999;
 static double externalM12D = 0.0025;
 static double externalM12M1 = 0.5965;
 
-double sequenceProbability_old( std::vector <double> &observations, std::string &sequence, size_t windowSize, bool useBrdU, std::map< std::string, std::pair< double, double > > &analogueModel, PoreParameters scalings ){
-
-	std::vector< double > I_curr(2*windowSize-5, NAN), D_curr(2*windowSize-5, NAN), M_curr(2*windowSize-5, NAN), I_prev(2*windowSize-5, NAN), D_prev(2*windowSize-5, NAN), M_prev(2*windowSize-5, NAN);
-	double firstI_curr = NAN, firstI_prev = NAN;
-	double start_curr = NAN, start_prev = 0.0;
-
-	double matchProb, insProb;
-
-	/*-----------INITIALISATION----------- */
-	//transitions from the start state
-	D_prev[0] = lnProd( start_prev, eln( 0.25 ) );
-
-	//account for transitions between deletion states before we emit the first observation
-	for ( unsigned int i = 1; i < D_prev.size(); i++ ){
-
-		D_prev[i] = lnProd( D_prev[i-1], eln ( externalD2D ) );
-	}
-
-
-	/*-----------RECURSION----------- */
-	/*complexity is O(T*N^2) where T is the number of observations and N is the number of states */
-	double level_mu, level_sigma;
-	for ( unsigned int t = 0; t < observations.size(); t++ ){
-
-		std::fill( I_curr.begin(), I_curr.end(), NAN );
-		std::fill( M_curr.begin(), M_curr.end(), NAN );
-		std::fill( D_curr.begin(), D_curr.end(), NAN );
-		firstI_curr = NAN;
-
-		std::string sixMer = sequence.substr(0, 6);
-
-		level_mu = scalings.shift + scalings.scale * SixMer_model.at(sixMer).first;
-		level_sigma = scalings.var * SixMer_model.at(sixMer).second;
-		//level_sigma = SixMer_model.at(sixMer).second;
-
-		//uncomment to scale events
-		//level_mu = SixMer_model.at(sixMer).first;
-		//level_sigma = scalings.var / scalings.scale * SixMer_model.at(sixMer).second;
-		//observations[t] = (observations[t] - scalings.shift) / scalings.scale;
-
-		matchProb = eln( normalPDF( level_mu, level_sigma, observations[t] ) );
-		//insProb = eln( uniformPDF( 50, 150, observations[t] ) );
-		insProb = eln( uniformPDF( 0, 250, observations[t] ) );
-
-		//first insertion
-		firstI_curr = lnSum( firstI_curr, lnProd( lnProd( start_prev, eln( 0.25 ) ), insProb ) ); //start to first I
-		firstI_curr = lnSum( firstI_curr, lnProd( lnProd( firstI_prev, eln( 0.25 ) ), insProb ) ); //first I to first I
-
-		//to the base 1 insertion
-		I_curr[0] = lnSum( I_curr[0], lnProd( lnProd( I_prev[0], eln( internalI2I ) ), insProb ) );  //I to I
-		I_curr[0] = lnSum( I_curr[0], lnProd( lnProd( M_prev[0], eln( internalM12I ) ), insProb ) ); //M to I 
-
-		//to the base 1 match
-		M_curr[0] = lnSum( M_curr[0], lnProd( lnProd( firstI_prev, eln( 0.5 ) ), matchProb ) ); //first I to first match
-		M_curr[0] = lnSum( M_curr[0], lnProd( lnProd( M_prev[0], eln( internalM12M1 ) ), matchProb ) );  //M to M
-		M_curr[0] = lnSum( M_curr[0], lnProd( lnProd( start_prev, eln( 0.5 ) ), matchProb ) );  //start to M
-
-		//to the base 1 deletion
-		D_curr[0] = lnSum( D_curr[0], lnProd( NAN, eln( 0.25 ) ) );  //start to D
-		D_curr[0] = lnSum( D_curr[0], lnProd( firstI_curr, eln( 0.25 ) ) ); //first I to first deletion
-
-		//the rest of the sequence
-		for ( unsigned int i = 1; i < I_curr.size(); i++ ){
-
-			//get model parameters
-			sixMer = sequence.substr(i, 6);
-			insProb = eln( uniformPDF( 0, 250, observations[t] ) );
-			if ( useBrdU and i == windowSize ){
-
-				level_mu = scalings.shift + scalings.scale * analogueModel.at(sixMer).first;
-				level_sigma = scalings.var * analogueModel.at(sixMer).second;
-
-				//uncomment if you scale events
-				//level_mu = analogueModel.at(sixMer).first;
-				//level_sigma = scalings.var / scalings.scale * analogueModel.at(sixMer).second;
-
-				matchProb = eln( normalPDF( level_mu, level_sigma, observations[t] ) );
-			}
-			else{
-
-				level_mu = scalings.shift + scalings.scale * SixMer_model.at(sixMer).first;
-				level_sigma = scalings.var * SixMer_model.at(sixMer).second;
-
-				//uncomment if you scale events				
-				//level_mu = SixMer_model.at(sixMer).first;
-				//level_sigma = scalings.var / scalings.scale * SixMer_model.at(sixMer).second;
-
-				matchProb = eln( normalPDF( level_mu, level_sigma, observations[t] ) );
-			}
-
-			//to the insertion
-			I_curr[i] = lnSum( I_curr[i], lnProd( lnProd( I_prev[i], eln( internalI2I ) ), insProb ) );  //I to I
-			I_curr[i] = lnSum( I_curr[i], lnProd( lnProd( M_prev[i], eln( internalM12I ) ), insProb ) ); //M to I 
-
-			//to the match
-			M_curr[i] = lnSum( M_curr[i], lnProd( lnProd( I_prev[i-1], eln( externalI2M1 ) ), matchProb ) );  //external I to M
-			M_curr[i] = lnSum( M_curr[i], lnProd( lnProd( M_prev[i-1], eln( externalM12M1 ) ), matchProb ) );  //external M to M
-			M_curr[i] = lnSum( M_curr[i], lnProd( lnProd( M_prev[i], eln( internalM12M1 ) ), matchProb ) );  //interal M to M
-			M_curr[i] = lnSum( M_curr[i], lnProd( lnProd( D_prev[i-1], eln( externalD2M1 ) ), matchProb ) );  //external D to M
-		}
-
-		for ( unsigned int i = 1; i < I_curr.size(); i++ ){
-
-			//to the deletion
-			D_curr[i] = lnSum( D_curr[i], lnProd( M_curr[i-1], eln( externalM12D ) ) );  //external M to D
-			D_curr[i] = lnSum( D_curr[i], lnProd( D_curr[i-1], eln( externalD2D ) ) );  //external D to D
-		}
-		
-		I_prev = I_curr;
-		M_prev = M_curr;
-		D_prev = D_curr;
-		firstI_prev = firstI_curr;
-		start_prev = start_curr;
-	}
-
-
-	/*-----------TERMINATION----------- */
-	double forwardProb = NAN;
-
-	forwardProb = lnSum( forwardProb, lnProd( D_curr.back(), eln( 1.0 ) ) ); //D to end
-	forwardProb = lnSum( forwardProb, lnProd( M_curr.back(), eln( externalM12M1 + externalM12D ) ) ); //M to end
-	forwardProb = lnSum( forwardProb, lnProd( I_curr.back(), eln( externalI2M1 ) ) ); //I to end
-
-	return forwardProb;
-}
-
 double sequenceProbability( std::vector <double> &observations,
 				std::string &sequence, 
 				size_t windowSize, 
@@ -634,24 +508,22 @@ std::vector< unsigned int > getPOIs( std::string &refSeq, std::map< std::string,
 }
 
 
+
+
+
+
 void llAcrossRead( read &r, unsigned int windowLength, std::map< std::string, std::pair< double, double > > &analogueModel, std::stringstream &ss, int &failedEvents ){
 
 	//get the positions on the reference subsequence where we could attempt to make a call
 	std::vector< unsigned int > POIs = getPOIs( r.referenceSeqMappedTo, analogueModel, windowLength );
 
 	std::string strand;
-	unsigned int readHead;
 	if ( r.isReverse ){
 
 		strand = "rev";
-		readHead = (r.eventAlignment).size() - 1;
 		std::reverse( POIs.begin(), POIs.end() );
 	}
-	else{
-		
-		strand = "fwd";
-		readHead = 0;
-	}
+	else strand = "fwd";
 
 	ss << ">" << r.readID << " " << r.referenceMappedTo << " " << r.refStart << " " << r.refEnd << " " << strand << std::endl;
 
@@ -663,18 +535,12 @@ void llAcrossRead( read &r, unsigned int windowLength, std::map< std::string, st
 		std::string readSnippet = (r.referenceSeqMappedTo).substr(posOnRef - windowLength, 2*windowLength);
 
 		//TESTING - print out the read snippet and the event and the ONT model
-		/*
-		std::cout << "ref start: " << r.refStart << std::endl;
-		std::cout << "ref end: " << r.refEnd << std::endl;
-		std::cout << "position on ref: " << posOnRef << std::endl;
-		std::cout << "strand: " << strand << std::endl;
-		extern std::map< std::string, std::pair< double, double > > SixMer_model;
-		std::cout << readSnippet << std::endl;
-		for ( int pos = 0; pos < readSnippet.length()-5; pos++ ){
+		//extern std::map< std::string, std::pair< double, double > > SixMer_model;
+		//std::cout << readSnippet << std::endl;
+		//for ( int pos = 0; pos < readSnippet.length()-5; pos++ ){
 		
-			std::cout << readSnippet.substr(pos,6) << "\t" << SixMer_model.at( readSnippet.substr(pos,6) ).first << std::endl;
-		}
-		*/
+		//	std::cout << readSnippet.substr(pos,6) << "\t" << SixMer_model.at( readSnippet.substr(pos,6) ).first << std::endl;
+		//}
 		//END TESTING
 
 		//make sure the read snippet is fully defined as A/T/G/C in reference
@@ -705,109 +571,29 @@ void llAcrossRead( read &r, unsigned int windowLength, std::map< std::string, st
 		if ( spanOnQuery > 2.5*windowLength or spanOnQuery < 1.5*windowLength ) continue;
 
 		/*get the events that correspond to the read snippet */
-		bool first = true;
-		if ( r.isReverse ){
+		for ( unsigned int j = 0; j < (r.eventAlignment).size(); j++ ){
 
-			for ( unsigned int j = readHead; j >= 0; j-- ){
+			/*if an event has been aligned to a position in the window, add it */
+			if ( (r.eventAlignment)[j].second >= (r.refToQuery)[posOnRef - windowLength] and (r.eventAlignment)[j].second < (r.refToQuery)[posOnRef + windowLength - 5] ){
 
-				/*if an event has been aligned to a position in the window, add it */
-				if ( (r.eventAlignment)[j].second >= (r.refToQuery)[posOnRef - windowLength] and (r.eventAlignment)[j].second < (r.refToQuery)[posOnRef + windowLength - 5] ){
+				double ev = (r.normalisedEvents)[(r.eventAlignment)[j].first];
+				if (ev > 0 and ev < 250) eventSnippet.push_back( ev );
 
-					if (first){
-						readHead = j;
-						first = false;
-						//std::cout << "READHEAD:" << j << " " << readHead << std::endl;
-					}
-
-					double ev = (r.normalisedEvents)[(r.eventAlignment)[j].first];
-					if (ev > 0 and ev < 250){
-						eventSnippet.push_back( ev );
-					}
-					else{
-
-						failedEvents++;
-					}
-
-					//TESTING - print the event snippet
-					//std::cout << "snippet size: " << eventSnippet.size() << std::endl;
-					//std::cout << j << " " << (r.eventAlignment)[j].first << " " << (r.eventAlignment)[j].second << std::endl;
-					//std::cout << (ev - r.scalings.shift) / r.scalings.scale << std::endl;
-					//END TESTING
-				}
-
-				/*stop once we get to the end of the window */
-				if ( (r.eventAlignment)[j].second < (r.refToQuery)[posOnRef - windowLength] ){
-
-					break;
-					std::reverse(eventSnippet.begin(), eventSnippet.end());
-				}
+				//TESTING - print the event snippet
+				//std::cout << (ev - r.scalings.shift) / r.scalings.scale << std::endl;
+				//END TESTING
 			}
-		}
-		else{
-			for ( unsigned int j = readHead; j < (r.eventAlignment).size(); j++ ){
 
-				/*if an event has been aligned to a position in the window, add it */
-				if ( (r.eventAlignment)[j].second >= (r.refToQuery)[posOnRef - windowLength] and (r.eventAlignment)[j].second < (r.refToQuery)[posOnRef + windowLength - 5] ){
-
-					if (first){
-						readHead = j;
-						first = false;
-						//std::cout << "READHEAD:" << j << " " << readHead << std::endl;
-					}
-
-					double ev = (r.normalisedEvents)[(r.eventAlignment)[j].first];
-					if (ev > 0 and ev < 250){
-						eventSnippet.push_back( ev );
-					}
-					else{
-
-						failedEvents++;
-					}
-
-					//TESTING - print the event snippet
-					//std::cout << "snippet size: " << eventSnippet.size() << std::endl;
-					//std::cout << j << " " << (r.eventAlignment)[j].first << " " << (r.eventAlignment)[j].second << std::endl;
-					//std::cout << (ev - r.scalings.shift) / r.scalings.scale << std::endl;
-					//END TESTING
-				}
-
-				/*stop once we get to the end of the window */
-				if ( (r.eventAlignment)[j].second >= (r.refToQuery)[posOnRef + windowLength - 5] ) break;
-			}
+			/*stop once we get to the end of the window */
+			if ( (r.eventAlignment)[j].second > (r.refToQuery)[posOnRef + windowLength] ) break;
 		}
 
 		//catch abnormally few or many events
 		if ( eventSnippet.size() > 8*windowLength or eventSnippet.size() < windowLength ) continue;
-	
-		//figure out where the T's are
-		//std::cout << ">--------------" << std::endl;
-		std::string sixOI = (r.referenceSeqMappedTo).substr(posOnRef,6);
-		//std::cout << sixOI << std::endl;
-		std::vector<double> BrdUscores;
+
 		double logProbAnalogue = sequenceProbability( eventSnippet, readSnippet, windowLength, true, analogueModel, r.scalings, windowLength );
-		//for ( unsigned int j = 0; j < sixOI.length(); j++ ){
-
-		//	if ( sixOI.substr(j,1) == "T" ){
-			
-				//double logProbAnalogue = sequenceProbability( eventSnippet, readSnippet, windowLength, true, analogueModel, r.scalings, j+windowLength );
-		//		BrdUscores.push_back(logProbAnalogue);
-				//std::cout << logProbAnalogue << std::endl;
-		//	}
-		//}
-
-		double BrdUmax = logProbAnalogue;//BrdUscores[0];
-		//for ( unsigned int j = 1; j < BrdUscores.size(); j++ ){
-
-		//	if (BrdUscores[j] > BrdUmax) BrdUmax = BrdUscores[j];
-		//}
-
-		//std::cout << "max: " << BrdUmax << std::endl;
-		//std::cout << "log likelihood brdu: " << logProbAnalogue << std::endl;
 		double logProbThymidine = sequenceProbability( eventSnippet, readSnippet, windowLength, false, analogueModel, r.scalings, 0 );
-		//std::cout << "log likelihood thym: " << logProbThymidine << std::endl;
-		double logLikelihoodRatio = BrdUmax - logProbThymidine;
-		//std::cout << "log likelihood ratio:" << logLikelihoodRatio << std::endl;
-		//std::cout << "----------------------------------------------" << std::endl;
+		double logLikelihoodRatio = logProbAnalogue - logProbThymidine;
 
 		//calculate where we are on the assembly - if we're a reverse complement, we're moving backwards down the reference genome
 		int globalPosOnRef;
@@ -823,7 +609,8 @@ void llAcrossRead( read &r, unsigned int windowLength, std::map< std::string, st
 
 			globalPosOnRef = r.refStart + posOnRef;
 		}
-		ss << globalPosOnRef << "\t" << logLikelihoodRatio << "\t" << sixMerRef << "\t" << sixMerQuery << std::endl;
+
+		ss << globalPosOnRef << "\t" << logLikelihoodRatio << "\t" <<  sixMerRef << "\t" << sixMerQuery << std::endl;
 	}
 }
 
