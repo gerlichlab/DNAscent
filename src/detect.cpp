@@ -756,7 +756,6 @@ int detect_main( int argc, char** argv ){
 	else maxBufferSize = 4*(args.threads);
 
 	do {
-
 		//initialise the record and get the record from the file iterator
 		bam1_t *record = bam_init1();
 		result = sam_itr_next(bam_fh, itr, record);
