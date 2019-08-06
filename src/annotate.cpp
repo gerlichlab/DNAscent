@@ -266,8 +266,11 @@ std::vector< int > annotatePosition( read &r, unsigned int windowLength, std::ma
 		//figure out where the T's are
 		//std::cout << ">--------------" << std::endl;
 		std::string sixOI = (r.referenceSeqMappedTo).substr(posOnRef,6);
+		size_t BrdUStart = sixOI.find('T') + windowLength;
+		size_t BrdUEnd = sixOI.rfind('T') + windowLength;
 		//std::cout << sixOI << std::endl;
 		std::vector<double> BrdUscores;
+		/*
 		for ( unsigned int j = 0; j < sixOI.length(); j++ ){
 
 			if ( sixOI.substr(j,1) == "T" ){
@@ -283,6 +286,7 @@ std::vector< int > annotatePosition( read &r, unsigned int windowLength, std::ma
 
 			if (BrdUscores[j] > BrdUmax) BrdUmax = BrdUscores[j];
 		}
+		
 		//std::cout << "max: " << BrdUmax << std::endl;
 		//double logProbAnalogue = sequenceProbability( eventSnippet, readSnippet, windowLength, true, analogueModel, r.scalings );
 		double logProbThymidine = sequenceProbability( eventSnippet, readSnippet, windowLength, false, analogueModel, r.scalings, 0 );
@@ -295,6 +299,7 @@ std::vector< int > annotatePosition( read &r, unsigned int windowLength, std::ma
 		//we're just annotating reads, so we want to stay with 5' -> 3' reference to the reads, so don't do anything extra here
 
 		if (logLikelihoodRatio >= callThresh ) analoguePositions.push_back(posOnRef);
+		*/	
 	}
 	return analoguePositions;
 }
