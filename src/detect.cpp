@@ -32,9 +32,9 @@ static const char *help=
 "  -i,--index                path to DNAscent index,\n"
 "  -o,--output               path to output file that will be generated.\n"
 "Optional arguments are:\n"
-"  -t,--threads              number of threads (default is 1 thread)\n"
+"  -t,--threads              number of threads (default is 1 thread),\n"
+"  --methyl-aware            account for CpG, Dcm, and Dam methylation in BrdU calling,\n"
 "  --divergence              minimum KL-divergence between BrdU 6mers to include and ONT pore model (default is 0),\n"
-"  --noCpG                   exclude 6mers that contain a CpG (default is to include all 6mers),\n"
 "  -q,--quality              minimum mapping quality (default is 20).\n"
 "  -l,--length               minimum read length in bp (default is 100).\n";
 
@@ -43,7 +43,7 @@ struct Arguments {
 	std::string referenceFilename;
 	std::string outputFilename;
 	std::string indexFilename;
-	bool excludeCpG;
+	bool excludeCpG, methylAware;
 	double divergence;
 	int minQ;
 	int minL;
@@ -52,6 +52,7 @@ struct Arguments {
 
 extern std::map< std::string, std::pair< double, double > > SixMer_model;
 extern std::map< std::string, std::pair< double, double > > BrdU_model_full;
+extern std::map< std::string, std::pair< double, double > > methylModel;
 
 Arguments parseDetectArguments( int argc, char** argv ){
 
@@ -79,6 +80,7 @@ Arguments parseDetectArguments( int argc, char** argv ){
 	args.minQ = 20;
 	args.minL = 100;
 	args.excludeCpG = false;
+	args.methylAware = false;
 	args.divergence = 0;
 
 	/*parse the command line arguments */
@@ -134,9 +136,9 @@ Arguments parseDetectArguments( int argc, char** argv ){
 			args.divergence = std::stof(strArg.c_str());
 			i+=2;
 		}
-		else if ( flag == "--noCpG" ){
+		else if ( flag == "--methyl-aware" ){
 
-			args.excludeCpG = true;
+			args.methylAware = true;
 			i+=1;
 		}
 		else throw InvalidOption( flag );
@@ -241,6 +243,137 @@ double sequenceProbability( std::vector <double> &observations,
 			}
 			else{
 
+				level_mu = scalings.shift + scalings.scale * SixMer_model.at(sixMer).first;
+				level_sigma = scalings.var * SixMer_model.at(sixMer).second;
+
+				//uncomment if you scale events				
+				//level_mu = SixMer_model.at(sixMer).first;
+				//level_sigma = scalings.var / scalings.scale * SixMer_model.at(sixMer).second;
+
+				matchProb = eln( normalPDF( level_mu, level_sigma, observations[t] ) );
+			}
+
+			//to the insertion
+			I_curr[i] = lnSum( I_curr[i], lnProd( lnProd( I_prev[i], eln( internalI2I ) ), insProb ) );  //I to I
+			I_curr[i] = lnSum( I_curr[i], lnProd( lnProd( M_prev[i], eln( internalM12I ) ), insProb ) ); //M to I 
+
+			//to the match
+			M_curr[i] = lnSum( M_curr[i], lnProd( lnProd( I_prev[i-1], eln( externalI2M1 ) ), matchProb ) );  //external I to M
+			M_curr[i] = lnSum( M_curr[i], lnProd( lnProd( M_prev[i-1], eln( externalM12M1 ) ), matchProb ) );  //external M to M
+			M_curr[i] = lnSum( M_curr[i], lnProd( lnProd( M_prev[i], eln( internalM12M1 ) ), matchProb ) );  //interal M to M
+			M_curr[i] = lnSum( M_curr[i], lnProd( lnProd( D_prev[i-1], eln( externalD2M1 ) ), matchProb ) );  //external D to M
+		}
+
+		for ( unsigned int i = 1; i < I_curr.size(); i++ ){
+
+			//to the deletion
+			D_curr[i] = lnSum( D_curr[i], lnProd( M_curr[i-1], eln( externalM12D ) ) );  //external M to D
+			D_curr[i] = lnSum( D_curr[i], lnProd( D_curr[i-1], eln( externalD2D ) ) );  //external D to D
+		}
+		
+		I_prev = I_curr;
+		M_prev = M_curr;
+		D_prev = D_curr;
+		firstI_prev = firstI_curr;
+		start_prev = start_curr;
+	}
+
+
+	/*-----------TERMINATION----------- */
+	double forwardProb = NAN;
+
+	forwardProb = lnSum( forwardProb, lnProd( D_curr.back(), eln( 1.0 ) ) ); //D to end
+	forwardProb = lnSum( forwardProb, lnProd( M_curr.back(), eln( externalM12M1 + externalM12D ) ) ); //M to end
+	forwardProb = lnSum( forwardProb, lnProd( I_curr.back(), eln( externalI2M1 ) ) ); //I to end
+
+	return forwardProb;
+}
+
+
+double sequenceProbability_methyl( std::vector <double> &observations,
+				std::string &sequence,
+				std::string &sequence_methylated,
+				size_t windowSize, 
+				PoreParameters scalings,
+				int BrdUStart,
+				int BrdUEnd ){
+
+	std::vector< double > I_curr(2*windowSize, NAN), D_curr(2*windowSize, NAN), M_curr(2*windowSize, NAN), I_prev(2*windowSize, NAN), D_prev(2*windowSize, NAN), M_prev(2*windowSize, NAN);
+	double firstI_curr = NAN, firstI_prev = NAN;
+	double start_curr = NAN, start_prev = 0.0;
+
+	double matchProb, insProb;
+
+	/*-----------INITIALISATION----------- */
+	//transitions from the start state
+	D_prev[0] = lnProd( start_prev, eln( 0.25 ) );
+
+	//account for transitions between deletion states before we emit the first observation
+	for ( unsigned int i = 1; i < D_prev.size(); i++ ){
+
+		D_prev[i] = lnProd( D_prev[i-1], eln ( externalD2D ) );
+	}
+
+
+	/*-----------RECURSION----------- */
+	/*complexity is O(T*N^2) where T is the number of observations and N is the number of states */
+	double level_mu, level_sigma;
+	for ( unsigned int t = 0; t < observations.size(); t++ ){
+
+		std::fill( I_curr.begin(), I_curr.end(), NAN );
+		std::fill( M_curr.begin(), M_curr.end(), NAN );
+		std::fill( D_curr.begin(), D_curr.end(), NAN );
+		firstI_curr = NAN;
+
+		std::string sixMer = sequence.substr(0, 6);
+
+		level_mu = scalings.shift + scalings.scale * SixMer_model.at(sixMer).first;
+		level_sigma = scalings.var * SixMer_model.at(sixMer).second;
+
+		//uncomment to scale events
+		//level_mu = SixMer_model.at(sixMer).first;
+		//level_sigma = scalings.var / scalings.scale * SixMer_model.at(sixMer).second;
+		//observations[t] = (observations[t] - scalings.shift) / scalings.scale;
+
+		matchProb = eln( normalPDF( level_mu, level_sigma, observations[t] ) );
+		insProb = eln( uniformPDF( 0, 250, observations[t] ) );
+
+		//first insertion
+		firstI_curr = lnSum( firstI_curr, lnProd( lnProd( start_prev, eln( 0.25 ) ), insProb ) ); //start to first I
+		firstI_curr = lnSum( firstI_curr, lnProd( lnProd( firstI_prev, eln( 0.25 ) ), insProb ) ); //first I to first I
+
+		//to the base 1 insertion
+		I_curr[0] = lnSum( I_curr[0], lnProd( lnProd( I_prev[0], eln( internalI2I ) ), insProb ) );  //I to I
+		I_curr[0] = lnSum( I_curr[0], lnProd( lnProd( M_prev[0], eln( internalM12I ) ), insProb ) ); //M to I 
+
+		//to the base 1 match
+		M_curr[0] = lnSum( M_curr[0], lnProd( lnProd( firstI_prev, eln( 0.5 ) ), matchProb ) ); //first I to first match
+		M_curr[0] = lnSum( M_curr[0], lnProd( lnProd( M_prev[0], eln( internalM12M1 ) ), matchProb ) );  //M to M
+		M_curr[0] = lnSum( M_curr[0], lnProd( lnProd( start_prev, eln( 0.5 ) ), matchProb ) );  //start to M
+
+		//to the base 1 deletion
+		D_curr[0] = lnSum( D_curr[0], lnProd( NAN, eln( 0.25 ) ) );  //start to D
+		D_curr[0] = lnSum( D_curr[0], lnProd( firstI_curr, eln( 0.25 ) ) ); //first I to first deletion
+
+		//the rest of the sequence
+		for ( unsigned int i = 1; i < I_curr.size(); i++ ){
+
+			//get model parameters
+			sixMer = sequence.substr(i, 6);
+			std::string sixMer_methyl = sequence_methylated.substr(i,6);
+			insProb = eln( uniformPDF( 0, 250, observations[t] ) );
+			if ( methylModel.count(sixMer_methyl) > 0 and BrdUStart - 5 <= i and i <= BrdUEnd ){
+
+				level_mu = scalings.shift + scalings.scale * methylModel.at(sixMer_methyl).first;
+				level_sigma = scalings.var * methylModel.at(sixMer_methyl).second;
+
+				//uncomment if you scale events
+				//level_mu = analogueModel.at(sixMer).first;
+				//level_sigma = scalings.var / scalings.scale * analogueModel.at(sixMer).second;
+
+				matchProb = eln( normalPDF( level_mu, level_sigma, observations[t] ) );
+			}
+			else{
 				level_mu = scalings.shift + scalings.scale * SixMer_model.at(sixMer).first;
 				level_sigma = scalings.var * SixMer_model.at(sixMer).second;
 
@@ -508,7 +641,30 @@ std::vector< unsigned int > getPOIs( std::string &refSeq, std::map< std::string,
 }
 
 
-void llAcrossRead( read &r, unsigned int windowLength, std::map< std::string, std::pair< double, double > > &analogueModel, std::stringstream &ss, int &failedEvents ){
+std::string methylateSequence( std::string &inSeq ){
+
+	std::string outSeq = inSeq;
+
+	for ( unsigned int i = 0; i < inSeq.size(); i++ ){
+
+		//CpG
+		if ( inSeq.substr(i,2) == "CG" ) outSeq.replace(i,1,"M");
+
+		//GpC
+		if ( inSeq.substr(i,2) == "GC" ) outSeq.replace(i+1,1,"M");
+
+		//Dam methylation (methyl-adenine in GATC)
+		if ( inSeq.substr(i,4) == "GATC" ) outSeq.replace(i+1,1,"M");
+
+		//Dcm methylation (methyl-cytosine second cytonsine of CCAGG and CCTGG)
+		if ( inSeq.substr(i,5) == "CCAGG" ) outSeq.replace(i+1,1,"M");
+		if ( inSeq.substr(i,5) == "CCTGG" ) outSeq.replace(i+1,1,"M");
+	}
+	return outSeq;
+}
+
+
+void llAcrossRead( read &r, unsigned int windowLength, std::map< std::string, std::pair< double, double > > &analogueModel, std::stringstream &ss, int &failedEvents, bool methylAware ){
 
 	//get the positions on the reference subsequence where we could attempt to make a call
 	std::vector< unsigned int > POIs = getPOIs( r.referenceSeqMappedTo, analogueModel, windowLength );
@@ -638,36 +794,6 @@ void llAcrossRead( read &r, unsigned int windowLength, std::map< std::string, st
 		}
 		*/
 
-		//figure out where the T's are
-		std::string sixOI = (r.referenceSeqMappedTo).substr(posOnRef,6);
-		int BrdUStart = sixOI.find('T') + windowLength;
-		int BrdUEnd = sixOI.rfind('T') + windowLength;
-		std::vector<double> BrdUscores;
-		double logProbAnalogue = sequenceProbability( eventSnippet, readSnippet, windowLength, true, analogueModel, r.scalings, BrdUStart, BrdUEnd );
-		//for ( unsigned int j = 0; j < sixOI.length(); j++ ){
-
-		//	if ( sixOI.substr(j,1) == "T" ){
-			
-				//double logProbAnalogue = sequenceProbability( eventSnippet, readSnippet, windowLength, true, analogueModel, r.scalings, j+windowLength );
-		//		BrdUscores.push_back(logProbAnalogue);
-				//std::cout << logProbAnalogue << std::endl;
-		//	}
-		//}
-
-		double BrdUmax = logProbAnalogue;//BrdUscores[0];
-		//for ( unsigned int j = 1; j < BrdUscores.size(); j++ ){
-
-		//	if (BrdUscores[j] > BrdUmax) BrdUmax = BrdUscores[j];
-		//}
-
-		//std::cout << "max: " << BrdUmax << std::endl;
-		//std::cout << "log likelihood brdu: " << logProbAnalogue << std::endl;
-		double logProbThymidine = sequenceProbability( eventSnippet, readSnippet, windowLength, false, analogueModel, r.scalings, 0, 0 );
-		//std::cout << "log likelihood thym: " << logProbThymidine << std::endl;
-		double logLikelihoodRatio = BrdUmax - logProbThymidine;
-		//std::cout << "log likelihood ratio:" << logLikelihoodRatio << std::endl;
-		//std::cout << "----------------------------------------------" << std::endl;
-
 		//calculate where we are on the assembly - if we're a reverse complement, we're moving backwards down the reference genome
 		int globalPosOnRef;
 		std::string sixMerQuery = (r.basecall).substr(posOnQuery, 6);
@@ -682,7 +808,35 @@ void llAcrossRead( read &r, unsigned int windowLength, std::map< std::string, st
 
 			globalPosOnRef = r.refStart + posOnRef;
 		}
-		ss << globalPosOnRef << "\t" << logLikelihoodRatio << "\t" << sixMerRef << "\t" << sixMerQuery << std::endl;
+
+		//make the BrdU call
+		std::string sixOI = (r.referenceSeqMappedTo).substr(posOnRef,6);
+		int BrdUStart = sixOI.find('T') + windowLength;
+		int BrdUEnd = sixOI.rfind('T') + windowLength;
+		double logProbAnalogue = sequenceProbability( eventSnippet, readSnippet, windowLength, true, analogueModel, r.scalings, BrdUStart, BrdUEnd );
+		double logProbThymidine = sequenceProbability( eventSnippet, readSnippet, windowLength, false, analogueModel, r.scalings, 0, 0 );
+		double logLikelihoodRatio = logProbAnalogue - logProbThymidine;
+		if ( methylAware) {
+
+			std::string readSnippetMethylated = methylateSequence( readSnippet );
+			std::string conflictSubseq = readSnippetMethylated.substr(BrdUStart-5,BrdUEnd+11-BrdUStart);
+
+			if (conflictSubseq.find("M") == std::string::npos){
+
+				ss << globalPosOnRef << "\t" << logLikelihoodRatio << "\t" << sixMerRef << "\t" << sixMerQuery << std::endl;
+			}
+			else{
+
+				double logProbMethylated = sequenceProbability_methyl( eventSnippet, readSnippet, readSnippetMethylated, windowLength, r.scalings, BrdUStart, BrdUEnd );
+				double logLikelihood_BrdUvsMethyl = logProbAnalogue - logProbMethylated;
+				double logLikelihood_MethylvsThym = logProbMethylated - logProbThymidine;
+				ss << globalPosOnRef << "\t" << logLikelihoodRatio << "\t" << logLikelihood_BrdUvsMethyl << "\t" << logLikelihood_MethylvsThym << "\t" << sixMerRef << "\t" << sixMerQuery << std::endl;
+			}
+		}
+		else{
+
+			ss << globalPosOnRef << "\t" << logLikelihoodRatio << "\t" << sixMerRef << "\t" << sixMerQuery << std::endl;
+		}
 	}
 }
 
@@ -711,7 +865,7 @@ int detect_main( int argc, char** argv ){
 	hts_itr_t* itr;
 
 	//load the bam
-	std::cout << "Opening bam file...";
+	std::cout << "Opening bam file... ";
 	bam_fh = sam_open((args.bamFilename).c_str(), "r");
 	if (bam_fh == NULL) throw IOerror(args.bamFilename);
 
@@ -816,7 +970,7 @@ int detect_main( int argc, char** argv ){
 				}
 
 				std::stringstream ss; 
-				llAcrossRead(r, windowLength, analogueModel, ss, failedEvents);
+				llAcrossRead(r, windowLength, analogueModel, ss, failedEvents, args.methylAware);
 
 				#pragma omp critical
 				{
