@@ -295,8 +295,8 @@ double sequenceProbability_methyl( std::vector <double> &observations,
 				std::string &sequence_methylated,
 				size_t windowSize, 
 				PoreParameters scalings,
-				int BrdUStart,
-				int BrdUEnd ){
+				int MethylStart,
+				int MethylEnd ){
 
 	std::vector< double > I_curr(2*windowSize, NAN), D_curr(2*windowSize, NAN), M_curr(2*windowSize, NAN), I_prev(2*windowSize, NAN), D_prev(2*windowSize, NAN), M_prev(2*windowSize, NAN);
 	double firstI_curr = NAN, firstI_prev = NAN;
@@ -326,9 +326,18 @@ double sequenceProbability_methyl( std::vector <double> &observations,
 		firstI_curr = NAN;
 
 		std::string sixMer = sequence.substr(0, 6);
+		std::string sixMer_methyl = sequence_methylated.substr(0,6);
 
-		level_mu = scalings.shift + scalings.scale * SixMer_model.at(sixMer).first;
-		level_sigma = scalings.var * SixMer_model.at(sixMer).second;
+		if ( sixMer_methyl.find('M') != std::string::npos and methylModel.count(sixMer_methyl) > 0 ){
+
+			level_mu = scalings.shift + scalings.scale * methylModel.at(sixMer_methyl).first;
+			level_sigma = scalings.var * methylModel.at(sixMer_methyl).second;
+		}
+		else {
+
+			level_mu = scalings.shift + scalings.scale * SixMer_model.at(sixMer).first;
+			level_sigma = scalings.var * SixMer_model.at(sixMer).second;
+		}
 
 		//uncomment to scale events
 		//level_mu = SixMer_model.at(sixMer).first;
@@ -360,9 +369,9 @@ double sequenceProbability_methyl( std::vector <double> &observations,
 
 			//get model parameters
 			sixMer = sequence.substr(i, 6);
-			std::string sixMer_methyl = sequence_methylated.substr(i,6);
+			sixMer_methyl = sequence_methylated.substr(i,6);
 			insProb = eln( uniformPDF( 0, 250, observations[t] ) );
-			if ( methylModel.count(sixMer_methyl) > 0 and BrdUStart - 5 <= i and i <= BrdUEnd ){
+			if ( methylModel.count(sixMer_methyl) > 0 and MethylStart - 5 <= i and i <= MethylEnd ){
 
 				level_mu = scalings.shift + scalings.scale * methylModel.at(sixMer_methyl).first;
 				level_sigma = scalings.var * methylModel.at(sixMer_methyl).second;
@@ -651,14 +660,14 @@ std::string methylateSequence( std::string &inSeq ){
 		if ( inSeq.substr(i,2) == "CG" ) outSeq.replace(i,1,"M");
 
 		//GpC
-		if ( inSeq.substr(i,2) == "GC" ) outSeq.replace(i+1,1,"M");
+		//if ( inSeq.substr(i,2) == "GC" ) outSeq.replace(i+1,1,"M");
 
 		//Dam methylation (methyl-adenine in GATC)
-		if ( inSeq.substr(i,4) == "GATC" ) outSeq.replace(i+1,1,"M");
+		//if ( inSeq.substr(i,4) == "GATC" ) outSeq.replace(i+1,1,"M");
 
 		//Dcm methylation (methyl-cytosine second cytonsine of CCAGG and CCTGG)
-		if ( inSeq.substr(i,5) == "CCAGG" ) outSeq.replace(i+1,1,"M");
-		if ( inSeq.substr(i,5) == "CCTGG" ) outSeq.replace(i+1,1,"M");
+		//if ( inSeq.substr(i,5) == "CCAGG" ) outSeq.replace(i+1,1,"M");
+		//if ( inSeq.substr(i,5) == "CCTGG" ) outSeq.replace(i+1,1,"M");
 	}
 	return outSeq;
 }
@@ -827,7 +836,10 @@ void llAcrossRead( read &r, unsigned int windowLength, std::map< std::string, st
 			}
 			else{
 
-				double logProbMethylated = sequenceProbability_methyl( eventSnippet, readSnippet, readSnippetMethylated, windowLength, r.scalings, BrdUStart, BrdUEnd );
+				int MethylStart = conflictSubseq.find('M') + BrdUStart-5;
+				int MethylEnd = conflictSubseq.rfind('M') + BrdUStart-5;
+
+				double logProbMethylated = sequenceProbability_methyl( eventSnippet, readSnippet, readSnippetMethylated, windowLength, r.scalings, MethylStart, MethylEnd );
 				double logLikelihood_BrdUvsMethyl = logProbAnalogue - logProbMethylated;
 				double logLikelihood_MethylvsThym = logProbMethylated - logProbThymidine;
 				ss << globalPosOnRef << "\t" << logLikelihoodRatio << "\t" << logLikelihood_BrdUvsMethyl << "\t" << logLikelihood_MethylvsThym << "\t" << sixMerRef << "\t" << sixMerQuery << std::endl;
