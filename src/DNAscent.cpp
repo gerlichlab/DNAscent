@@ -15,7 +15,7 @@
 #include "psl.h"
 #include "annotate.h"
 #include "index.h"
-
+#include "train.h"
 
 /*prototype */
 int show_options( int, char** );
@@ -27,6 +27,7 @@ static std::map< std::string, std::function< int( int, char** ) > > executables 
 	{"regions", 	regions_main},
 	{"index", 	index_main},
 	{"annotate", 	annotate_main},
+	{"train", 	train_main},
 	{"--help",	show_options},
 	{"-h",		show_options}
 };

@@ -318,7 +318,8 @@ inline float logProbabilityMatch(std::string sixMer, double x, double shift, dou
 	float a = (x - mu) / sigma;
 	static const float log_inv_sqrt_2pi = log(0.3989422804014327);
     	double thymProb = log_inv_sqrt_2pi - eln(sigma) + (-0.5f * a * a);
-
+	return thymProb;
+	/*
 	if (BrdU_model_full.count(sixMer) > 0){
 
 		mu = scale * BrdU_model_full.at(sixMer).first + shift;
@@ -329,6 +330,7 @@ inline float logProbabilityMatch(std::string sixMer, double x, double shift, dou
 		return std::max(thymProb,brduProb);
 	}
 	else return thymProb;
+	*/
 }	
 
 #define event_kmer_to_band(ei, ki) (ei + 1) + (ki + 1)
@@ -360,7 +362,7 @@ void adaptive_banded_simple_event_align( std::vector< double > &raw, read &r, Po
 	const uint8_t FROM_L = 2;
  
 	// qc
-	double min_average_log_emission = -4.0;
+	double min_average_log_emission = -5.0;
 	int max_gap_threshold = 50;
 
 	// banding
