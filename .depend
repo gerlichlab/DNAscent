@@ -7,7 +7,8 @@ train.o: src/train.cpp src/common.h src/data_IO.h src/error_handling.h \
  src/poreModels.h src/event_handling.h src/probability.h src/train.h
 regions.o: src/regions.cpp src/regions.h src/data_IO.h \
  src/error_handling.h src/scrappie/event_detection.h \
- src/scrappie/scrappie_structures.h src/poreModels.h src/common.h
+ src/scrappie/scrappie_structures.h src/poreModels.h src/common.h \
+ src/train.h
 detect.o: src/detect.cpp src/detect.h src/data_IO.h \
  src/../htslib/htslib/hts.h src/../htslib/htslib/hts_defs.h \
  src/../htslib/htslib/hts_log.h src/../htslib/htslib/sam.h \

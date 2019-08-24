@@ -10,6 +10,7 @@
 #include "regions.h"
 #include "data_IO.h"
 #include "error_handling.h"
+#include "train.h"
 #include <cmath>
 #include <math.h>
 #include <algorithm>
@@ -323,7 +324,8 @@ int regions_main( int argc, char** argv ){
 			std::string column;
 			std::stringstream ssLine(line);
 			int position, cIndex = 0;
-			double B;
+			double B, BM;
+			int countCol = std::count(line.begin(), line.end(), '\t');
 			while ( std::getline( ssLine, column, '\t' ) ){
 
 				if ( cIndex == 0 ){
@@ -333,14 +335,30 @@ int regions_main( int argc, char** argv ){
 				else if ( cIndex == 1 ){
 
 					B = std::stof(column);
-					if ( B > 2.5 ) calls++;
+				}
+				else if ( cIndex == 2 and countCol > 3 ){ //methyl-aware detect file
+
+					BM = std::stof(column);
 				}
 				cIndex++;
+			}
+			if ( countCol > 3){
+
+					if ( B > 2.5 and BM > 2.5 ){
+						calls++;
+						attempts++;
+					}
+					else if ( B < 2.5 and BM > 0.0 ) attempts++;
+					// if B < 2.5 and BM < 0, then it's corrupted by methylation so don't count as attempt
+			}
+			else{
+
+					if ( B > 2.5 ) calls++;
+					attempts++;
 			}
 
 			if ( startingPos == -1 ) startingPos = position;
 			gap = position - startingPos;
-			attempts++;
 
 			if ( gap > args.resolution and attempts >= args.resolution / 30 ){
 
@@ -355,6 +373,112 @@ int regions_main( int argc, char** argv ){
 		p = std::max(k1,k2);
 		std::cout << "Estimated fraction of analogue substitution in analogue-positive regions: " << p << std::endl;
 		inFile.close();
+
+		//estimate appropriate z-score threshold
+		std::cout << "Setting Z-score threshold..." << std::endl;
+		inFile.open( args.detectFilename );
+		if ( not inFile.is_open() ) throw IOerror( args.detectFilename );
+		progressBar pb_z(readCount,false);
+		calls = 0; attempts = 0; gap = 0;
+		startingPos = -1;
+		progress = 0;
+		std::vector<double> allZScores;
+		while( std::getline( inFile, line ) ){
+
+			if ( line.substr(0,1) == ">" ){
+
+				progress++;
+				pb_z.displayProgress( progress, 0, 0 );
+				calls = 0, attempts = 0, gap = 0, startingPos = -1;
+			}
+			else{
+
+				std::string column;
+				std::stringstream ssLine(line);
+				int position, cIndex = 0;
+				double B, BM;
+				int countCol = std::count(line.begin(), line.end(), '\t');
+				while ( std::getline( ssLine, column, '\t' ) ){
+
+					if ( cIndex == 0 ){
+
+						position = std::stoi(column);
+					}
+					else if ( cIndex == 1 ){
+
+						B = std::stof(column);
+					}
+					else if ( cIndex == 2 and countCol > 3 ){ //methyl-aware detect file
+
+						BM = std::stof(column);
+					}
+					cIndex++;
+				}
+
+				if ( countCol > 3){
+
+						if ( B > 2.5 and BM > 2.5 ){
+							calls++;
+							attempts++;
+						}
+						else if ( B < 2.5 and BM > 0 ) attempts++;
+						//not strong BrdU but more BrdU than methyl counts as an attempt
+				}
+				else{
+
+						if ( B > 2.5 ) calls++;
+						attempts++;
+				}
+
+				if ( startingPos == -1 ) startingPos = position;
+				gap = position - startingPos;
+
+				if ( gap > args.resolution and attempts >= args.resolution / 30 ){
+
+					double score = (calls - attempts * p) / sqrt( attempts * p * ( 1 - p) );
+					allZScores.push_back(score);
+					calls = 0, attempts = 0, gap = 0, startingPos = -1;
+				}
+			}
+		}
+		inFile.close();
+		std::cout << "Done." << std::endl;
+
+		std::vector< double > fitParams = gaussianMixtureEM(-3.0, 3.0, 0, 3.0, allZScores, 0.01, 100 );
+		double thym_mu, thym_mix, thym_sigma, brdu_mu, brdu_mix, brdu_sigma;
+		if (fitParams[1] < fitParams[2]){
+
+			thym_mix = fitParams[0];
+			thym_mu = fitParams[1];
+			thym_sigma = fitParams[2];
+			brdu_mix = fitParams[3];
+			brdu_mu = fitParams[4];
+			brdu_sigma = fitParams[5];
+		}
+		else{
+
+			thym_mix = fitParams[3];
+			thym_mu = fitParams[4];
+			thym_sigma = fitParams[5];
+			brdu_mix = fitParams[0];
+			brdu_mu = fitParams[1];
+			brdu_sigma = fitParams[2];
+		}
+		std::cout << "Estimated fraction of thymidine regions: " << thym_mix << std::endl;
+		std::cout << "Estimated fraction of BrdU regions: " << brdu_mix << std::endl;
+		std::cout << "Thymidine Z-score mean, stdv: " << thym_mu << " " << thym_sigma << std::endl;
+		std::cout << "BrdU Z-score mean, stdv: " << brdu_mu << " " << brdu_sigma << std::endl;
+
+		if (2*thym_sigma < (brdu_mu - thym_mu)/2.0){
+
+			std::cout << "Set Z-score threshold: " << thym_mu+(brdu_mu - thym_mu)/2.0 << std::endl;
+			args.threshold = thym_mu+(brdu_mu - thym_mu)/2.0;
+		}
+		else{
+
+			std::cout << "Set Z-score threshold: " << thym_mu+2*thym_sigma << std::endl;
+			args.threshold = thym_mu+2*thym_sigma;
+		}
 	}
 	else p = args.probability;
 

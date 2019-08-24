@@ -257,7 +257,7 @@ std::vector< double > gaussianMixtureEM_PRIOR( double pi, double mu1, double sig
 }
 
 
-std::vector< double > gaussianMixtureEM( double mu1, double sigma1, double mu2, double sigma2, std::vector< double > &data, double tolerance ){
+std::vector< double > gaussianMixtureEM( double mu1, double sigma1, double mu2, double sigma2, std::vector< double > &data, double tolerance, int maxIter ){
 
 	std::vector< std::vector< double > > Z( 2, std::vector< double >( data.size(), 0 ) );
 
@@ -273,6 +273,7 @@ std::vector< double > gaussianMixtureEM( double mu1, double sigma1, double mu2, 
 	}
 	double improvement = std::numeric_limits< double >::max();
 
+	int iterations = 0;
 	while ( improvement > tolerance ){
 
 		/*EXPECTATION */
@@ -330,6 +331,8 @@ std::vector< double > gaussianMixtureEM( double mu1, double sigma1, double mu2, 
 
 		improvement = logLikelihood_New - logLikelihood_Old;
 		logLikelihood_Old = logLikelihood_New;
+		iterations++;
+		if (iterations > maxIter) break;
 	}
 	return { pi1, mu1, sigma1, pi2, mu2, sigma2 };
 }
