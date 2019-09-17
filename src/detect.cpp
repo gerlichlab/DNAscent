@@ -673,8 +673,9 @@ std::string methylateSequence( std::string &inSeq ){
 }
 
 
-void llAcrossRead( read &r, unsigned int windowLength, std::map< std::string, std::pair< double, double > > &analogueModel, std::stringstream &ss, int &failedEvents, bool methylAware ){
+std::string llAcrossRead( read &r, unsigned int windowLength, std::map< std::string, std::pair< double, double > > &analogueModel, int &failedEvents, bool methylAware ){
 
+	std::string out;
 	//get the positions on the reference subsequence where we could attempt to make a call
 	std::vector< unsigned int > POIs = getPOIs( r.referenceSeqMappedTo, analogueModel, windowLength );
 	std::string strand;
@@ -691,7 +692,7 @@ void llAcrossRead( read &r, unsigned int windowLength, std::map< std::string, st
 		readHead = 0;
 	}
 
-	ss << ">" << r.readID << " " << r.referenceMappedTo << " " << r.refStart << " " << r.refEnd << " " << strand << std::endl;
+	out += ">" + r.readID + " " + r.referenceMappedTo + " " + std::to_string(r.refStart) + " " + std::to_string(r.refEnd) + " " + strand + "\n";
 
 	for ( unsigned int i = 0; i < POIs.size(); i++ ){
 
@@ -832,7 +833,7 @@ void llAcrossRead( read &r, unsigned int windowLength, std::map< std::string, st
 
 			if (conflictSubseq.find("M") == std::string::npos){
 
-				ss << globalPosOnRef << "\t" << logLikelihoodRatio << "\t" << sixMerRef << "\t" << sixMerQuery << std::endl;
+				out += std::to_string(globalPosOnRef) + "\t" + std::to_string(logLikelihoodRatio) + "\t" + sixMerRef + "\t" + sixMerQuery + "\n";
 			}
 			else{
 
@@ -842,14 +843,15 @@ void llAcrossRead( read &r, unsigned int windowLength, std::map< std::string, st
 				double logProbMethylated = sequenceProbability_methyl( eventSnippet, readSnippet, readSnippetMethylated, windowLength, r.scalings, MethylStart, MethylEnd );
 				double logLikelihood_BrdUvsMethyl = logProbAnalogue - logProbMethylated;
 				double logLikelihood_MethylvsThym = logProbMethylated - logProbThymidine;
-				ss << globalPosOnRef << "\t" << logLikelihoodRatio << "\t" << logLikelihood_BrdUvsMethyl << "\t" << logLikelihood_MethylvsThym << "\t" << sixMerRef << "\t" << sixMerQuery << std::endl;
+				out +=  std::to_string(globalPosOnRef) + "\t" + std::to_string(logLikelihoodRatio) + "\t" + std::to_string(logLikelihood_BrdUvsMethyl) + "\t" + std::to_string(logLikelihood_MethylvsThym) + "\t" + sixMerRef + "\t" + sixMerQuery + "\n";
 			}
 		}
 		else{
 
-			ss << globalPosOnRef << "\t" << logLikelihoodRatio << "\t" << sixMerRef << "\t" << sixMerQuery << std::endl;
+			out += std::to_string(globalPosOnRef) + "\t" + std::to_string(logLikelihoodRatio) + "\t" + sixMerRef + "\t" + sixMerQuery + "\n";
 		}
 	}
+	return out;
 }
 
 
@@ -981,12 +983,11 @@ int detect_main( int argc, char** argv ){
 					continue;
 				}
 
-				std::stringstream ss; 
-				llAcrossRead(r, windowLength, analogueModel, ss, failedEvents, args.methylAware);
+				std::string readOut = llAcrossRead(r, windowLength, analogueModel, failedEvents, args.methylAware);
 
 				#pragma omp critical
 				{
-					outFile << ss.rdbuf();
+					outFile << readOut;
 					prog++;
 					pb.displayProgress( prog, failed, failedEvents );
 				}
