@@ -24,7 +24,7 @@
 "Example:\n"
 "  ./DNAscent index -d /path/to/detect_output.out\n"
 "Required arguments are:\n"
-"  -d,--detect               path to fast5 files.\n"
+"  -f,--files                path to fast5 files.\n"
 "Optional arguments are:\n"
 "  -s,--sequencing-summary   path to sequencing summary file from guppy/albacore basecalling.\n";
 
@@ -55,7 +55,7 @@ Arguments parseIndexArguments( int argc, char** argv ){
  	/*parse the command line arguments */
 	for ( int i = 1; i < argc; ){
  		std::string flag( argv[ i ] );
- 		if ( flag == "-d" or flag == "--detect" ){
+ 		if ( flag == "-f" or flag == "--files" ){
  			std::string strArg( argv[ i + 1 ] );
 			args.fast5path = strArg;
 			i+=2;

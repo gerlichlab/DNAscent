@@ -7,8 +7,8 @@
 //----------------------------------------------------------
 
 
-#ifndef POREMODELS_INL
-#define POREMODELS_INL
+#ifndef POREMODELS_H
+#define POREMODELS_H
 
 #include <utility>
 #include <string>

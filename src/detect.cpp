@@ -43,7 +43,7 @@ struct Arguments {
 	std::string referenceFilename;
 	std::string outputFilename;
 	std::string indexFilename;
-	bool excludeCpG, methylAware;
+	bool excludeCpG, methylAware, testAlignment;
 	double divergence;
 	int minQ;
 	int minL;
@@ -82,6 +82,7 @@ Arguments parseDetectArguments( int argc, char** argv ){
 	args.excludeCpG = false;
 	args.methylAware = false;
 	args.divergence = 0;
+	args.testAlignment = false;
 
 	/*parse the command line arguments */
 	for ( int i = 1; i < argc; ){
@@ -139,6 +140,11 @@ Arguments parseDetectArguments( int argc, char** argv ){
 		else if ( flag == "--methyl-aware" ){
 
 			args.methylAware = true;
+			i+=1;
+		}
+		else if ( flag == "--testAlignment" ){
+
+			args.testAlignment = true;
 			i+=1;
 		}
 		else throw InvalidOption( flag );
@@ -863,6 +869,9 @@ int detect_main( int argc, char** argv ){
 	/*import the analogue pore model that we specified on the command line */
 	std::map< std::string, std::pair< double, double > > analogueModel = buildAnalogueModel(args.divergence, args.excludeCpG);
 
+	//load the pore models
+	std::map< std::string, std::pair< double, double > > test = import_poreModel( "/home/michael/development/DNAscent_dev/pore_models/template_median68pA.6mer.model" );
+
 	//load DNAscent index
 	std::map< std::string, std::string > readID2path;
 	parseIndex( args.indexFilename, readID2path, bulkFast5 );
@@ -990,6 +999,14 @@ int detect_main( int argc, char** argv ){
 					outFile << readOut;
 					prog++;
 					pb.displayProgress( prog, failed, failedEvents );
+
+					if (args.testAlignment){
+						std::cerr << ">" << r.readID << std::endl;
+						for ( auto p_align = r.eventAlignment.begin(); p_align < r.eventAlignment.end(); p_align++ ){
+
+							std::cerr<< p_align -> first << " " << p_align -> second << std::endl;
+						}
+					}
 				}
 			}
 			for ( unsigned int i = 0; i < buffer.size(); i++ ) bam_destroy1(buffer[i]);

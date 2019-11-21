@@ -1,4 +1,3 @@
-poreModels.o: src/poreModels.cpp
 data_IO.o: src/data_IO.cpp src/data_IO.h src/error_handling.h \
  src/scrappie/event_detection.h src/scrappie/scrappie_structures.h \
  src/poreModels.h src/common.h src/pfasta/pfasta.h
@@ -99,17 +98,15 @@ event_handling.o: src/event_handling.cpp src/probability.h \
  src/../fast5/include/fast5/cwmap.fast5_ev_rel_skip_1.inl \
  src/../fast5/include/fast5/cwmap.fast5_ev_move_1.inl \
  src/../fast5/include/fast5/Bit_Packer.hpp src/scrappie/scrappie_common.h
-psl.o: src/psl.cpp src/psl.h src/common.h src/data_IO.h \
- src/error_handling.h src/scrappie/event_detection.h \
- src/scrappie/scrappie_structures.h src/poreModels.h
+common.o: src/common.cpp src/common.h src/error_handling.h \
+ src/scrappie/event_detection.h src/scrappie/scrappie_structures.h \
+ src/poreModels.h src/data_IO.h
 DNAscent.o: src/DNAscent.cpp src/detect.h src/data_IO.h \
  src/../htslib/htslib/hts.h src/../htslib/htslib/hts_defs.h \
  src/../htslib/htslib/hts_log.h src/../htslib/htslib/sam.h \
  src/../htslib/htslib/hts.h src/regions.h src/psl.h src/annotate.h \
  src/index.h src/train.h
-common.o: src/common.cpp src/common.h src/error_handling.h \
- src/scrappie/event_detection.h src/scrappie/scrappie_structures.h \
- src/poreModels.h src/data_IO.h
+poreModels.o: src/poreModels.cpp
 annotate.o: src/annotate.cpp src/annotate.h src/common.h src/data_IO.h \
  src/event_handling.h src/probability.h src/poreModels.h \
  src/error_handling.h src/scrappie/event_detection.h \
@@ -157,6 +154,9 @@ annotate.o: src/annotate.cpp src/annotate.h src/common.h src/data_IO.h \
  src/../fast5/include/fast5/cwmap.fast5_ev_rel_skip_1.inl \
  src/../fast5/include/fast5/cwmap.fast5_ev_move_1.inl \
  src/../fast5/include/fast5/Bit_Packer.hpp
+psl.o: src/psl.cpp src/psl.h src/common.h src/data_IO.h \
+ src/error_handling.h src/scrappie/event_detection.h \
+ src/scrappie/scrappie_structures.h src/poreModels.h
 index.o: src/index.cpp src/../tinydir/tinydir.h \
  src/../fast5/include/fast5.hpp src/../fast5/include/fast5/logger.hpp \
  src/../fast5/include/fast5/fast5_version.hpp \
