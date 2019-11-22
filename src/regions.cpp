@@ -58,7 +58,7 @@ Arguments parseRegionsArguments( int argc, char** argv ){
 
  	Arguments args;
 
- 	/*defaults - we'll override these if the option was specified by the user */
+ 	//defaults - we'll override these if the option was specified by the user
 	args.resolution = 2000;
 	args.threshold = 0;
 	args.callReplication = false;
@@ -323,8 +323,8 @@ int regions_main( int argc, char** argv ){
 
 			std::string column;
 			std::stringstream ssLine(line);
-			int position, cIndex = 0;
-			double B, BM;
+			int position = -1, cIndex = 0;
+			AnalogueScore B, BM;
 			int countCol = std::count(line.begin(), line.end(), '\t');
 			while ( std::getline( ssLine, column, '\t' ) ){
 
@@ -334,26 +334,27 @@ int regions_main( int argc, char** argv ){
 				}
 				else if ( cIndex == 1 ){
 
-					B = std::stof(column);
+					B.set(std::stof(column));
 				}
 				else if ( cIndex == 2 and countCol > 3 ){ //methyl-aware detect file
 
-					BM = std::stof(column);
+					BM.set(std::stof(column));
 				}
 				cIndex++;
 			}
+			assert(position != -1);
 			if ( countCol > 3){
 
-					if ( B > 2.5 and BM > 2.5 ){
+					if ( B.get() > 2.5 and BM.get() > 2.5 ){
 						calls++;
 						attempts++;
 					}
-					else if ( B < 2.5 and BM > 0.0 ) attempts++;
+					else if ( B.get() < 2.5 and BM.get() > 0.0 ) attempts++;
 					// if B < 2.5 and BM < 0, then it's corrupted by methylation so don't count as attempt
 			}
 			else{
 
-					if ( B > 2.5 ) calls++;
+					if ( B.get() > 2.5 ) calls++;
 					attempts++;
 			}
 
@@ -371,7 +372,7 @@ int regions_main( int argc, char** argv ){
 		double k1,k2;
 		std::tie(k1,k2) = twoMeans( callFractions );
 		p = std::max(k1,k2);
-		std::cout << "Estimated fraction of analogue substitution in analogue-positive regions: " << p << std::endl;
+		std::cerr << "Estimated fraction of analogue substitution in analogue-positive regions: " << p << std::endl;
 		inFile.close();
 
 		//estimate appropriate z-score threshold
@@ -395,8 +396,8 @@ int regions_main( int argc, char** argv ){
 
 				std::string column;
 				std::stringstream ssLine(line);
-				int position, cIndex = 0;
-				double B, BM;
+				int position = -1, cIndex = 0;
+				AnalogueScore B, BM;
 				int countCol = std::count(line.begin(), line.end(), '\t');
 				while ( std::getline( ssLine, column, '\t' ) ){
 
@@ -406,27 +407,28 @@ int regions_main( int argc, char** argv ){
 					}
 					else if ( cIndex == 1 ){
 
-						B = std::stof(column);
+						B.set(std::stof(column));
 					}
 					else if ( cIndex == 2 and countCol > 3 ){ //methyl-aware detect file
 
-						BM = std::stof(column);
+						BM.set(std::stof(column));
 					}
 					cIndex++;
 				}
+				assert(position != -1);
 
 				if ( countCol > 3){
 
-						if ( B > 2.5 and BM > 2.5 ){
+						if ( B.get() > 2.5 and BM.get() > 2.5 ){
 							calls++;
 							attempts++;
 						}
-						else if ( B < 2.5 and BM > 0 ) attempts++;
+						else if ( B.get() < 2.5 and BM.get() > 0 ) attempts++;
 						//not strong BrdU but more BrdU than methyl counts as an attempt
 				}
 				else{
 
-						if ( B > 2.5 ) calls++;
+						if ( B.get() > 2.5 ) calls++;
 						attempts++;
 				}
 
@@ -464,19 +466,19 @@ int regions_main( int argc, char** argv ){
 			brdu_mu = fitParams[1];
 			brdu_sigma = fitParams[2];
 		}
-		std::cout << "Estimated fraction of thymidine regions: " << thym_mix << std::endl;
-		std::cout << "Estimated fraction of BrdU regions: " << brdu_mix << std::endl;
-		std::cout << "Thymidine Z-score mean, stdv: " << thym_mu << " " << thym_sigma << std::endl;
-		std::cout << "BrdU Z-score mean, stdv: " << brdu_mu << " " << brdu_sigma << std::endl;
+		std::cerr << "Estimated fraction of thymidine regions: " << thym_mix << std::endl;
+		std::cerr << "Estimated fraction of BrdU regions: " << brdu_mix << std::endl;
+		std::cerr << "Thymidine Z-score mean, stdv: " << thym_mu << " " << thym_sigma << std::endl;
+		std::cerr << "BrdU Z-score mean, stdv: " << brdu_mu << " " << brdu_sigma << std::endl;
 
 		if (2*thym_sigma < (brdu_mu - thym_mu)/2.0){
 
-			std::cout << "Set Z-score threshold: " << thym_mu+(brdu_mu - thym_mu)/2.0 << std::endl;
+			std::cerr << "Set Z-score threshold: " << thym_mu+(brdu_mu - thym_mu)/2.0 << std::endl;
 			args.threshold = thym_mu+(brdu_mu - thym_mu)/2.0;
 		}
 		else{
 
-			std::cout << "Set Z-score threshold: " << thym_mu+2*thym_sigma << std::endl;
+			std::cerr << "Set Z-score threshold: " << thym_mu+2*thym_sigma << std::endl;
 			args.threshold = thym_mu+2*thym_sigma;
 		}
 	}
@@ -534,7 +536,7 @@ int regions_main( int argc, char** argv ){
 
 			std::string column;
 			std::stringstream ssLine(line);
-			int position, cIndex = 0;
+			int position = -1, cIndex = 0;
 			double B;
 			while ( std::getline( ssLine, column, '\t' ) ){
 
@@ -552,6 +554,7 @@ int regions_main( int argc, char** argv ){
 				}
 				cIndex++;
 			}
+			assert(position != -1);
 
 			if ( startingPos == -1 ) startingPos = position;
 			gap = position - startingPos;

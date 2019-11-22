@@ -9,7 +9,26 @@
 #ifndef REGIONS_H
 #define REGIONS_H
 
+#include <cassert>
+
 /*function prototypes */
 int regions_main( int argc, char** argv );
+
+
+class AnalogueScore{
+
+	private:
+		double _score = 0.0;
+		bool _isSet = false;
+	public:
+		void set(double s){
+			_score = s;
+			_isSet = true;
+		}
+		double get(void){
+			assert(_isSet);
+			return _score;
+		}
+};
 
 #endif

@@ -157,12 +157,22 @@
 				buffer.clear();
 			}
  			readDetection rd;
-			rd.readID = line.substr(1, line.find(' ') - 1);
-			rd.chromosome = line.substr(line.find(' ') + 1, line.find(':') - line.find(' ') - 1);
-			rd.mappingLower = std::stoi(line.substr(line.find(':') + 1, line.rfind('-') - line.find(':') - 1));
-			rd.mappingUpper = std::stoi(line.substr(line.rfind('-')+1, line.find('#') - line.rfind('-') - 1 ));
 
-			int readLength = rd.mappingUpper - rd.mappingLower;
+			std::stringstream ssLine(line);
+			std::string column;
+			int cIndex = 0;
+			while ( std::getline( ssLine, column, ' ' ) ){
+
+				if ( cIndex == 0 ) rd.readID = column;
+				else if ( cIndex == 1 ) rd.chromosome = column;
+				else if ( cIndex == 2 ) rd.mappingLower = std::stoi(column);
+				else if ( cIndex == 3 ) rd.mappingUpper = std::stoi(column);
+				else if ( cIndex == 4 ) rd.strand = column;
+				else throw DetectParsing();
+				cIndex++;
+			}
+			assert(rd.mappingUpper > rd.mappingLower);
+			unsigned int readLength = rd.mappingUpper - rd.mappingLower;
 			recordRead = true;
 			if ( (args.cropToMin and readLength < args.min) or (args.cropToMax and readLength > args.max) ){
 
@@ -170,9 +180,8 @@
 				continue;
 			}
 
-			std::string strand = line.substr(line.find('#')+1);
-			if (strand == "fwd") rd.direction = "+";
-			else if (strand == "rev") rd.direction = "-";
+			if (rd.strand == "fwd") rd.direction = "+";
+			else if (rd.strand == "rev") rd.direction = "-";
 			else throw BadStrandDirection();
 			buffer.push_back(rd);
 		}

@@ -14,6 +14,15 @@
 #include "error_handling.h"
 
 
+int show_version( int, char** ){
+
+	std::cout << "Version: " << VERSION << std::endl;
+	std::cout << "Written by Michael Boemo, Department of Pathology, University of Cambridge." << std::endl;
+	std::cout << "Please submit bug reports to GitHub Issues." << std::endl;
+	return 0;
+}
+
+
 void displayProgress( int current, int total ){
 /*poached from https://stackoverflow.com/questions/14539867/how-to-display-a-progress-indicator-in-pure-c-c-cout-printf */
 

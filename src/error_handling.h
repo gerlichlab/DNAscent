@@ -118,6 +118,13 @@ struct ParsingError : public std::exception {
 	}
 };
 
+
+struct DetectParsing : public std::exception {
+	const char * what () const throw () {
+		return "Parsing error on DNAscent detect output.";
+	}
+};
+
 struct IndexFormatting : public std::exception {
 	const char * what () const throw () {
 		return "Index should specify whether fast5 is bulk or individual.  Please contact the author.";

@@ -44,8 +44,8 @@ struct Arguments {
 	std::string logFilename;
 	int threads;
 	std::string eventalignFilename;
-	int maxReads;
-	int maxEvents;
+	unsigned int maxReads;
+	unsigned int maxEvents;
 	float pi;
 };
 
@@ -65,7 +65,7 @@ Arguments parseTrainingArguments( int argc, char** argv ){
 
 	Arguments trainArgs;
 
-	/*defaults - we'll override these if the option was specified by the user */
+	//defaults - we'll override these if the option was specified by the user
 	trainArgs.threads = 1;
 	trainArgs.maxReads = 100000;
 	trainArgs.maxEvents = 10000;
@@ -127,7 +127,7 @@ Arguments parseTrainingArguments( int argc, char** argv ){
 std::vector<int> findNeighbours( std::vector<double> &events, double ev, double epsilon ){
 
 	std::vector< int > neighbourIdx;
-	for ( int i = 0; i < events.size(); i++ ){
+	for ( unsigned int i = 0; i < events.size(); i++ ){
 
 		if (std::abs(ev - events[i]) <= epsilon) neighbourIdx.push_back(i);
 	}
@@ -135,7 +135,7 @@ std::vector<int> findNeighbours( std::vector<double> &events, double ev, double 
 }
 
 
-std::map<int,int> DBSCAN( std::vector< double > events, double epsilon, int minPoints ){
+std::map<int,int> DBSCAN( std::vector< double > events, double epsilon, unsigned int minPoints ){
 
 	//labels
 	//-2 := undefined
@@ -144,10 +144,10 @@ std::map<int,int> DBSCAN( std::vector< double > events, double epsilon, int minP
 
 	//initialise labels
 	std::map< int, int > index2label;
-	for ( int i = 0; i < events.size(); i++ ) index2label[i] = -2;
+	for ( unsigned int i = 0; i < events.size(); i++ ) index2label[i] = -2;
 
 	int C = 0; //cluster counter
-	for ( int i = 0; i < events.size(); i++ ){
+	for ( unsigned int i = 0; i < events.size(); i++ ){
 
 		if (index2label[i] != -2) continue;
 		std::vector<int> neighbourIndices = findNeighbours( events, events[i], epsilon );
@@ -161,7 +161,7 @@ std::map<int,int> DBSCAN( std::vector< double > events, double epsilon, int minP
 		index2label[i] = C;
 		std::vector< int > seedSet = neighbourIndices;
 		seedSet.erase(std::find(seedSet.begin(),seedSet.end(),i)); //seed set is the neighbours minus the event we're at
-		for ( int j = 0; j < seedSet.size(); j++ ){
+		for ( unsigned int j = 0; j < seedSet.size(); j++ ){
 
 			if (index2label[seedSet[j]] == -1) index2label[seedSet[j]] = C;
 			if (index2label[seedSet[j]] != -2 ) continue;
@@ -397,7 +397,7 @@ int train_main( int argc, char** argv ){
 	progressBar pb_read( lineCount, true );
 	*/
 	progressBar pb_read( trainArgs.maxReads, true );
-	int readsRead = 0;
+	unsigned int readsRead = 0;
 	std::string readIdx = "";
 
 	std::ifstream eventFile(trainArgs.eventalignFilename);
@@ -409,7 +409,7 @@ int train_main( int argc, char** argv ){
 
 		std::istringstream ss( line );
 		std::string sixMer, entry;
-		double eventMean, eventLength;
+		double eventMean = 0.0, eventLength = 0.0;
 
 		int col = 0;
 		while ( std::getline( ss, entry, '\t' ) ){
@@ -438,6 +438,9 @@ int train_main( int argc, char** argv ){
 			}
 			col++;
 		}
+
+		assert (eventMean != 0.0 and eventLength != 0.0);
+
 		if ( eventLength >= 0.002 and importedEvents[sixmerToIndex[sixMer]].size() < trainArgs.maxEvents ){
 
 			importedEvents[sixmerToIndex[sixMer]].push_back( eventMean );
@@ -453,7 +456,7 @@ int train_main( int argc, char** argv ){
 	progressBar pb_fit( importedEvents.size(),true );
 
 	#pragma omp parallel for schedule(dynamic) shared(pb_fit, indexToSixmer, SixMer_model, prog, failed, outFile, importedEvents, trainArgs) num_threads(trainArgs.threads)
-	for ( int i = 0; i < importedEvents.size(); i++ ){
+	for ( unsigned int i = 0; i < importedEvents.size(); i++ ){
 
 		/*don't train if we have less than 200 events for this 6mer */
 		if ( importedEvents[i].size() < 200 ){
@@ -462,9 +465,11 @@ int train_main( int argc, char** argv ){
 		}
 
 		//DBSCAN to eliminate alignment artefacts
-		std::map<int,int> labels = DBSCAN( importedEvents[i], 0.5, 0.025*importedEvents[i].size() );
+		unsigned int minPoints = 0.025*importedEvents[i].size();
+		std::map<int,int> labels = DBSCAN( importedEvents[i], 0.5, minPoints );
+
 		std::vector< double > filteredEvents;
-		for ( int j = 0; j < importedEvents[i].size(); j++ ){
+		for ( unsigned int j = 0; j < importedEvents[i].size(); j++ ){
 
 			if (labels[j] != -1) filteredEvents.push_back(importedEvents[i][j]);
 		}

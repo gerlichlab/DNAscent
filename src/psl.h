@@ -23,7 +23,7 @@ struct readDetection{
 	std::string readID, chromosome;
 	int mappingLower, mappingUpper;
 	std::vector< Track > tracks;
-	std::string direction;
+	std::string direction, strand;
 };
 
 

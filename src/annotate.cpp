@@ -198,7 +198,7 @@ std::vector< int > annotatePosition( read &r, unsigned int windowLength, std::ma
 	for ( unsigned int i = 0; i < POIs.size(); i++ ){
 
 		int posOnRef = POIs[i];
-		int posOnQuery = (r.refToQuery).at(posOnRef);
+		//int posOnQuery = (r.refToQuery).at(posOnRef);
 
 		std::string readSnippet = (r.referenceSeqMappedTo).substr(posOnRef - windowLength, 2*windowLength);
 
@@ -266,8 +266,8 @@ std::vector< int > annotatePosition( read &r, unsigned int windowLength, std::ma
 		//figure out where the T's are
 		//std::cout << ">--------------" << std::endl;
 		std::string sixOI = (r.referenceSeqMappedTo).substr(posOnRef,6);
-		size_t BrdUStart = sixOI.find('T') + windowLength;
-		size_t BrdUEnd = sixOI.rfind('T') + windowLength;
+		//size_t BrdUStart = sixOI.find('T') + windowLength;
+		//size_t BrdUEnd = sixOI.rfind('T') + windowLength;
 		//std::cout << sixOI << std::endl;
 		std::vector<double> BrdUscores;
 		/*
@@ -360,6 +360,9 @@ std::string annotateReferenceFasta( std::string &basecall, std::vector<int> &cal
 
 
 int annotate_main( int argc, char** argv ){
+
+	std::cout << "DNAscent annotate is not supported yet." << std::endl;
+	return 0;
 
 	Arguments args = parseAnnotateArguments( argc, argv );
 	bool bulkFast5;

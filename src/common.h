@@ -10,6 +10,7 @@
 #ifndef COMMON_H
 #define COMMON_H
 
+#define VERSION "1.0.0"
 
 #include <algorithm>
 #include <vector>
@@ -21,6 +22,7 @@
 #include <chrono>
 #include <iomanip>
 
+int show_version( int, char** );
 
 class progressBar{
 

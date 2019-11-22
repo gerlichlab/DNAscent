@@ -16,6 +16,7 @@
 #include "annotate.h"
 #include "index.h"
 #include "train.h"
+#include "common.h"
 
 /*prototype */
 int show_options( int, char** );
@@ -29,7 +30,9 @@ static std::map< std::string, std::function< int( int, char** ) > > executables 
 	{"annotate", 	annotate_main},
 	{"train", 	train_main},
 	{"--help",	show_options},
-	{"-h",		show_options}
+	{"-h",		show_options},
+	{"-v",		show_version},
+	{"--version",	show_version}
 };
 
 
@@ -45,7 +48,9 @@ int show_options( int, char** ){
 	for ( auto &exec : executables ){
 		std::cout << "  "<< exec.first << std::endl;
 	}
-
+	std::cout << "Version: " << VERSION << std::endl;
+	std::cout << "Written by Michael Boemo, Department of Pathology, University of Cambridge." << std::endl;
+	std::cout << "Please submit bug reports to GitHub Issues." << std::endl;
 	return 0;
 }
 

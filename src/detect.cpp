@@ -12,11 +12,8 @@
 #include <stdlib.h>
 #include <limits>
 #include "common.h"
-//#include "data_IO.h"
 #include "event_handling.h"
 #include "probability.h"
-//#include "../htslib/htslib/hts.h"
-//#include "../htslib/htslib/sam.h"
 #include "../fast5/include/fast5.hpp"
 
 
@@ -171,8 +168,8 @@ double sequenceProbability( std::vector <double> &observations,
 				bool useBrdU, 
 				std::map< std::string, std::pair< double, double > > &analogueModel, 
 				PoreParameters scalings,
-				int BrdUStart,
-				int BrdUEnd ){
+				size_t BrdUStart,
+				size_t BrdUEnd ){
 
 	std::vector< double > I_curr(2*windowSize, NAN), D_curr(2*windowSize, NAN), M_curr(2*windowSize, NAN), I_prev(2*windowSize, NAN), D_prev(2*windowSize, NAN), M_prev(2*windowSize, NAN);
 	double firstI_curr = NAN, firstI_prev = NAN;
@@ -301,8 +298,8 @@ double sequenceProbability_methyl( std::vector <double> &observations,
 				std::string &sequence_methylated,
 				size_t windowSize, 
 				PoreParameters scalings,
-				int MethylStart,
-				int MethylEnd ){
+				size_t MethylStart,
+				size_t MethylEnd ){
 
 	std::vector< double > I_curr(2*windowSize, NAN), D_curr(2*windowSize, NAN), M_curr(2*windowSize, NAN), I_prev(2*windowSize, NAN), D_prev(2*windowSize, NAN), M_prev(2*windowSize, NAN);
 	double firstI_curr = NAN, firstI_prev = NAN;
@@ -827,8 +824,8 @@ std::string llAcrossRead( read &r, unsigned int windowLength, std::map< std::str
 
 		//make the BrdU call
 		std::string sixOI = (r.referenceSeqMappedTo).substr(posOnRef,6);
-		int BrdUStart = sixOI.find('T') + windowLength;
-		int BrdUEnd = sixOI.rfind('T') + windowLength;
+		size_t BrdUStart = sixOI.find('T') + windowLength;
+		size_t BrdUEnd = sixOI.rfind('T') + windowLength;
 		double logProbAnalogue = sequenceProbability( eventSnippet, readSnippet, windowLength, true, analogueModel, r.scalings, BrdUStart, BrdUEnd );
 		double logProbThymidine = sequenceProbability( eventSnippet, readSnippet, windowLength, false, analogueModel, r.scalings, 0, 0 );
 		double logLikelihoodRatio = logProbAnalogue - logProbThymidine;
@@ -843,8 +840,8 @@ std::string llAcrossRead( read &r, unsigned int windowLength, std::map< std::str
 			}
 			else{
 
-				int MethylStart = conflictSubseq.find('M') + BrdUStart-5;
-				int MethylEnd = conflictSubseq.rfind('M') + BrdUStart-5;
+				size_t MethylStart = conflictSubseq.find('M') + BrdUStart-5;
+				size_t MethylEnd = conflictSubseq.rfind('M') + BrdUStart-5;
 
 				double logProbMethylated = sequenceProbability_methyl( eventSnippet, readSnippet, readSnippetMethylated, windowLength, r.scalings, MethylStart, MethylEnd );
 				double logLikelihood_BrdUvsMethyl = logProbAnalogue - logProbMethylated;
