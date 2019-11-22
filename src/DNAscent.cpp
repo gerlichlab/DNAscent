@@ -13,6 +13,7 @@
 #include "detect.h"
 #include "regions.h"
 #include "psl.h"
+#include "sense.h"
 #include "annotate.h"
 #include "index.h"
 #include "train.h"
@@ -29,6 +30,7 @@ static std::map< std::string, std::function< int( int, char** ) > > executables 
 	{"index", 	index_main},
 	{"annotate", 	annotate_main},
 	{"train", 	train_main},
+	{"forkSense", 	sense_main},
 	{"--help",	show_options},
 	{"-h",		show_options},
 	{"-v",		show_version},
