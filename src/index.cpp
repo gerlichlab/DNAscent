@@ -24,7 +24,7 @@
 "Example:\n"
 "  ./DNAscent index -d /path/to/detect_output.out\n"
 "Required arguments are:\n"
-"  -f,--files                path to fast5 files.\n"
+"  -f,--files                full path to fast5 files.\n"
 "Optional arguments are:\n"
 "  -s,--sequencing-summary   path to sequencing summary file from guppy/albacore basecalling.\n";
 
@@ -57,6 +57,8 @@ Arguments parseIndexArguments( int argc, char** argv ){
  		std::string flag( argv[ i ] );
  		if ( flag == "-f" or flag == "--files" ){
  			std::string strArg( argv[ i + 1 ] );
+			char trailing = strArg.back();
+			if (trailing == '/') strArg.pop_back();
 			args.fast5path = strArg;
 			i+=2;
 		}
@@ -78,7 +80,7 @@ void countFast5(std::string path, int &count){
 	tinydir_dir dir;
 	unsigned int i;
 	if (tinydir_open_sorted(&dir, path.c_str()) == -1){
-		std::string error = "Error opening directory "+path;
+		std::string error = "Error opening directory: "+path;
 		perror(error.c_str());
 		goto fail;
 	}
@@ -87,7 +89,7 @@ void countFast5(std::string path, int &count){
 
 		tinydir_file file;
 		if (tinydir_readfile_n(&dir, &file, i) == -1){
-			std::string error = "Error opening file in "+path;
+			std::string error = "Error opening file in: "+path;
 			perror(error.c_str());
 			goto fail;
 		}
@@ -113,7 +115,7 @@ void readDirectory(std::string path, std::map<std::string,std::string> &allfast5
 	tinydir_dir dir;
 	unsigned int i;
 	if (tinydir_open_sorted(&dir, path.c_str()) == -1){
-		std::string error = "Error opening directory "+path;
+		std::string error = "Error opening directory: "+path;
 		perror(error.c_str());
 		goto fail;
 	}
@@ -122,7 +124,7 @@ void readDirectory(std::string path, std::map<std::string,std::string> &allfast5
 
 		tinydir_file file;
 		if (tinydir_readfile_n(&dir, &file, i) == -1){
-			std::string error = "Error opening file in "+path;
+			std::string error = "Error opening file in: "+path;
 			perror(error.c_str());
 			goto fail;
 		}

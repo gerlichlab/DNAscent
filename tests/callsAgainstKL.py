@@ -35,6 +35,9 @@ for line in f:
 	else:
 		[pos, score, kmerRef, kmerRead] = line.rstrip().split()
 
+		if strand == 'rev':
+			kmerRef = reverseComplement(kmerRef)
+
 		if kmerRef not in kmer2attempts:
 			kmer2attempts[kmerRef] = 1
 		else:
@@ -44,9 +47,6 @@ for line in f:
 		if score < callThreshold:
 			continue
 
-		if strand == 'rev':
-			kmerRef = reverseComplement(kmerRef)
-		
 		if kmerRef not in kmer2calls:
 			kmer2calls[kmerRef] = 1
 		else:
