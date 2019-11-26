@@ -108,10 +108,10 @@ Arguments parseRegionsArguments( int argc, char** argv ){
 
 struct region{
 
-	std::string call;
+	std::string call="";
 	int start, end;
 	double score;
-	std::string forkDir;
+	std::string forkDir="";
 };
 
 
@@ -266,6 +266,13 @@ void callOrigins( std::vector< region > &regions, double threshold, std::string 
 			if ( regions[i].score > regions[i+1].score ) oriPosForRead.push_back( (regions[i].start + regions[i].end) / 2 );
 			else oriPosForRead.push_back( (regions[i+1].start + regions[i+1].end) / 2 );
 		}
+	}
+
+	//fix the ends
+	if (regions.size() > 3){
+
+		if (not regions[1].forkDir.empty() and regions[0].call == "BrdU") regions[0].forkDir = regions[1].forkDir;
+		if (not regions[regions.size()-2].forkDir.empty() and regions[regions.size()-1].call == "BrdU") regions[regions.size()-1].forkDir = regions[regions.size()-2].forkDir;
 	}
 
 	//write the origins to the output stream
