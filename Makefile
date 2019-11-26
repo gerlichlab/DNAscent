@@ -2,7 +2,7 @@ CC = gcc
 CXX = g++
 DEBUG = -g
 LIBFLAGS =
-CXXFLAGS = -Wall -O2 -fopenmp -std=c++11 $(DEBUG)
+CXXFLAGS = -Wall -O2 -fopenmp -std=c++14 $(DEBUG)
 CFLAGS = -Wall -std=c99 -O2 $(DEBUG)
 
 #hdf5
@@ -18,7 +18,7 @@ LIBFLAGS += -Wl,-rpath,$(dir $(abspath $(lastword $(MAKEFILE_LIST))))htslib -L h
 #tensorflow
 TENS_LIB = ./tensorflow/include/tensorflow/c/c_api.h
 TENS_INCLUDE = -I./tensorflow/include
-LIBFLAGS += -Wl,-rpath,$(dir $(abspath $(lastword $(MAKEFILE_LIST))))tensorflow -L tensorflow/lib -ltensorflow
+LIBFLAGS += -Wl,-rpath,$(dir $(abspath $(lastword $(MAKEFILE_LIST))))tensorflow/lib -L tensorflow/lib -ltensorflow
 
 #fast5
 FAST5_INCLUDE = -I./fast5/include
