@@ -333,22 +333,39 @@ std::string runCNN(DetectedRead &r, std::string modelPath){
 }
 
 
-void emptyBuffer(std::vector< DetectedRead > &buffer, std::string modelPath, std::ofstream &outFile){
+void emptyBuffer(std::vector< DetectedRead > &buffer, std::string modelPath, std::ofstream &outFile, int threads){
 
+	#pragma omp parallel for schedule(dynamic) shared(modelPath,outFile) num_threads(threads)
 	for ( auto b = buffer.begin(); b < buffer.end(); b++) {
 
 		std::string readOutput = runCNN(*b, modelPath);
-		outFile << readOutput;
+
+		#pragma omp critical
+		{
+			outFile << readOutput;
+		}
 	}
 	buffer.clear();
 }
 
 
+bool checkReadLength( int length ){
+
+	std::vector<int> pooling = {6,4,4,4};
+	for (auto p = pooling.begin(); p < pooling.end(); p++){
+
+		length /= *p;
+	}
+	if (length <= 3) return false;
+	else return true;
+}
+
+
 int sense_main( int argc, char** argv ){
 
-	unsigned int maxBufferSize = 10;
-
 	Arguments args = parseSenseArguments( argc, argv );
+
+	unsigned int maxBufferSize = 8*(args.threads);
 
 	//get a read count
 	int readCount = 0;
@@ -375,7 +392,7 @@ int sense_main( int argc, char** argv ){
 		if ( line.substr(0,1) == ">" ){
 
 			//empty the buffer if it's full
-			if (buffer.size() >= maxBufferSize) emptyBuffer(buffer,args.modelFilename, outFile);
+			if (buffer.size() >= maxBufferSize) emptyBuffer(buffer,args.modelFilename, outFile, args.threads);
 
 			progress++;
 			pb.displayProgress( progress, 0, 0 );
@@ -396,8 +413,10 @@ int sense_main( int argc, char** argv ){
 				cIndex++;
 			}
 			assert(d.mappingUpper > d.mappingLower);
-			buffer.push_back(d);
 
+			bool longEnough = checkReadLength(d.mappingUpper - d.mappingLower);
+
+			if (longEnough) buffer.push_back(d);
 		}
 		else{
 
