@@ -280,15 +280,15 @@ TF_Tensor *read2tensor(DetectedRead &r, const TensorShape &shape){
 }
 
 
-int runCNN(DetectedRead &r, std::string modelPath){
+std::string runCNN(DetectedRead &r, std::string modelPath){
 
-	auto session = std::unique_ptr<MySession>(my_model_load(modelPath.c_str(), "conv1d_input", "time_distributed/Reshape_1"));
+	auto session = std::unique_ptr<MySession>(my_model_load(modelPath.c_str(), "conv1d_input", "time_distributed_2/Reshape_1"));
 
 	TensorShape input_shape={{1, r.brduCalls.size(), 1}, 3};
 	auto input_values = tf_obj_unique_ptr(read2tensor(r, input_shape));
 	if(!input_values){
 		std::cerr << "Tensor creation failure." << std::endl;
-		return -1;
+		exit (EXIT_FAILURE);
 	}
 
 	CStatus status;
@@ -302,39 +302,44 @@ int runCNN(DetectedRead &r, std::string modelPath){
 
 	if(status.failure()){
 		status.dump_error();
-		return -1;
+		exit (EXIT_FAILURE);
 	}
 
 	TF_Tensor &output = *outputs[0];
 	if(TF_TensorType(&output) != TF_FLOAT){
 		std::cerr << "Error, unexpected output tensor type." << std::endl;
-		return -1;
+		exit (EXIT_FAILURE);
 	}
 
+	std::string str_output;
 	{
-		std::cerr << r.readID << " " << r.chromosome << " " << r.mappingLower << " " << r.mappingUpper << " " << r.strand << std::endl; //header
+		str_output += r.readID + " " + r.chromosome + " " + std::to_string(r.mappingLower) + " " + std::to_string(r.mappingUpper) + " " + r.strand + "\n"; //header
 		size_t output_size = TF_TensorByteSize(&output) / sizeof(float);
 		auto output_array = (const float *)TF_TensorData(&output);
 		unsigned int pos = 1;
-		std::cerr << r.positions[0];
+		str_output += std::to_string(r.positions[0]);
 		for(size_t i = 0; i < output_size; i++){
-			std::cerr << "\t" << output_array[i];
-			if((i+1)%3==0){
+			str_output += "\t" + std::to_string(output_array[i]);
+			if((i+1)%4==0){
 
-				std::cerr << std::endl;
+				str_output += "\n";
 				pos++;
-				if (i != output_size-1) std::cerr << r.positions[pos];
+				if (i != output_size-1) str_output += std::to_string(r.positions[pos]);
 			}
 		}
-		std::cerr << std::endl;
+		str_output += "\n";
 	}
-	return 0;
+	return str_output;
 }
 
 
-void emptyBuffer(std::vector< DetectedRead > &buffer, std::string modelPath){
+void emptyBuffer(std::vector< DetectedRead > &buffer, std::string modelPath, std::ofstream &outFile){
 
-	for ( auto b = buffer.begin(); b < buffer.end(); b++) runCNN(*b, modelPath);
+	for ( auto b = buffer.begin(); b < buffer.end(); b++) {
+
+		std::string readOutput = runCNN(*b, modelPath);
+		outFile << readOutput;
+	}
 	buffer.clear();
 }
 
@@ -370,7 +375,7 @@ int sense_main( int argc, char** argv ){
 		if ( line.substr(0,1) == ">" ){
 
 			//empty the buffer if it's full
-			if (buffer.size() >= maxBufferSize) emptyBuffer(buffer,args.modelFilename);
+			if (buffer.size() >= maxBufferSize) emptyBuffer(buffer,args.modelFilename, outFile);
 
 			progress++;
 			pb.displayProgress( progress, 0, 0 );
