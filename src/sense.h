@@ -14,12 +14,21 @@
 /*function prototypes */
 int sense_main( int argc, char** argv );
 
-struct DetectedRead{
+class DetectedRead{
 
-	std::vector< unsigned int > positions;
-	std::vector< double > brduCalls;
-	std::string readID, chromosome, strand;
-	int mappingLower, mappingUpper;
+	public:
+		std::vector< unsigned int > positions;
+		std::vector< double > brduCalls;
+		std::string readID, chromosome, strand;
+		int mappingLower, mappingUpper;
+		void trim(unsigned int trimFactor){
+
+			assert(positions.size() > trimFactor and brduCalls.size() > trimFactor and positions.size() == brduCalls.size());
+			unsigned int cropFromEnd = positions.size() % trimFactor;
+			brduCalls.erase(brduCalls.end() - cropFromEnd, brduCalls.end());
+			positions.erase(positions.end() - cropFromEnd, positions.end());
+			assert(positions.size() % trimFactor == 0 and brduCalls.size() % trimFactor == 0);
+		}
 };
 
 #endif

@@ -91,6 +91,9 @@ Arguments parseSenseArguments( int argc, char** argv ){
 static TF_Buffer *read_tf_buffer_from_file(const char* file);
 
 
+std::vector<int> pooling = {6,4,4,4};
+
+
 class CStatus{
 	public:
 		TF_Status *ptr;
@@ -281,9 +284,8 @@ TF_Tensor *read2tensor(DetectedRead &r, const TensorShape &shape){
 
 
 std::string runCNN(DetectedRead &r, std::string modelPath){
-
+;
 	auto session = std::unique_ptr<MySession>(my_model_load(modelPath.c_str(), "conv1d_input", "time_distributed_2/Reshape_1"));
-
 	TensorShape input_shape={{1, r.brduCalls.size(), 1}, 3};
 	auto input_values = tf_obj_unique_ptr(read2tensor(r, input_shape));
 	if(!input_values){
@@ -312,15 +314,17 @@ std::string runCNN(DetectedRead &r, std::string modelPath){
 	}
 
 	std::string str_output;
+	unsigned int outputFields = 4;	
 	{
 		str_output += r.readID + " " + r.chromosome + " " + std::to_string(r.mappingLower) + " " + std::to_string(r.mappingUpper) + " " + r.strand + "\n"; //header
 		size_t output_size = TF_TensorByteSize(&output) / sizeof(float);
+		assert(output_size == r.brduCalls.size() * outputFields);
 		auto output_array = (const float *)TF_TensorData(&output);
 		unsigned int pos = 1;
 		str_output += std::to_string(r.positions[0]);
 		for(size_t i = 0; i < output_size; i++){
 			str_output += "\t" + std::to_string(output_array[i]);
-			if((i+1)%4==0){
+			if((i+1)%outputFields==0){
 
 				str_output += "\n";
 				pos++;
@@ -333,11 +337,12 @@ std::string runCNN(DetectedRead &r, std::string modelPath){
 }
 
 
-void emptyBuffer(std::vector< DetectedRead > &buffer, std::string modelPath, std::ofstream &outFile, int threads){
+void emptyBuffer(std::vector< DetectedRead > &buffer, std::string modelPath, std::ofstream &outFile, int trimFactor, int threads){
 
 	#pragma omp parallel for schedule(dynamic) shared(modelPath,outFile) num_threads(threads)
 	for ( auto b = buffer.begin(); b < buffer.end(); b++) {
 
+		b -> trim(trimFactor);
 		std::string readOutput = runCNN(*b, modelPath);
 
 		#pragma omp critical
@@ -351,7 +356,6 @@ void emptyBuffer(std::vector< DetectedRead > &buffer, std::string modelPath, std
 
 bool checkReadLength( int length ){
 
-	std::vector<int> pooling = {6,4,4,4};
 	for (auto p = pooling.begin(); p < pooling.end(); p++){
 
 		length /= *p;
@@ -385,6 +389,10 @@ int sense_main( int argc, char** argv ){
  	std::ofstream outFile( args.outputFilename );
 	if ( not outFile.is_open() ) throw IOerror( args.outputFilename );
 
+	//compute trim factor
+	unsigned int trimFactor = 1;
+	for (auto p = pooling.begin(); p < pooling.end(); p++) trimFactor *= *p;
+
 	std::vector< DetectedRead > buffer;
 	int progress = 0;
 	while( std::getline( inFile, line ) ){
@@ -392,7 +400,7 @@ int sense_main( int argc, char** argv ){
 		if ( line.substr(0,1) == ">" ){
 
 			//empty the buffer if it's full
-			if (buffer.size() >= maxBufferSize) emptyBuffer(buffer,args.modelFilename, outFile, args.threads);
+			if (buffer.size() >= maxBufferSize) emptyBuffer(buffer,args.modelFilename, outFile, trimFactor, args.threads);
 
 			progress++;
 			pb.displayProgress( progress, 0, 0 );
