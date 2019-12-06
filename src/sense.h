@@ -10,6 +10,7 @@
 #define SENSE_H
 
 #include <cassert>
+#include <vector>
 
 /*function prototypes */
 int sense_main( int argc, char** argv );
@@ -19,8 +20,11 @@ class DetectedRead{
 	public:
 		std::vector< unsigned int > positions;
 		std::vector< double > brduCalls;
-		std::string readID, chromosome, strand;
+		std::string readID, chromosome, strand, header;
 		int mappingLower, mappingUpper;
+		std::vector<std::vector<float>> probabilities;
+		std::vector<std::pair<int,int>> stalls;
+		std::vector<std::pair<int,int>> origins;
 		void trim(unsigned int trimFactor){
 
 			assert(positions.size() > trimFactor and brduCalls.size() > trimFactor and positions.size() == brduCalls.size());

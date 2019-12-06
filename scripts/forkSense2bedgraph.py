@@ -29,7 +29,7 @@ for line in f:
 
 			#leftward moving fork
 			f_forkLeft = open( str(directoryCount) + '/' + str(count) + '_' + readID + '_forkLeft.bedgraph','w')
-			f_forkLeft.write( 'track type=bedGraph name="'+readID + '_forkLeft'+'" description="BedGraph format" visibility=full color=200,100,0 altColor=0,100,200 priority=20'+'\n')
+			f_forkLeft.write( 'track type=bedGraph name="'+readID + '_forkLeft'+'" description="BedGraph format" visibility=full color=200,100,0 altColor=0,100,200 priority=20 viewLimits=0.0:1.0'+'\n')
 
 			for l in buffer_forkLeft:
 				f_forkLeft.write(l)
@@ -37,7 +37,7 @@ for line in f:
 
 			#rightward moving fork
 			f_forkRight = open( str(directoryCount) + '/' + str(count) + '_' + readID + '_forkRight.bedgraph','w')
-			f_forkRight.write( 'track type=bedGraph name="'+readID + '_forkRight'+'" description="BedGraph format" visibility=full color=0,0,255 altColor=0,100,200 priority=20'+'\n')
+			f_forkRight.write( 'track type=bedGraph name="'+readID + '_forkRight'+'" description="BedGraph format" visibility=full color=0,0,255 altColor=0,100,200 priority=20 viewLimits=0.0:1.0'+'\n')
 
 			for l in buffer_forkRight:
 				f_forkRight.write(l)
@@ -47,7 +47,7 @@ for line in f:
 			if len( buffer_stall ) > 0 and includeStall:
 
 				f_forkStall = open( str(directoryCount) + '/' + str(count) + '_' + readID + '_forkStall.bedgraph','w')
-				f_forkStall.write( 'track type=bedGraph name="'+readID + '_forkStall'+'" description="BedGraph format" visibility=full color=255,0,0 altColor=0,100,200 priority=20'+'\n')
+				f_forkStall.write( 'track type=bedGraph name="'+readID + '_forkStall'+'" description="BedGraph format" visibility=full color=255,0,0 altColor=0,100,200 priority=20 viewLimits=0.0:1.0'+'\n')
 
 				for l in buffer_stall:
 					f_forkStall.write(l)
@@ -66,7 +66,7 @@ for line in f:
 		buffer_stall = []
 
 	else:
-		print line
+
 		splitLine = line.rstrip().split()
 		pos = int(splitLine[0])
 		probForkLeft = float(splitLine[1])
@@ -89,7 +89,7 @@ count += 1
 
 #leftward moving fork
 f_forkLeft = open( str(directoryCount) + '/' + str(count) + '_' + readID + '_forkLeft.bedgraph','w')
-f_forkLeft.write( 'track type=bedGraph name="'+readID + '_forkLeft'+'" description="BedGraph format" visibility=full color=200,100,0 altColor=0,100,200 priority=20'+'\n')
+f_forkLeft.write( 'track type=bedGraph name="'+readID + '_forkLeft'+'" description="BedGraph format" visibility=full color=200,100,0 altColor=0,100,200 priority=20 viewLimits=0.0:1.0'+'\n')
 
 for l in buffer_forkLeft:
 	f_forkLeft.write(l)
@@ -97,7 +97,7 @@ f_forkLeft.close()
 
 #rightward moving fork
 f_forkRight = open( str(directoryCount) + '/' + str(count) + '_' + readID + '_forkRight.bedgraph','w')
-f_forkRight.write( 'track type=bedGraph name="'+readID + '_forkRight'+'" description="BedGraph format" visibility=full color=200,100,0 altColor=0,100,200 priority=20'+'\n')
+f_forkRight.write( 'track type=bedGraph name="'+readID + '_forkRight'+'" description="BedGraph format" visibility=full color=200,100,0 altColor=0,100,200 priority=20 viewLimits=0.0:1.0'+'\n')
 
 for l in buffer_forkRight:
 	f_forkRight.write(l)
@@ -106,7 +106,7 @@ f_forkRight.close()
 #fork direction
 if len( buffer_stall ) > 0 and includeStall:
 	f_forkStall = open( str(directoryCount) + '/' + str(count) + '_' + readID + '_forkStall.bedgraph','w')
-	f_forkStall.write( 'track type=bedGraph name="'+readID + '_forkStall'+'" description="BedGraph format" visibility=full color=200,100,0 altColor=0,100,200 priority=20'+'\n')
+	f_forkStall.write( 'track type=bedGraph name="'+readID + '_forkStall'+'" description="BedGraph format" visibility=full color=200,100,0 altColor=0,100,200 priority=20 viewLimits=0.0:1.0'+'\n')
 
 	for l in buffer_stall:
 		f_forkStall.write(l)

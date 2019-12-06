@@ -17,6 +17,7 @@
 #include <memory>
 #include <math.h>
 #include <algorithm>
+#include <limits>
 
 static const char *help=
 "forkSense: DNAscent AI executable that calls replication origins, fork movement, and fork stalling.\n"
@@ -29,13 +30,17 @@ static const char *help=
 "  -o,--output               path to output file for forkSense,\n"
 "  -m,--model                path to dnn forkSense model.\n"
 "Optional arguments are:\n"
-"  -t,--threads              number of threads (default is 1 thread).\n";
+"  -t,--threads              number of threads (default: 1 thread),\n"
+"  --markOrigins             writes replication origin locations to a bed file (default: off),\n"
+"  --markStalls              writes fork stall locations to a bed file (default: off).\n";
 
 struct Arguments {
 
 	std::string detectFilename;
 	std::string outputFilename;
 	std::string modelFilename;
+	bool markOrigins = false;
+	bool markStalls = false;
 	unsigned int threads = 1;
 };
 
@@ -81,6 +86,16 @@ Arguments parseSenseArguments( int argc, char** argv ){
 			std::string strArg( argv[ i + 1 ] );
 			args.threads = std::stoi( strArg.c_str() );
 			i+=2;
+		}
+		else if ( flag == "--markOrigins" ){
+
+			args.markOrigins = true;
+			i+=1;
+		}
+		else if ( flag == "--markStalls" ){
+
+			args.markStalls = true;
+			i+=1;
 		}
 		else throw InvalidOption( flag );
 	}
@@ -283,6 +298,185 @@ TF_Tensor *read2tensor(DetectedRead &r, const TensorShape &shape){
 }
 
 
+std::string callStalls(DetectedRead &r){
+
+	assert(r.positions.size() == r.probabilities.size());
+
+	float threshold = 0.8;
+	bool inStall = false;
+	int stallStart = -1, potentialEnd = -1;
+	std::string outBed;
+
+	for (size_t i = 1; i < r.probabilities.size(); i++){
+
+		if (r.probabilities[i][3] > threshold and not inStall){ //initilise the stall site
+
+			stallStart = r.positions[i];
+			inStall = true;
+		}
+		else if (inStall and r.probabilities[i][3] < threshold and r.probabilities[i-1][3] > threshold){
+
+			potentialEnd = r.positions[i];
+		}
+		else if (inStall and (r.probabilities[i][0] > threshold or r.probabilities[i][1] > threshold or r.probabilities[i][2] > threshold)){//close if we've confidently moved to something else
+
+			assert(stallStart != -1 and potentialEnd != -1);
+			r.stalls.push_back(std::make_pair(stallStart,potentialEnd));
+			outBed += r.chromosome + " " + std::to_string(stallStart) + " " + std::to_string(potentialEnd) + " " + r.header.substr(1) + "\n";
+			inStall = false;
+			stallStart = -1;
+			potentialEnd = -1;
+
+		}
+	}
+
+	//if we got to the end of the read without closing
+	if (inStall){
+
+		assert(stallStart != -1);
+		if (potentialEnd == -1) potentialEnd = r.positions.back();
+
+		r.stalls.push_back(std::make_pair(stallStart,potentialEnd));
+		outBed += r.chromosome + " " + std::to_string(stallStart) + " " + std::to_string(potentialEnd) + " " + r.header.substr(1) + "\n";
+	}
+
+	return outBed;
+}
+
+
+std::string callOrigins(DetectedRead &r, bool stallsMarked){
+
+	//detect stalls if we haven't already
+	//if (not stallsMarked) callStalls(r);
+
+	assert(r.positions.size() == r.probabilities.size());
+
+	float threshold = 0.8;
+
+	std::vector<std::pair<int,int>> leftForks, rightForks;
+	std::string outBed;
+
+	bool inFork = false;
+	int forkStart = -1, potentialEnd = -1;
+
+	//rightward-moving forks
+	for (size_t i = 1; i < r.probabilities.size(); i++){
+
+		if (r.probabilities[i][2] > threshold and not inFork){ //initilise the stall site
+
+			forkStart = r.positions[i];
+			inFork = true;
+		}
+		else if (inFork and r.probabilities[i][2] < threshold and r.probabilities[i-1][2] > threshold){
+
+			potentialEnd = r.positions[i];
+		}
+		else if (inFork and (r.probabilities[i][0] > threshold or r.probabilities[i][1] > threshold or r.probabilities[i][3] > threshold)){//close if we've confidently moved to something else
+
+			assert(forkStart != -1 and potentialEnd != -1);
+			rightForks.push_back(std::make_pair(forkStart,potentialEnd));
+			inFork = false;
+			forkStart = -1;
+			potentialEnd = -1;
+
+		}
+	}
+
+	//if we got to the end of the read without closing
+	if (inFork){
+
+		assert(forkStart != -1);
+		if (potentialEnd == -1) potentialEnd = r.positions.back();
+
+		rightForks.push_back(std::make_pair(forkStart,potentialEnd));
+	}
+
+	inFork = false;
+	forkStart = -1;
+	potentialEnd = -1;
+
+	//reverse order for leftward-moving forks
+	std::vector<int> revPositions(r.positions.rbegin(), r.positions.rend());
+	std::vector<std::vector<float>> revProbabilities(r.probabilities.rbegin(), r.probabilities.rend());
+
+	//leftward-moving forks
+	for (size_t i = 1; i < revProbabilities.size(); i++){
+
+		if (revProbabilities[i][0] > threshold and not inFork){ //initilise the stall site
+
+			forkStart = revPositions[i];
+			inFork = true;
+		}
+		else if (inFork and revProbabilities[i][0] < threshold and revProbabilities[i-1][0] > threshold){
+
+			potentialEnd = revPositions[i];
+		}
+		else if (inFork and (revProbabilities[i][1] > threshold or revProbabilities[i][2] > threshold or revProbabilities[i][3] > threshold)){//close if we've confidently moved to something else
+
+			assert(forkStart != -1 and potentialEnd != -1);
+			leftForks.push_back(std::make_pair(potentialEnd,forkStart));
+			inFork = false;
+			forkStart = -1;
+			potentialEnd = -1;
+
+		}
+	}
+
+	//if we got to the end of the read without closing
+	if (inFork){
+
+		assert(forkStart != -1);
+		if (potentialEnd == -1) potentialEnd = revPositions.back();
+
+		leftForks.push_back(std::make_pair(potentialEnd,forkStart));
+	}
+
+	//match up regions
+	for ( size_t li = 0; li < leftForks.size(); li++ ){
+
+		//find the closest right fork region
+		int minDist = std::numeric_limits<int>::max();
+		int bestMatch = -1;
+		for ( size_t ri = 0; ri < rightForks.size(); ri++ ){
+
+			if (leftForks[li].second > rightForks[ri].first ) continue;
+
+			int dist = rightForks[ri].first - leftForks[li].second;
+			if (dist < minDist){
+				minDist = dist;
+				bestMatch = ri;
+
+			}
+		}
+
+		//make sure no other left forks are closer
+		bool failed = false;
+		if (bestMatch != -1){
+
+			for (size_t l2 = li+1; l2 < leftForks.size(); l2++){
+
+				if (leftForks[l2].second > rightForks[bestMatch].first ) continue;
+
+				int dist = rightForks[bestMatch].first - leftForks[l2].second;
+				if (dist < minDist){
+
+					failed = true;
+					break;
+				}
+			}
+		}
+		if (failed) continue;
+		else if (bestMatch != -1){
+
+			r.origins.push_back(std::make_pair(leftForks[li].second, rightForks[bestMatch].first));
+			outBed += r.chromosome + " " + std::to_string(leftForks[li].second) + " " + std::to_string(rightForks[bestMatch].first) + " " + r.header.substr(1) + "\n";
+		}
+	}
+
+	return outBed;
+}
+
+
 std::string runCNN(DetectedRead &r, std::string modelPath){
 ;
 	auto session = std::unique_ptr<MySession>(my_model_load(modelPath.c_str(), "conv1d_input", "time_distributed_2/Reshape_1"));
@@ -325,7 +519,7 @@ std::string runCNN(DetectedRead &r, std::string modelPath){
 		for(size_t i = 0; i < output_size; i++){
 			str_output += "\t" + std::to_string(output_array[i]);
 			if((i+1)%outputFields==0){
-
+				r.probabilities.push_back({output_array[i-3],output_array[i-2],output_array[i-1],output_array[i]});
 				str_output += "\n";
 				pos++;
 				if (i != output_size-1) str_output += std::to_string(r.positions[pos]);
@@ -337,17 +531,29 @@ std::string runCNN(DetectedRead &r, std::string modelPath){
 }
 
 
-void emptyBuffer(std::vector< DetectedRead > &buffer, std::string modelPath, std::ofstream &outFile, int trimFactor, int threads){
+void emptyBuffer(std::vector< DetectedRead > &buffer, Arguments args, std::ofstream &outFile, std::ofstream &originFile, std::ofstream &stallFile, int trimFactor){
 
-	#pragma omp parallel for schedule(dynamic) shared(modelPath,outFile) num_threads(threads)
+	#pragma omp parallel for schedule(dynamic) shared(args,outFile) num_threads(args.threads)
 	for ( auto b = buffer.begin(); b < buffer.end(); b++) {
 
 		b -> trim(trimFactor);
-		std::string readOutput = runCNN(*b, modelPath);
+		std::string readOutput = runCNN(*b, args.modelFilename);
+
+		std::string stallOutput, originOutput;
+		if (args.markStalls){
+
+			stallOutput = callStalls(*b);
+		}
+		if (args.markOrigins){
+
+			originOutput = callOrigins(*b,args.markStalls);
+		}
 
 		#pragma omp critical
 		{
 			outFile << readOutput;
+			if (args.markStalls and (*b).stalls.size() > 0) stallFile << stallOutput;
+			if (args.markOrigins and (*b).origins.size() > 0) originFile << originOutput;
 		}
 	}
 	buffer.clear();
@@ -388,6 +594,17 @@ int sense_main( int argc, char** argv ){
 	if ( not inFile.is_open() ) throw IOerror( args.detectFilename );
  	std::ofstream outFile( args.outputFilename );
 	if ( not outFile.is_open() ) throw IOerror( args.outputFilename );
+ 	std::ofstream originFile, stallFile;
+	if (args.markStalls){
+
+		stallFile.open("forkStalls_DNAscent_forkSense.bed");
+		if ( not stallFile.is_open() ) throw IOerror( "forkStalls_DNAscent_forkSense.bed" );
+	}
+	if (args.markOrigins){
+
+		originFile.open("origins_DNAscent_forkSense.bed");
+		if ( not originFile.is_open() ) throw IOerror( "origins_DNAscent_forkSense.bed" );
+	}
 
 	//compute trim factor
 	unsigned int trimFactor = 1;
@@ -400,13 +617,13 @@ int sense_main( int argc, char** argv ){
 		if ( line.substr(0,1) == ">" ){
 
 			//empty the buffer if it's full
-			if (buffer.size() >= maxBufferSize) emptyBuffer(buffer,args.modelFilename, outFile, trimFactor, args.threads);
+			if (buffer.size() >= maxBufferSize) emptyBuffer(buffer,args, outFile, originFile, stallFile, trimFactor);
 
 			progress++;
 			pb.displayProgress( progress, 0, 0 );
 
 			DetectedRead d;
-
+			d.header = line;
 			std::stringstream ssLine(line);
 			std::string column;
 			int cIndex = 0;
@@ -459,6 +676,9 @@ int sense_main( int argc, char** argv ){
 
 	inFile.close();
 	outFile.close();
+	if (args.markStalls) stallFile.close();
+	if (args.markOrigins) originFile.close();
+
 	std::cout << std::endl << "Done." << std::endl;
 
 	return 0;
