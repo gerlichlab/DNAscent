@@ -866,9 +866,6 @@ int detect_main( int argc, char** argv ){
 	/*import the analogue pore model that we specified on the command line */
 	std::map< std::string, std::pair< double, double > > analogueModel = buildAnalogueModel(args.divergence, args.excludeCpG);
 
-	//load the pore models
-	std::map< std::string, std::pair< double, double > > test = import_poreModel( "/home/michael/development/DNAscent_dev/pore_models/template_median68pA.6mer.model" );
-
 	//load DNAscent index
 	std::map< std::string, std::string > readID2path;
 	parseIndex( args.indexFilename, readID2path, bulkFast5 );

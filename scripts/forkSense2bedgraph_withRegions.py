@@ -11,6 +11,7 @@ first = True
 count = 0
 signalLineBuffer = []
 forkDirLineBuffer = []
+brduPositiveRead = False
 
 for line in f:
 
@@ -21,7 +22,7 @@ for line in f:
 
 		if not first:
 
-			if len(signalLineBuffer) >= 5:
+			if len(signalLineBuffer) >= 5 and brduPositiveRead:
 
 				regions_readID2buffer[readID] = signalLineBuffer
 				
@@ -29,7 +30,7 @@ for line in f:
 		splitLine = line.rstrip().split(' ')
 		readID = splitLine[0][1:]
 		chromosome = splitLine[1]
-
+		brduPositiveRead = False
 		first = False
 		signalLineBuffer = []
 
@@ -41,10 +42,14 @@ for line in f:
 		score = float(splitLine[2])
 		call = splitLine[3]
 
+		if call == 'BrdU':
+			brduPositiveRead = True
+
 		signalLineBuffer.append( chromosome + ' ' + str(start) + ' ' + str(end) + ' ' + str(score) + '\n' )
 
 f.close()
-regions_readID2buffer[readID] = signalLineBuffer
+if brduPositiveRead:
+	regions_readID2buffer[readID] = signalLineBuffer
 
 
 
@@ -77,47 +82,47 @@ for line in f:
 			#DNAscent regions
 			if readID in regions_readID2buffer:
 				outRegions = open( str(directoryCount) + '/' + str(count) + '_' + readID + '_DNAscentRegions.bedgraph','w')
-				outRegions.write( 'track type=bedGraph name="'+readID + '_DNAscentRegions'+'" description="BedGraph format" visibility=full color=0,153,0 altColor=51,0,0 priority=20'+'\n')
+				outRegions.write( 'track type=bedGraph name="'+readID + '_' + strand + '_DNAscentRegions'+'" description="BedGraph format" visibility=full color=0,153,0 altColor=51,0,0 priority=20'+'\n')
 
 				for l in regions_readID2buffer[readID]:
 					outRegions.write(l)
 				outRegions.close()
 
 
-			#leftward moving fork
-			f_forkLeft = open( str(directoryCount) + '/' + str(count) + '_' + readID + '_forkLeft.bedgraph','w')
-			f_forkLeft.write( 'track type=bedGraph name="'+readID + '_forkLeft'+'" description="BedGraph format" visibility=full color=200,100,0 altColor=0,100,200 priority=20 viewLimits=0.0:1.0'+'\n')
+				#leftward moving fork
+				f_forkLeft = open( str(directoryCount) + '/' + str(count) + '_' + readID + '_forkLeft.bedgraph','w')
+				f_forkLeft.write( 'track type=bedGraph name="'+readID + '_' + strand + '_forkLeft'+'" description="BedGraph format" visibility=full color=200,100,0 altColor=0,100,200 priority=20 viewLimits=0.0:1.0'+'\n')
 
-			for l in buffer_forkLeft:
-				f_forkLeft.write(l)
-			f_forkLeft.close()
+				for l in buffer_forkLeft:
+					f_forkLeft.write(l)
+				f_forkLeft.close()
 
-			#rightward moving fork
-			f_forkRight = open( str(directoryCount) + '/' + str(count) + '_' + readID + '_forkRight.bedgraph','w')
-			f_forkRight.write( 'track type=bedGraph name="'+readID + '_forkRight'+'" description="BedGraph format" visibility=full color=0,0,255 altColor=0,100,200 priority=20 viewLimits=0.0:1.0'+'\n')
+				#rightward moving fork
+				f_forkRight = open( str(directoryCount) + '/' + str(count) + '_' + readID + '_forkRight.bedgraph','w')
+				f_forkRight.write( 'track type=bedGraph name="'+readID + '_' + strand + '_forkRight'+'" description="BedGraph format" visibility=full color=0,0,255 altColor=0,100,200 priority=20 viewLimits=0.0:1.0'+'\n')
 
-			for l in buffer_forkRight:
-				f_forkRight.write(l)
-			f_forkRight.close()
+				for l in buffer_forkRight:
+					f_forkRight.write(l)
+				f_forkRight.close()
 
-			#fork direction
-			if len( buffer_stall ) > 0 and includeStall:
+				#fork direction
+				if len( buffer_stall ) > 0 and includeStall:
 
-				f_forkStall = open( str(directoryCount) + '/' + str(count) + '_' + readID + '_forkStall.bedgraph','w')
-				f_forkStall.write( 'track type=bedGraph name="'+readID + '_forkStall'+'" description="BedGraph format" visibility=full color=255,0,0 altColor=0,100,200 priority=20 viewLimits=0.0:1.0'+'\n')
+					f_forkStall = open( str(directoryCount) + '/' + str(count) + '_' + readID + '_forkStall.bedgraph','w')
+					f_forkStall.write( 'track type=bedGraph name="'+readID + '_' + strand + '_forkStall'+'" description="BedGraph format" visibility=full color=255,0,0 altColor=0,100,200 priority=20 viewLimits=0.0:1.0'+'\n')
 
-				for l in buffer_stall:
-					f_forkStall.write(l)
-				f_forkStall.close()
+					for l in buffer_stall:
+						f_forkStall.write(l)
+					f_forkStall.close()
 				
 		#get readID and chromosome
 		splitLine = line.rstrip().split(' ')
 		readID = splitLine[0][1:]
 		chromosome = splitLine[1]
+		strand = splitLine[-1:][0]
 		prevPos = int(splitLine[2]) #set the previous position for below to where this read started mapping
 
 		first = False
-		printThisOne = False
 		buffer_forkLeft = []
 		buffer_forkRight = []
 		buffer_stall = []

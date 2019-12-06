@@ -25,16 +25,17 @@ for line in f:
 
 	if line[0] == '>':
 
-		#splitLineHash = line.rstrip().split('#')
 		splitLineHash = line.rstrip().split(' ')
 		
-#		if splitLineHash[1] == 'rev':
 		if splitLineHash[-1:][0] == 'rev':
 			onRev = True
 			onFwd = False
-		else:
+		elif splitLineHash[-1:][0] == 'fwd':
 			onRev = False
 			onFwd = True
+		else:
+			print "Invalid strand - exiting"
+			sys.quit()
 
 		continue
 	else:
@@ -53,7 +54,7 @@ for line in f:
 					numRevMethylCalls += 1
 				numRevAttempts += 1
 				numRevMethylAttempts += 1
-			else:
+			elif onFwd:
 				if logLikelihood > threshold and logLikelihood_BrdUvsMethyl < threshold:
 					numFwdMethylDeclined += 1
 				elif logLikelihood > threshold and logLikelihood_BrdUvsMethyl > threshold:
@@ -62,7 +63,9 @@ for line in f:
 					numFwdMethylCalls += 1
 				numFwdAttempts += 1
 				numFwdMethylAttempts += 1
-
+			else:
+				print "Invalid strand - exiting"
+				sys.quit()
 
 			if logLikelihood > threshold:
 				numCalls += 1
@@ -74,11 +77,13 @@ for line in f:
 				if logLikelihood > threshold:
 					numRevCalls += 1
 				numRevAttempts += 1
-			else:
+			elif onFwd:
 				if logLikelihood > threshold:
 					numFwdCalls += 1
 				numFwdAttempts += 1
-			
+			else:
+				print "Invalid strand - exiting"
+				sys.quit()		
 
 			if logLikelihood > threshold:
 				numCalls += 1
