@@ -302,7 +302,7 @@ std::string callStalls(DetectedRead &r){
 
 	assert(r.positions.size() == r.probabilities.size());
 
-	float threshold = 0.8;
+	float threshold = 0.5;
 	bool inStall = false;
 	int stallStart = -1, potentialEnd = -1;
 	std::string outBed;
