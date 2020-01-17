@@ -22,7 +22,7 @@
 "To run DNAscent index, do:\n"
 "  ./DNAscent index [arguments]\n"
 "Example:\n"
-"  ./DNAscent index -d /path/to/detect_output.out\n"
+"  ./DNAscent index -f /path/to/detect_output.out\n"
 "Required arguments are:\n"
 "  -f,--files                path to fast5 files.\n"
 "Optional arguments are:\n"
