@@ -434,6 +434,7 @@ double sequenceProbability_methyl( std::vector <double> &observations,
 
 
 std::string getQuerySequence( bam1_t *record ){ 
+	//Covered in: tests/detect/htslib
 	
 	std::string seq;
 	uint8_t *a_seq = bam_get_seq(record);
@@ -455,6 +456,7 @@ std::string getQuerySequence( bam1_t *record ){
 
 
 void getRefEnd(bam1_t *record, int &refStart, int &refEnd ){
+	//Covered in: tests/detect/htslib
 
 	//initialise reference coordinates for the first match
 	refStart = record -> core.pos;
@@ -509,6 +511,7 @@ void getRefEnd(bam1_t *record, int &refStart, int &refEnd ){
 
 
 void parseCigar(bam1_t *record, std::map< unsigned int, unsigned int > &ref2query, int &refStart, int &refEnd ){
+	//Covered in: tests/detect/htslib
 
 	//initialise reference and query coordinates for the first match
 	refStart = record -> core.pos;
