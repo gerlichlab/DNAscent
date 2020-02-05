@@ -612,14 +612,21 @@ int sense_main( int argc, char** argv ){
 	unsigned int trimFactor = 1;
 	for (auto p = pooling.begin(); p < pooling.end(); p++) trimFactor *= *p;
 
-	std::vector< DetectedRead > buffer;
+	std::vector< DetectedRead > readBuffer;
 	int progress = 0;
 	while( std::getline( inFile, line ) ){
 
 		if ( line.substr(0,1) == ">" ){
 
+			//check the read length on the back of the buffer
+			if (readBuffer.size() > 0){
+
+				bool longEnough = checkReadLength( readBuffer.back().positions.size() );
+				if (not longEnough) readBuffer.pop_back();
+			}
+
 			//empty the buffer if it's full
-			if (buffer.size() >= maxBufferSize) emptyBuffer(buffer,args, outFile, originFile, stallFile, trimFactor);
+			if (readBuffer.size() >= maxBufferSize) emptyBuffer(readBuffer,args, outFile, originFile, stallFile, trimFactor);
 
 			progress++;
 			pb.displayProgress( progress, 0, 0 );
@@ -640,10 +647,7 @@ int sense_main( int argc, char** argv ){
 				cIndex++;
 			}
 			assert(d.mappingUpper > d.mappingLower);
-
-			bool longEnough = checkReadLength(d.mappingUpper - d.mappingLower);
-
-			if (longEnough) buffer.push_back(d);
+			readBuffer.push_back(d);
 		}
 		else{
 
@@ -668,8 +672,8 @@ int sense_main( int argc, char** argv ){
 				}
 				cIndex++;
 			}
-			buffer.back().positions.push_back(position);
-			buffer.back().brduCalls.push_back(B.get());
+			readBuffer.back().positions.push_back(position);
+			readBuffer.back().brduCalls.push_back(B.get());
 		}
 	}
 

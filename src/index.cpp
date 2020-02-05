@@ -22,7 +22,7 @@
 "To run DNAscent index, do:\n"
 "  ./DNAscent index [arguments]\n"
 "Example:\n"
-"  ./DNAscent index -d /path/to/detect_output.out\n"
+"  ./DNAscent index -f /path/to/detect_output.out\n"
 "Required arguments are:\n"
 "  -f,--files                path to fast5 files.\n"
 "Optional arguments are:\n"
@@ -108,6 +108,14 @@ void countFast5(std::string path, int &count){
 }
 
 
+const char *get_ext(const char *filename){
+
+	const char *ext = strrchr(filename, '.');
+	if(!ext || ext == filename) return "";
+	return ext + 1;
+}
+
+
 void readDirectory(std::string path, std::map<std::string,std::string> &allfast5paths){
 
 	tinydir_dir dir;
@@ -131,11 +139,23 @@ void readDirectory(std::string path, std::map<std::string,std::string> &allfast5
 
 			if (strcmp(file.name,".") != 0 and strcmp(file.name,"..") != 0){
 
+				char &trail = path.back();
+				if (trail == '/') path.pop_back();
+
 				std::string newPath = path + "/" + file.name;
 				readDirectory(newPath, allfast5paths);
 			}
 		}
-		else allfast5paths[file.name] = path + "/" + file.name;
+		else{
+			const char *ext = get_ext(file.name);
+			if ( strcmp(ext,"fast5") == 0 ){
+
+				char &trail = path.back();
+				if (trail == '/') path.pop_back();
+
+				allfast5paths[file.name] = path + "/" + file.name;
+			}
+		}
 	}
 
 	fail:
