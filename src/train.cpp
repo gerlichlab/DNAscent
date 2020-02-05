@@ -33,9 +33,9 @@ static const char *help=
 "  -pi,                      mixing parameter for BrdU (default is 0.5),\n"
 "  -m,--max-reads            maximum number of reads to consider (default is 100000),\n"
 "  -e,--max-events           maximum number of events per 6mer to consider (default is 10000),\n"
-"  -t,--threads              number of threads (default is 1 thread).\n";
-
-extern std::map< std::string, std::pair< double, double > > SixMer_model;
+"  -t,--threads              number of threads (default is 1 thread).\n"
+"Written by Michael Boemo, Department of Pathology, University of Cambridge.\n"
+"Please submit bug reports to GitHub Issues (https://github.com/MBoemo/DNAscent/issues).";
 
 struct Arguments {
 
@@ -375,7 +375,7 @@ int train_main( int argc, char** argv ){
 	std::map< int, std::string > indexToSixmer;
 	std::map< std::string, int > sixmerToIndex;
 	int index = 0;
-	for ( auto i = SixMer_model.cbegin(); i != SixMer_model.cend(); i++ ){
+	for ( auto i = thymidineModel.cbegin(); i != thymidineModel.cend(); i++ ){
 
 		indexToSixmer[index] = i -> first;
 		sixmerToIndex[i->first] = index;
@@ -455,7 +455,7 @@ int train_main( int argc, char** argv ){
 	outFile << "6mer" << '\t' << "ONT_mean" << '\t' << "ONT_stdv" << '\t' << "pi_1" << '\t' << "mean_1" << '\t' << "stdv_1" << '\t' << "pi_2" << '\t' << "mean_2" << '\t' << "stdv_2" << std::endl;
 	progressBar pb_fit( importedEvents.size(),true );
 
-	#pragma omp parallel for schedule(dynamic) shared(pb_fit, indexToSixmer, SixMer_model, prog, failed, outFile, importedEvents, trainArgs) num_threads(trainArgs.threads)
+	#pragma omp parallel for schedule(dynamic) shared(pb_fit, indexToSixmer, thymidineModel, prog, failed, outFile, importedEvents, trainArgs) num_threads(trainArgs.threads)
 	for ( unsigned int i = 0; i < importedEvents.size(); i++ ){
 
 		/*don't train if we have less than 200 events for this 6mer */
@@ -483,12 +483,12 @@ int train_main( int argc, char** argv ){
 		double mu1, stdv1, mu2, stdv2;
 
 		/*get the ONT distribution for the mixture */
-		mu1 = SixMer_model[sixMer].first;
-		stdv1 = SixMer_model[sixMer].second;
+		mu1 = thymidineModel[sixMer].first;
+		stdv1 = thymidineModel[sixMer].second;
 
 		/*make a second distribution that's similar to the ONT distribution */
-		mu2 = SixMer_model[sixMer].first;
-		stdv2 = 2*SixMer_model[sixMer].second;
+		mu2 = thymidineModel[sixMer].first;
+		stdv2 = 2*thymidineModel[sixMer].second;
 
 		/*fit the model */
 		std::vector< double > fitParameters;
@@ -504,7 +504,7 @@ int train_main( int argc, char** argv ){
 		}
 		#pragma omp critical
 		{	
-			outFile << sixMer << '\t' << SixMer_model[sixMer].first << '\t' << SixMer_model[sixMer].second << '\t' << fitParameters[0] << '\t' << fitParameters[1] << '\t' << fitParameters[2] << '\t' << fitParameters[3] << '\t' << fitParameters[4] << '\t' << fitParameters[5] << '\t' << (importedEvents[i]).size() << "\t" << filteredEvents.size() << std::endl; 
+			outFile << sixMer << '\t' << thymidineModel[sixMer].first << '\t' << thymidineModel[sixMer].second << '\t' << fitParameters[0] << '\t' << fitParameters[1] << '\t' << fitParameters[2] << '\t' << fitParameters[3] << '\t' << fitParameters[4] << '\t' << fitParameters[5] << '\t' << (importedEvents[i]).size() << "\t" << filteredEvents.size() << std::endl; 
 			pb_fit.displayProgress( prog, failed, 0 );
 		}
 		prog++;

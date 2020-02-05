@@ -182,5 +182,4 @@ void displayProgress( int, int );
 std::vector< std::string > split( std::string, char );
 int argMin( std::vector< double > & );
 
-
 #endif

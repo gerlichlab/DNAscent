@@ -19,7 +19,7 @@
 /*function prototypes */
 int detect_main( int argc, char** argv );
 
-std::vector< unsigned int > getPOIs( std::string &, std::map< std::string, std::pair< double, double > > &, int );
+std::vector< unsigned int > getPOIs( std::string &, int );
 void countRecords( htsFile *, hts_idx_t *, bam_hdr_t *, int &, int, int );
 void parseIndex( std::string, std::map< std::string, std::string > &, bool & );
 void parseCigar(bam1_t *, std::map< unsigned int, unsigned int > &, int &, int & );
@@ -28,7 +28,6 @@ double sequenceProbability( std::vector <double> &,
 				std::string &,
 				size_t,
 				bool,
-				std::map< std::string, std::pair< double, double > > &,
 				PoreParameters,
 				int );
 

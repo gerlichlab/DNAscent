@@ -35,12 +35,13 @@ static const char *help=
 "Optional arguments are:\n"
 "  -t,--threads              number of threads (default is 1 thread)\n"
 "  --useReference            annotate the reference subsequence rather than the ONT basecall (default is ONT basecall),\n"
-"  --divergence              minimum KL-divergence between BrdU 6mers to include and ONT pore model (default is 2.0),\n"
 "  --llThreshold             log-likelihood threshold above which a 6mer is said to contain BrdU (default is 2.5),\n"
-"  --noCpG                   exclude 6mers that contain a CpG (default is to include all 6mers),\n"
+"  --methyl-aware            account for CpG, Dcm, and Dam methylation in BrdU calling,\n"
 "  -q,--quality              minimum mapping quality (default is 20),\n"
 "  --minLength               minimum read length in bp (default is 1000),\n"
-"  --maxLength               minimum read length in bp (default is 10000).\n";
+"  --maxLength               minimum read length in bp (default is 10000).\n"
+"Written by Michael Boemo, Department of Pathology, University of Cambridge.\n"
+"Please submit bug reports to GitHub Issues (https://github.com/MBoemo/DNAscent/issues).";
 
 struct Arguments {
 	bool useReference;
@@ -49,15 +50,16 @@ struct Arguments {
 	std::string referenceFilename;
 	std::string outputFilename;
 	std::string indexFilename;
-	bool excludeCpG;
+	bool methylAware;
 	double divergence;
 	int minQ;
 	int minL, maxL;
 	unsigned int threads;
 };
 
-extern std::map< std::string, std::pair< double, double > > SixMer_model;
-extern std::map< std::string, std::pair< double, double > > BrdU_model_full;
+extern std::map< std::string, std::pair< double, double > > analogueModel;
+extern std::map< std::string, std::pair< double, double > > thymidineModel;
+extern std::map< std::string, std::pair< double, double > > methyl5mCModel;
 
 Arguments parseAnnotateArguments( int argc, char** argv ){
 
@@ -86,7 +88,7 @@ Arguments parseAnnotateArguments( int argc, char** argv ){
 	args.minQ = 20;
 	args.minL = 1000;
 	args.maxL = 10000;
-	args.excludeCpG = false;
+	args.methylAware = false;
 	args.useReference = false;
 	args.divergence = 2.0;
 
@@ -155,14 +157,14 @@ Arguments parseAnnotateArguments( int argc, char** argv ){
 			args.divergence = std::stof(strArg.c_str());
 			i+=2;
 		}
-		else if ( flag == "--noCpG" ){
-
-			args.excludeCpG = true;
-			i+=1;
-		}
 		else if ( flag == "--useReference" ){
 
 			args.useReference = true;
+			i+=1;
+		}
+		else if ( flag == "--methyl-aware" ){
+
+			args.methylAware = true;
 			i+=1;
 		}
 		else throw InvalidOption( flag );
@@ -191,7 +193,7 @@ void countAnnotateRecords( htsFile *bam_fh, hts_idx_t *bam_idx, bam_hdr_t *bam_h
 std::vector< int > annotatePosition( read &r, unsigned int windowLength, std::map< std::string, std::pair< double, double > > &analogueModel, double callThresh ){
 
 	//get the positions on the reference subsequence where we could attempt to make a call
-	std::vector< unsigned int > POIs = getPOIs( r.referenceSeqMappedTo, analogueModel, windowLength );
+	std::vector< unsigned int > POIs = getPOIs( r.referenceSeqMappedTo, windowLength );
 
 	std::vector< int > analoguePositions;
 
@@ -366,9 +368,6 @@ int annotate_main( int argc, char** argv ){
 
 	Arguments args = parseAnnotateArguments( argc, argv );
 	bool bulkFast5;
-
-	/*import the analogue pore model that we specified on the command line */
-	std::map< std::string, std::pair< double, double > > analogueModel = buildAnalogueModel(args.divergence, args.excludeCpG);
 
 	//load DNAscent index
 	std::map< std::string, std::string > readID2path;

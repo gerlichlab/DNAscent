@@ -25,7 +25,9 @@
 "  -o,--output               path to output bed prefix.\n"
 "Optional arguments are:\n"
 "     --min                  minimum read length to compute (default is 1),\n"
-"     --max                  maximum read length to compute (default is Inf).\n";
+"     --max                  maximum read length to compute (default is Inf).\n"
+"Written by Michael Boemo, Department of Pathology, University of Cambridge.\n"
+"Please submit bug reports to GitHub Issues (https://github.com/MBoemo/DNAscent/issues).";
 
 
  struct Arguments {

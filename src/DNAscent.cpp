@@ -18,6 +18,7 @@
 #include "index.h"
 #include "train.h"
 #include "common.h"
+#include "poreModels.h"
 
 /*prototype */
 int show_options( int, char** );
@@ -56,9 +57,17 @@ int show_options( int, char** ){
 	return 0;
 }
 
+std::map< std::string, std::pair< double, double > > analogueModel;
+std::map< std::string, std::pair< double, double > > thymidineModel;
+std::map< std::string, std::pair< double, double > > methyl5mCModel;
 
 /*main DNAscent executable that will link to other executables */
 int main( int argc, char** argv ){
+
+	//load pore models
+	analogueModel = import_poreModel("BrdU.model");
+	thymidineModel = import_poreModel("template_median68pA.6mer.model");
+	methyl5mCModel = import_poreModel("r9.4_450bps.cpg.6mer.template.model");
 
 	if ( argc < 2 ){
 		std::cout << "Exiting with error.  No DNAscent executable specified." << std::endl <<  show_options( argc, argv );

@@ -29,7 +29,9 @@
 "     --replication          detect fork direction and call origin firing (default: off),\n"
 "  -p,--probability          override probability that a thymidine 6mer contains a BrdU (default: automatically calculated),\n"
 "  -r,--resolution           minimum length of regions (default is 2kb).\n"
-"  -z,--zScore               zScore threshold for BrdU call (default is 0).\n";
+"  -z,--zScore               zScore threshold for BrdU call (default is 0).\n"
+"Written by Michael Boemo, Department of Pathology, University of Cambridge.\n"
+"Please submit bug reports to GitHub Issues (https://github.com/MBoemo/DNAscent/issues).";
 
  struct Arguments {
 

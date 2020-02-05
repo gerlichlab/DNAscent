@@ -131,5 +131,11 @@ struct IndexFormatting : public std::exception {
 	}
 };
 
+struct MissingModelPath : public std::exception {
+	const char * what () const throw () {
+		return "Missing path to model file.  Please contact the author.";
+	}
+};
+
 #endif
 

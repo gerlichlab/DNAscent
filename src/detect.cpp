@@ -15,6 +15,7 @@
 #include "event_handling.h"
 #include "probability.h"
 #include "../fast5/include/fast5.hpp"
+#include "poreModels.h"
 
 
 static const char *help=
@@ -31,9 +32,10 @@ static const char *help=
 "Optional arguments are:\n"
 "  -t,--threads              number of threads (default is 1 thread),\n"
 "  --methyl-aware            account for CpG, Dcm, and Dam methylation in BrdU calling,\n"
-"  --divergence              minimum KL-divergence between BrdU 6mers to include and ONT pore model (default is 0),\n"
 "  -q,--quality              minimum mapping quality (default is 20).\n"
-"  -l,--length               minimum read length in bp (default is 100).\n";
+"  -l,--length               minimum read length in bp (default is 100).\n"
+"Written by Michael Boemo, Department of Pathology, University of Cambridge.\n"
+"Please submit bug reports to GitHub Issues (https://github.com/MBoemo/DNAscent/issues).";
 
 struct Arguments {
 	std::string bamFilename;
@@ -46,10 +48,6 @@ struct Arguments {
 	int minL;
 	unsigned int threads;
 };
-
-extern std::map< std::string, std::pair< double, double > > SixMer_model;
-extern std::map< std::string, std::pair< double, double > > BrdU_model_full;
-extern std::map< std::string, std::pair< double, double > > methylModel;
 
 Arguments parseDetectArguments( int argc, char** argv ){
 
@@ -76,7 +74,6 @@ Arguments parseDetectArguments( int argc, char** argv ){
 	args.threads = 1;
 	args.minQ = 20;
 	args.minL = 100;
-	args.excludeCpG = false;
 	args.methylAware = false;
 	args.divergence = 0;
 	args.testAlignment = false;
@@ -166,7 +163,6 @@ double sequenceProbability( std::vector <double> &observations,
 				std::string &sequence, 
 				size_t windowSize, 
 				bool useBrdU, 
-				std::map< std::string, std::pair< double, double > > &analogueModel, 
 				PoreParameters scalings,
 				size_t BrdUStart,
 				size_t BrdUEnd ){
@@ -200,12 +196,12 @@ double sequenceProbability( std::vector <double> &observations,
 
 		std::string sixMer = sequence.substr(0, 6);
 
-		level_mu = scalings.shift + scalings.scale * SixMer_model.at(sixMer).first;
-		level_sigma = scalings.var * SixMer_model.at(sixMer).second;
+		level_mu = scalings.shift + scalings.scale * thymidineModel.at(sixMer).first;
+		level_sigma = scalings.var * thymidineModel.at(sixMer).second;
 
 		//uncomment to scale events
-		//level_mu = SixMer_model.at(sixMer).first;
-		//level_sigma = scalings.var / scalings.scale * SixMer_model.at(sixMer).second;
+		//level_mu = thymidineModel.at(sixMer).first;
+		//level_sigma = scalings.var / scalings.scale * thymidineModel.at(sixMer).second;
 		//observations[t] = (observations[t] - scalings.shift) / scalings.scale;
 
 		matchProb = eln( normalPDF( level_mu, level_sigma, observations[t] ) );
@@ -234,9 +230,9 @@ double sequenceProbability( std::vector <double> &observations,
 			//get model parameters
 			sixMer = sequence.substr(i, 6);
 			insProb = eln( uniformPDF( 0, 250, observations[t] ) );
-			if ( useBrdU and BrdUStart - 5 <= i and i <= BrdUEnd and sixMer.find('T') != std::string::npos and BrdU_model_full.count(sixMer) > 0 ){
-				level_mu = scalings.shift + scalings.scale * BrdU_model_full.at(sixMer).first;
-				level_sigma = scalings.var * BrdU_model_full.at(sixMer).second;
+			if ( useBrdU and BrdUStart - 5 <= i and i <= BrdUEnd and sixMer.find('T') != std::string::npos and analogueModel.count(sixMer) > 0 ){
+				level_mu = scalings.shift + scalings.scale * analogueModel.at(sixMer).first;
+				level_sigma = scalings.var * analogueModel.at(sixMer).second;
 
 				//uncomment if you scale events
 				//level_mu = analogueModel.at(sixMer).first;
@@ -246,12 +242,12 @@ double sequenceProbability( std::vector <double> &observations,
 			}
 			else{
 
-				level_mu = scalings.shift + scalings.scale * SixMer_model.at(sixMer).first;
-				level_sigma = scalings.var * SixMer_model.at(sixMer).second;
+				level_mu = scalings.shift + scalings.scale * thymidineModel.at(sixMer).first;
+				level_sigma = scalings.var * thymidineModel.at(sixMer).second;
 
 				//uncomment if you scale events				
-				//level_mu = SixMer_model.at(sixMer).first;
-				//level_sigma = scalings.var / scalings.scale * SixMer_model.at(sixMer).second;
+				//level_mu = thymidineModel.at(sixMer).first;
+				//level_sigma = scalings.var / scalings.scale * thymidineModel.at(sixMer).second;
 
 				matchProb = eln( normalPDF( level_mu, level_sigma, observations[t] ) );
 			}
@@ -331,20 +327,20 @@ double sequenceProbability_methyl( std::vector <double> &observations,
 		std::string sixMer = sequence.substr(0, 6);
 		std::string sixMer_methyl = sequence_methylated.substr(0,6);
 
-		if ( sixMer_methyl.find('M') != std::string::npos and methylModel.count(sixMer_methyl) > 0 ){
+		if ( sixMer_methyl.find('M') != std::string::npos and methyl5mCModel.count(sixMer_methyl) > 0 ){
 
-			level_mu = scalings.shift + scalings.scale * methylModel.at(sixMer_methyl).first;
-			level_sigma = scalings.var * methylModel.at(sixMer_methyl).second;
+			level_mu = scalings.shift + scalings.scale * methyl5mCModel.at(sixMer_methyl).first;
+			level_sigma = scalings.var * methyl5mCModel.at(sixMer_methyl).second;
 		}
 		else {
 
-			level_mu = scalings.shift + scalings.scale * SixMer_model.at(sixMer).first;
-			level_sigma = scalings.var * SixMer_model.at(sixMer).second;
+			level_mu = scalings.shift + scalings.scale * thymidineModel.at(sixMer).first;
+			level_sigma = scalings.var * thymidineModel.at(sixMer).second;
 		}
 
 		//uncomment to scale events
-		//level_mu = SixMer_model.at(sixMer).first;
-		//level_sigma = scalings.var / scalings.scale * SixMer_model.at(sixMer).second;
+		//level_mu = thymidineModel.at(sixMer).first;
+		//level_sigma = scalings.var / scalings.scale * thymidineModel.at(sixMer).second;
 		//observations[t] = (observations[t] - scalings.shift) / scalings.scale;
 
 		matchProb = eln( normalPDF( level_mu, level_sigma, observations[t] ) );
@@ -374,10 +370,10 @@ double sequenceProbability_methyl( std::vector <double> &observations,
 			sixMer = sequence.substr(i, 6);
 			sixMer_methyl = sequence_methylated.substr(i,6);
 			insProb = eln( uniformPDF( 0, 250, observations[t] ) );
-			if ( methylModel.count(sixMer_methyl) > 0 and MethylStart - 5 <= i and i <= MethylEnd ){
+			if ( methyl5mCModel.count(sixMer_methyl) > 0 and MethylStart - 5 <= i and i <= MethylEnd ){
 
-				level_mu = scalings.shift + scalings.scale * methylModel.at(sixMer_methyl).first;
-				level_sigma = scalings.var * methylModel.at(sixMer_methyl).second;
+				level_mu = scalings.shift + scalings.scale * methyl5mCModel.at(sixMer_methyl).first;
+				level_sigma = scalings.var * methyl5mCModel.at(sixMer_methyl).second;
 
 				//uncomment if you scale events
 				//level_mu = analogueModel.at(sixMer).first;
@@ -386,12 +382,12 @@ double sequenceProbability_methyl( std::vector <double> &observations,
 				matchProb = eln( normalPDF( level_mu, level_sigma, observations[t] ) );
 			}
 			else{
-				level_mu = scalings.shift + scalings.scale * SixMer_model.at(sixMer).first;
-				level_sigma = scalings.var * SixMer_model.at(sixMer).second;
+				level_mu = scalings.shift + scalings.scale * thymidineModel.at(sixMer).first;
+				level_sigma = scalings.var * thymidineModel.at(sixMer).second;
 
 				//uncomment if you scale events				
-				//level_mu = SixMer_model.at(sixMer).first;
-				//level_sigma = scalings.var / scalings.scale * SixMer_model.at(sixMer).second;
+				//level_mu = thymidineModel.at(sixMer).first;
+				//level_sigma = scalings.var / scalings.scale * thymidineModel.at(sixMer).second;
 
 				matchProb = eln( normalPDF( level_mu, level_sigma, observations[t] ) );
 			}
@@ -641,7 +637,7 @@ void countRecords( htsFile *bam_fh, hts_idx_t *bam_idx, bam_hdr_t *bam_hdr, int 
 }
 
 
-std::vector< unsigned int > getPOIs( std::string &refSeq, std::map< std::string, std::pair< double, double > > &analogueModel, int windowLength ){
+std::vector< unsigned int > getPOIs( std::string &refSeq, int windowLength ){
 
 	std::vector< unsigned int > POIs;
 
@@ -676,11 +672,14 @@ std::string methylateSequence( std::string &inSeq ){
 }
 
 
-std::string llAcrossRead( read &r, unsigned int windowLength, std::map< std::string, std::pair< double, double > > &analogueModel, int &failedEvents, bool methylAware ){
+std::string llAcrossRead( read &r,
+                          unsigned int windowLength, 
+                          int &failedEvents,
+                          bool methylAware ){
 
 	std::string out;
 	//get the positions on the reference subsequence where we could attempt to make a call
-	std::vector< unsigned int > POIs = getPOIs( r.referenceSeqMappedTo, analogueModel, windowLength );
+	std::vector< unsigned int > POIs = getPOIs( r.referenceSeqMappedTo, windowLength );
 	std::string strand;
 	unsigned int readHead = 0;
 	if ( r.isReverse ){
@@ -799,7 +798,7 @@ std::string llAcrossRead( read &r, unsigned int windowLength, std::map< std::str
 		std::cout << readSnippet << std::endl;
 		for ( int pos = 0; pos < readSnippet.length()-5; pos++ ){
 		
-			std::cout << readSnippet.substr(pos,6) << "\t" << SixMer_model.at( readSnippet.substr(pos,6) ).first << std::endl;
+			std::cout << readSnippet.substr(pos,6) << "\t" << thymidineModel.at( readSnippet.substr(pos,6) ).first << std::endl;
 		}
 		for ( auto ev = eventSnippet.begin(); ev < eventSnippet.end(); ev++){
 			double scaledEv =  (*ev - r.scalings.shift) / r.scalings.scale;
@@ -826,8 +825,8 @@ std::string llAcrossRead( read &r, unsigned int windowLength, std::map< std::str
 		std::string sixOI = (r.referenceSeqMappedTo).substr(posOnRef,6);
 		size_t BrdUStart = sixOI.find('T') + windowLength;
 		size_t BrdUEnd = sixOI.rfind('T') + windowLength;
-		double logProbAnalogue = sequenceProbability( eventSnippet, readSnippet, windowLength, true, analogueModel, r.scalings, BrdUStart, BrdUEnd );
-		double logProbThymidine = sequenceProbability( eventSnippet, readSnippet, windowLength, false, analogueModel, r.scalings, 0, 0 );
+		double logProbAnalogue = sequenceProbability( eventSnippet, readSnippet, windowLength, true, r.scalings, BrdUStart, BrdUEnd );
+		double logProbThymidine = sequenceProbability( eventSnippet, readSnippet, windowLength, false, r.scalings, 0, 0 );
 		double logLikelihoodRatio = logProbAnalogue - logProbThymidine;
 		if ( methylAware) {
 
@@ -862,9 +861,6 @@ int detect_main( int argc, char** argv ){
 
 	Arguments args = parseDetectArguments( argc, argv );
 	bool bulkFast5;
-
-	/*import the analogue pore model that we specified on the command line */
-	std::map< std::string, std::pair< double, double > > analogueModel = buildAnalogueModel(args.divergence, args.excludeCpG);
 
 	//load DNAscent index
 	std::map< std::string, std::string > readID2path;
@@ -930,7 +926,7 @@ int detect_main( int argc, char** argv ){
 		/*if we've filled up the buffer with short reads, compute them in parallel */
 		if (buffer.size() >= maxBufferSize or (buffer.size() > 0 and result == -1 ) ){
 
-			#pragma omp parallel for schedule(dynamic) shared(buffer,windowLength,analogueModel,args,prog,failed) num_threads(args.threads)
+			#pragma omp parallel for schedule(dynamic) shared(buffer,windowLength,analogueModel,thymidineModel,methyl5mCModel,args,prog,failed) num_threads(args.threads)
 			for (unsigned int i = 0; i < buffer.size(); i++){
 
 				read r; 
@@ -986,7 +982,7 @@ int detect_main( int argc, char** argv ){
 					continue;
 				}
 
-				std::string readOut = llAcrossRead(r, windowLength, analogueModel, failedEvents, args.methylAware);
+				std::string readOut = llAcrossRead(r, windowLength, failedEvents, args.methylAware);
 
 				#pragma omp critical
 				{

@@ -32,7 +32,9 @@ static const char *help=
 "Optional arguments are:\n"
 "  -t,--threads              number of threads (default: 1 thread),\n"
 "  --markOrigins             writes replication origin locations to a bed file (default: off),\n"
-"  --markStalls              writes fork stall locations to a bed file (default: off).\n";
+"  --markStalls              writes fork stall locations to a bed file (default: off).\n"
+"Written by Michael Boemo, Department of Pathology, University of Cambridge.\n"
+"Please submit bug reports to GitHub Issues (https://github.com/MBoemo/DNAscent/issues).";
 
 struct Arguments {
 

@@ -13,6 +13,7 @@
 #include "error_handling.h"
 #include "event_handling.h"
 #include "../fast5/include/fast5.hpp"
+#include "poreModels.h"
 
 //extern "C" {
 #include "scrappie/event_detection.h"
@@ -20,8 +21,6 @@
 //}
 
 #define _USE_MATH_DEFINES
-
-extern std::map< std::string, std::pair< double, double > > BrdU_model_full, SixMer_model;
 
 // from scrappie
 float fast5_read_float_attribute(hid_t group, const char *attribute) {
@@ -251,8 +250,8 @@ std::vector< std::pair< unsigned int, unsigned int > > matchWarping( std::vector
 	/*INITIALISATION */
 	dtw[0][0] = 0.0;
 	dtw[1][1] = 0.0;
-	double mu = SixMer_model[basecall.substr(1,6)].first;
-	double stdv = SixMer_model[basecall.substr(1,6)].second;
+	double mu = thymidineModel[basecall.substr(1,6)].first;
+	double stdv = thymidineModel[basecall.substr(1,6)].second;
 	dtw[1][1] = manhattanMetric( mu, stdv, raw[1], raw_stdv[1] );
 
 	/*RECURSION: fill in the dynamic time warping lattice */
@@ -260,8 +259,8 @@ std::vector< std::pair< unsigned int, unsigned int > > matchWarping( std::vector
 
 		for ( unsigned int col = 2; col < numOf5mers; col++ ){
 
-			mu = SixMer_model[basecall.substr(col, 6)].first;
-			stdv = SixMer_model[basecall.substr(col, 6)].second;
+			mu = thymidineModel[basecall.substr(col, 6)].first;
+			stdv = thymidineModel[basecall.substr(col, 6)].second;
 			dtw[row][col] =  manhattanMetric( mu, stdv, raw[row], raw_stdv[row] ) + std::min( dtw[row - 1][col], std::min(dtw[row - 1][col - 1], dtw[row - 1][col - 2] ) );	
 		}
 	}
@@ -312,18 +311,18 @@ std::vector< std::pair< unsigned int, unsigned int > > matchWarping( std::vector
 
 inline float logProbabilityMatch(std::string sixMer, double x, double shift, double scale){
 
-	double mu = scale * SixMer_model.at(sixMer).first + shift;
-	double sigma = SixMer_model.at(sixMer).second;
+	double mu = scale * thymidineModel.at(sixMer).first + shift;
+	double sigma = thymidineModel.at(sixMer).second;
 
 	float a = (x - mu) / sigma;
 	static const float log_inv_sqrt_2pi = log(0.3989422804014327);
     	double thymProb = log_inv_sqrt_2pi - eln(sigma) + (-0.5f * a * a);
 	return thymProb;
 	/*
-	if (BrdU_model_full.count(sixMer) > 0){
+	if (analogueModel.count(sixMer) > 0){
 
-		mu = scale * BrdU_model_full.at(sixMer).first + shift;
-		sigma = BrdU_model_full.at(sixMer).second;
+		mu = scale * analogueModel.at(sixMer).first + shift;
+		sigma = analogueModel.at(sixMer).second;
 
 		a = (x - mu) / sigma;
 	    	double brduProb = log_inv_sqrt_2pi - eln(sigma) + (-0.5f * a * a);
@@ -561,14 +560,14 @@ void adaptive_banded_simple_event_align( std::vector< double > &raw, read &r, Po
 		std::string sixMer = sequence.substr(curr_kmer_idx, k);
 		//eventToScore[curr_event_idx] = logProbabilityMatch(sixMer, raw[curr_event_idx], s.shift, s.scale);
 		sum_emission += logProbabilityMatch(sixMer, raw[curr_event_idx], s.shift, s.scale);
-		eventDiffs += SixMer_model.at(sixMer).first - raw[curr_event_idx];
+		eventDiffs += thymidineModel.at(sixMer).first - raw[curr_event_idx];
 
 		//update A,b for recomputing shift and scale
-		A[0][0] += 1.0 / pow( SixMer_model.at(sixMer).second, 2.0 );
-		A[0][1] += SixMer_model.at(sixMer).first / pow( SixMer_model.at(sixMer).second, 2.0 );
-		A[1][1] += pow( SixMer_model.at(sixMer).first, 2.0 ) / pow( SixMer_model.at(sixMer).second, 2.0 );
-		b[0] += raw[curr_event_idx] / pow( SixMer_model.at(sixMer).second, 2.0 );
-		b[1] += raw[curr_event_idx] * SixMer_model.at(sixMer).first / pow( SixMer_model.at(sixMer).second, 2.0 );
+		A[0][0] += 1.0 / pow( thymidineModel.at(sixMer).second, 2.0 );
+		A[0][1] += thymidineModel.at(sixMer).first / pow( thymidineModel.at(sixMer).second, 2.0 );
+		A[1][1] += pow( thymidineModel.at(sixMer).first, 2.0 ) / pow( thymidineModel.at(sixMer).second, 2.0 );
+		b[0] += raw[curr_event_idx] / pow( thymidineModel.at(sixMer).second, 2.0 );
+		b[1] += raw[curr_event_idx] * thymidineModel.at(sixMer).first / pow( thymidineModel.at(sixMer).second, 2.0 );
 
 		n_aligned_events += 1;
 
@@ -616,8 +615,8 @@ void adaptive_banded_simple_event_align( std::vector< double > &raw, read &r, Po
 
 			double event = raw[eventSeqLocPairs[i].first];
 			std::string sixMer = sequence.substr(eventSeqLocPairs[i].second, k);
-			double mu = SixMer_model.at(sixMer).first;
-			double stdv = SixMer_model.at(sixMer).second;
+			double mu = thymidineModel.at(sixMer).first;
+			double stdv = thymidineModel.at(sixMer).second;
 
 			double yi = (event - rescale.shift - rescale.scale*mu);
 			rescale.var += yi * yi / (stdv * stdv);
@@ -651,7 +650,7 @@ PoreParameters roughRescale( std::vector< double > &means, std::string &basecall
 	double sixMer_sq_sum = 0.0;
 	for ( unsigned int i = 0; i < numOfSixMers; i ++ ){
 
-		double sixMer_mean = SixMer_model[basecall.substr(i, 6)].first;
+		double sixMer_mean = thymidineModel[basecall.substr(i, 6)].first;
 		sixMer_sum += sixMer_mean;
 		sixMer_sq_sum += pow( sixMer_mean, 2.0 );
 	}
