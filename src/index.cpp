@@ -26,12 +26,15 @@
 "Required arguments are:\n"
 "  -f,--files                path to fast5 files.\n"
 "Optional arguments are:\n"
-"  -s,--sequencing-summary   path to sequencing summary file from guppy/albacore basecalling.\n";
-
+"  -o,--output               output file name (default is index.dnascent),\n"
+"  -s,--sequencing-summary   path to sequencing summary file from guppy/albacore basecalling.\n"
+"Written by Michael Boemo, Department of Pathology, University of Cambridge.\n"
+"Please submit bug reports to GitHub Issues (https://github.com/MBoemo/DNAscent/issues).";
 
  struct Arguments {
 	std::string fast5path;
 	std::string ssPath;
+	std::string outfile;
 	bool gaveSeqSummary = false;
 };
 
@@ -51,6 +54,7 @@ Arguments parseIndexArguments( int argc, char** argv ){
 		exit(EXIT_FAILURE);
 	}
  	Arguments args;
+	args.outfile = "index.dnascent";
 
  	/*parse the command line arguments */
 	for ( int i = 1; i < argc; ){
@@ -65,6 +69,12 @@ Arguments parseIndexArguments( int argc, char** argv ){
 			std::string strArg( argv[ i + 1 ] );
 			args.ssPath = strArg;
 			args.gaveSeqSummary = true;
+			i+=2;
+		}
+		else if ( flag == "-o" or flag == "--output" ){
+
+			std::string strArg( argv[ i + 1 ] );
+			args.outfile = strArg;
 			i+=2;
 		}
 		else throw InvalidOption( flag );
@@ -257,8 +267,8 @@ int index_main( int argc, char** argv ){
 	int progress = 0;
 	progressBar pb(totalFast5,false);
 
-	std::ofstream outFile( "index.dnascent" );
-	if ( not outFile.is_open() ) throw IOerror( "index.dnascent" );
+	std::ofstream outFile( args.outfile );
+	if ( not outFile.is_open() ) throw IOerror( args.outfile );
 
 	//iterate on the filesystem to find the full path for each fast5 file
 	std::map<std::string,std::string> fast52fullpath;

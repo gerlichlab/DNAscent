@@ -6,6 +6,8 @@
 // not, please Email the author.
 //----------------------------------------------------------
 
+//#define TEST_EVENTALIGN 1
+
 #include <iterator>
 #include <algorithm>
 #include <math.h>
@@ -22,28 +24,28 @@
 
 #define _USE_MATH_DEFINES
 
-// from scrappie
+//from scrappie
 float fast5_read_float_attribute(hid_t group, const char *attribute) {
-    float val = NAN;
-    if (group < 0) {
+	float val = NAN;
+	if (group < 0) {
 #ifdef DEBUG_FAST5_IO
-        fprintf(stderr, "Invalid group passed to %s:%d.", __FILE__, __LINE__);
+		fprintf(stderr, "Invalid group passed to %s:%d.", __FILE__, __LINE__);
 #endif
-        return val;
-    }
+		return val;
+	}
 
-    hid_t attr = H5Aopen(group, attribute, H5P_DEFAULT);
-    if (attr < 0) {
+	hid_t attr = H5Aopen(group, attribute, H5P_DEFAULT);
+	if (attr < 0) {
 #ifdef DEBUG_FAST5_IO
-        fprintf(stderr, "Failed to open attribute '%s' for reading.", attribute);
+		fprintf(stderr, "Failed to open attribute '%s' for reading.", attribute);
 #endif
-        return val;
-    }
+		return val;
+	}
 
-    H5Aread(attr, H5T_NATIVE_FLOAT, &val);
-    H5Aclose(attr);
+	H5Aread(attr, H5T_NATIVE_FLOAT, &val);
+	H5Aclose(attr);
 
-    return val;
+	return val;
 }
 //end scrappie
 
@@ -224,7 +226,6 @@ double fisherRaoMetric( double mu1, double stdv1, double mu2, double stdv2 ){
 /*computes the length of the geodesic between N(mu1,stdv1) and N(mu2,stdv2) using the Fisher-Rao metric as a distance */
 
 	double F = sqrt( ( pow( mu1 - mu2, 2.0 ) + 2*pow( stdv1 - stdv2, 2.0 ) )*( pow( mu1 - mu2, 2.0 ) + 2*pow( stdv1 + stdv2, 2.0 ) ) );
-
 	return sqrt(2)*log( (F + pow( mu1 - mu2, 2.0 ) + 2*( pow( stdv1, 2.0 ) + pow( stdv2, 2.0 ) ) ) / ( 4 * stdv1 * stdv2 ) );
 }
 
@@ -595,6 +596,8 @@ void adaptive_banded_simple_event_align( std::vector< double > &raw, read &r, Po
 	double avg_log_emission = sum_emission / n_aligned_events;
 	bool spanned = eventSeqLocPairs.front().second == 0 && eventSeqLocPairs.back().second == n_kmers - 1;
     
+	r.alignmentQCs.recordQCs(avg_log_emission, spanned, max_gap);
+
 	if(avg_log_emission < min_average_log_emission || !spanned || max_gap > max_gap_threshold) {
 		
 		//bool failed = true;		

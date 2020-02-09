@@ -6,6 +6,8 @@
 // not, please Email the author.
 //----------------------------------------------------------
 
+//#define TEST_HMM 1
+
 #include <fstream>
 #include "detect.h"
 #include <math.h>
@@ -284,6 +286,18 @@ double sequenceProbability( std::vector <double> &observations,
 	forwardProb = lnSum( forwardProb, lnProd( D_curr.back(), eln( 1.0 ) ) ); //D to end
 	forwardProb = lnSum( forwardProb, lnProd( M_curr.back(), eln( externalM12M1 + externalM12D ) ) ); //M to end
 	forwardProb = lnSum( forwardProb, lnProd( I_curr.back(), eln( externalI2M1 ) ) ); //I to end
+
+#if TEST_HMM
+std::cerr << "<-------------------" << std::endl;
+std::cerr << useBrdU << std::endl;
+std::cerr << windowSize << std::endl;
+std::cerr << sequence << std::endl;
+for (auto ob = observations.begin(); ob < observations.end(); ob++){
+	std::cerr << *ob << " ";
+}
+std::cerr << std::endl;
+std::cerr << forwardProb << std::endl;
+#endif
 
 	return forwardProb;
 }
@@ -999,6 +1013,8 @@ int detect_main( int argc, char** argv ){
 
 							std::cerr<< p_align -> first << " " << p_align -> second << std::endl;
 						}
+						r.alignmentQCs.printQCs();
+						r.printScalings();
 					}
 				}
 			}

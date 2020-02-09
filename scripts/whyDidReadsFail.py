@@ -5,6 +5,9 @@ import matplotlib
 matplotlib.use('Agg')
 from matplotlib import pyplot as plt
 
+#looks through bam file to see why reads were ignored by DNAscent detect
+#i.e., whether they failed the length condition, the mapping quality condition, or both
+
 #QC
 minLen = 20000
 minMQ = 10
@@ -31,6 +34,10 @@ for record in f:
 	if record.reference_length is not None:
 		totalReadLen += record.reference_length
 		totalReadCount += 1
+	else:
+		failedBoth += 1
+		continue
+
 	if record.reference_length < minLen and record.mapping_quality < minMQ:
 		failedBoth += 1
 	elif record.reference_length < minLen:
@@ -70,9 +77,9 @@ plt.ylabel('Query Length (kb)')
 plt.savefig('queryRefLength.png')
 plt.close()
 
-print "Total reads:",totalRecords
-print "Failed reference length:",failedRefLen
-print "Failed mapping quality:",failedMQ
-print "Failed both:",failedBoth
-print "Failed query length:",failedQueryLen
-print "Average read length:",float(totalReadLen)/totalReadCount
+print("Total reads:",totalRecords)
+print("Failed reference length:",failedRefLen)
+print("Failed mapping quality:",failedMQ)
+print("Failed both:",failedBoth)
+print("Failed query length:",failedQueryLen)
+print("Average read length:",float(totalReadLen)/totalReadCount)

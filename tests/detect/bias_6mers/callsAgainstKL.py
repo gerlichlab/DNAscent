@@ -3,7 +3,7 @@ matplotlib.use('Agg')
 from matplotlib import pyplot as plt
 import sys
 
-#Usage: python callsAgainstKL.py out.detect home/michael/development/DNAscent_dev/pore_models/BrdU_full_noThreshold.model
+#Usage: python callsAgainstKL.py out.detect DNAscent/pore_models/BrdU_full_noThreshold.model
 
 
 def reverseComplement(seq):
