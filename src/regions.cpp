@@ -6,6 +6,8 @@
 // not, please Email the author.
 //----------------------------------------------------------
 
+#define TEST_CLUSTERING 0
+
  #include <fstream>
 #include "regions.h"
 #include "data_IO.h"
@@ -173,6 +175,14 @@ std::pair< double, double > twoMeans( std::vector< double > &observations ){
 
 		iter++;
 	}while (iter < maxIter and (std::abs(C1_old - C1_new)>tol or std::abs(C2_old - C2_new)>tol));
+
+#if TEST_CLUSTERING
+	std::cerr << ">" << C1_new << std::endl;
+	for (auto c = C1_points_old.begin(); c < C1_points_old.end(); c++) std::cerr << *c << std::endl;
+	std::cerr << ">" << C2_new << std::endl;
+	for (auto c = C2_points_old.begin(); c < C2_points_old.end(); c++) std::cerr << *c << std::endl;
+#endif 
+
 	return std::make_pair(C1_new,C2_new);
 }
 
@@ -381,7 +391,9 @@ int regions_main( int argc, char** argv ){
 		double k1,k2;
 		std::tie(k1,k2) = twoMeans( callFractions );
 		p = std::max(k1,k2);
+#if !TEST_CLUSTERING
 		std::cerr << "Estimated fraction of analogue substitution in analogue-positive regions: " << p << std::endl;
+#endif
 		inFile.close();
 
 		//estimate appropriate z-score threshold
@@ -475,19 +487,24 @@ int regions_main( int argc, char** argv ){
 			brdu_mu = fitParams[1];
 			brdu_sigma = fitParams[2];
 		}
+#if !TEST_CLUSTERING
 		std::cerr << "Estimated fraction of thymidine regions: " << thym_mix << std::endl;
 		std::cerr << "Estimated fraction of BrdU regions: " << brdu_mix << std::endl;
 		std::cerr << "Thymidine Z-score mean, stdv: " << thym_mu << " " << thym_sigma << std::endl;
 		std::cerr << "BrdU Z-score mean, stdv: " << brdu_mu << " " << brdu_sigma << std::endl;
-
+#endif
 		if (2*thym_sigma < (brdu_mu - thym_mu)/2.0){
 
+#if !TEST_CLUSTERING
 			std::cerr << "Set Z-score threshold: " << thym_mu+(brdu_mu - thym_mu)/2.0 << std::endl;
+#endif
 			args.threshold = thym_mu+(brdu_mu - thym_mu)/2.0;
 		}
 		else{
 
+#if !TEST_CLUSTERING
 			std::cerr << "Set Z-score threshold: " << thym_mu+2*thym_sigma << std::endl;
+#endif
 			args.threshold = thym_mu+2*thym_sigma;
 		}
 	}
