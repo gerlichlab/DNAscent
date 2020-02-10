@@ -6,7 +6,7 @@
 // not, please Email the author.
 //----------------------------------------------------------
 
-//#define TEST_EVENTALIGN 1
+//#define EVENT_LENGTHS 1
 
 #include <iterator>
 #include <algorithm>
@@ -686,6 +686,9 @@ void normaliseEvents( read &r ){
 	for ( unsigned int i = 0; i < et.n; i++ ){
 
 		if (et.event[i].mean > 0) events_mu.push_back( et.event[i].mean );
+#if EVENT_LENGTHS
+		if (et.event[i].mean > 0) std::cerr << et.event[i].length << std::endl;
+#endif
 	}
 	r.normalisedEvents = events_mu;
 	free(et.event);

@@ -1,6 +1,6 @@
 import sys
 
-threshold = 2.5
+threshold = 0.0
 
 f = open(sys.argv[1],'r')
 numCalls = 0

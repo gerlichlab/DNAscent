@@ -18,7 +18,10 @@
 #include <algorithm>
 #define _USE_MATH_DEFINES
 
- static const char *help=
+
+static double LOG_LIKELIHOOD_THRESHOLD = 0.0;
+
+static const char *help=
 "regions: DNAscent executable that finds regions of analogue incorporation from the output of DNAscent detect.\n"
 "To run DNAscent regions, do:\n"
 "  ./DNAscent regions [arguments]\n"
@@ -364,16 +367,16 @@ int regions_main( int argc, char** argv ){
 			assert(position != -1);
 			if ( countCol > 3){
 
-					if ( B.get() > 2.5 and BM.get() > 2.5 ){
+					if ( B.get() > LOG_LIKELIHOOD_THRESHOLD and BM.get() > LOG_LIKELIHOOD_THRESHOLD ){
 						calls++;
 						attempts++;
 					}
-					else if ( B.get() < 2.5 and BM.get() > 0.0 ) attempts++;
-					// if B < 2.5 and BM < 0, then it's corrupted by methylation so don't count as attempt
+					else if ( B.get() < LOG_LIKELIHOOD_THRESHOLD and BM.get() > 0.0 ) attempts++;
+					// if B < LOG_LIKELIHOOD_THRESHOLD and BM < 0, then it's corrupted by methylation so don't count as attempt
 			}
 			else{
 
-					if ( B.get() > 2.5 ) calls++;
+					if ( B.get() > LOG_LIKELIHOOD_THRESHOLD ) calls++;
 					attempts++;
 			}
 
@@ -440,16 +443,16 @@ int regions_main( int argc, char** argv ){
 
 				if ( countCol > 3){
 
-						if ( B.get() > 2.5 and BM.get() > 2.5 ){
+						if ( B.get() > LOG_LIKELIHOOD_THRESHOLD and BM.get() > LOG_LIKELIHOOD_THRESHOLD ){
 							calls++;
 							attempts++;
 						}
-						else if ( B.get() < 2.5 and BM.get() > 0 ) attempts++;
+						else if ( B.get() < LOG_LIKELIHOOD_THRESHOLD and BM.get() > 0 ) attempts++;
 						//not strong BrdU but more BrdU than methyl counts as an attempt
 				}
 				else{
 
-						if ( B.get() > 2.5 ) calls++;
+						if ( B.get() > LOG_LIKELIHOOD_THRESHOLD ) calls++;
 						attempts++;
 				}
 
@@ -573,7 +576,7 @@ int regions_main( int argc, char** argv ){
 				else if ( cIndex == 1 ){
 
 					B = std::stof(column);
-					if ( B > 2.5 ){
+					if ( B > LOG_LIKELIHOOD_THRESHOLD ){
 
 						calls++;
 					}

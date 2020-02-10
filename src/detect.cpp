@@ -148,18 +148,17 @@ Arguments parseDetectArguments( int argc, char** argv ){
 	return args;
 }
 
-
 //Initial transitions within modules (internal transitions)
-static double internalM12I = 0.001;
-static double internalI2I = 0.001;
+static double internalM12I = 0.3475;
+static double internalI2I = 0.5;
 static double internalM12M1 = 0.4;
 
 //Initial transitions between modules (external transitions)
 static double externalD2D = 0.3;
 static double externalD2M1 = 0.7;
-static double externalI2M1 = 0.999;
+static double externalI2M1 = 0.5;
 static double externalM12D = 0.0025;
-static double externalM12M1 = 0.5965;
+static double externalM12M1 = 0.25;
 
 double sequenceProbability( std::vector <double> &observations,
 				std::string &sequence, 
@@ -230,9 +229,10 @@ double sequenceProbability( std::vector <double> &observations,
 		for ( unsigned int i = 1; i < I_curr.size(); i++ ){
 
 			//get model parameters
-			sixMer = sequence.substr(i, 6);
+			sixMer = sequence.substr(i, 6); 
 			insProb = eln( uniformPDF( 0, 250, observations[t] ) );
 			if ( useBrdU and BrdUStart - 5 <= i and i <= BrdUEnd and sixMer.find('T') != std::string::npos and analogueModel.count(sixMer) > 0 ){
+
 				level_mu = scalings.shift + scalings.scale * analogueModel.at(sixMer).first;
 				level_sigma = scalings.var * analogueModel.at(sixMer).second;
 
