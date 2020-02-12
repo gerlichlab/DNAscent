@@ -175,7 +175,7 @@ void readDirectory(std::string path, std::map<std::string,std::string> &allfast5
 
 std::vector<std::string> fast5_get_multi_read_groups(hid_t &hdf5_file){
     std::vector<std::string> out;
-    size_t buffer_size = 0;
+    ssize_t buffer_size = 0;
     char* buffer = NULL;
 
     // get the number of groups in the root group
