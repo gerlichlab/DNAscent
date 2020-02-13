@@ -20,6 +20,7 @@
 
 
 static double LOG_LIKELIHOOD_THRESHOLD = 0.0;
+static int COOLDOWN_LENGTH = 6;
 
 static const char *help=
 "regions: DNAscent executable that finds regions of analogue incorporation from the output of DNAscent detect.\n"
@@ -42,7 +43,7 @@ static const char *help=
 
 	std::string detectFilename;
 	double probability, threshold;
-	bool overrideProb;
+	bool overrideProb,overrideZ;
 	unsigned int resolution;
 	std::string outputFilename;
 	bool callReplication;
@@ -70,6 +71,7 @@ Arguments parseRegionsArguments( int argc, char** argv ){
 	args.threshold = 0;
 	args.callReplication = false;
 	args.overrideProb = false;
+	args.overrideZ = false;
 
  	/*parse the command line arguments */
 	for ( int i = 1; i < argc; ){
@@ -95,6 +97,7 @@ Arguments parseRegionsArguments( int argc, char** argv ){
 		else if ( flag == "-z" or flag == "--zScore" ){
  			std::string strArg( argv[ i + 1 ] );
 			args.threshold = std::stof(strArg.c_str());
+			args.overrideZ = true;
 			i+=2;
 		}
 		else if ( flag == "--replication" ){
@@ -381,12 +384,12 @@ int regions_main( int argc, char** argv ){
 			else{
 					//testing
 					//std::cout << B.get() << " " << position << " " << callCooldown << std::endl;
-					if ( B.get() > LOG_LIKELIHOOD_THRESHOLD and position - callCooldown > 6 ){
+					if ( B.get() > LOG_LIKELIHOOD_THRESHOLD and position - callCooldown > COOLDOWN_LENGTH ){
 						callCooldown = position;
 						calls++;
 						attempts++;
 					}
-					else if (position - attemptCooldown > 6){
+					else if (position - attemptCooldown > COOLDOWN_LENGTH){
 						attempts++;
 						attemptCooldown = position;
 					}
@@ -410,6 +413,10 @@ int regions_main( int argc, char** argv ){
 		std::cerr << "Estimated fraction of analogue substitution in analogue-positive regions: " << p << std::endl;
 #endif
 		inFile.close();
+	}
+	else p = args.probability;
+
+	if ( not args.overrideZ ){
 
 		//estimate appropriate z-score threshold
 		std::cout << "Setting Z-score threshold..." << std::endl;
@@ -467,12 +474,12 @@ int regions_main( int argc, char** argv ){
 				}
 				else{
 
-					if ( B.get() > LOG_LIKELIHOOD_THRESHOLD and position - callCooldown > 6 ){
+					if ( B.get() > LOG_LIKELIHOOD_THRESHOLD and position - callCooldown > COOLDOWN_LENGTH ){
 						callCooldown = position;
 						calls++;
 						attempts++;
 					}
-					else if (position - attemptCooldown > 6){
+					else if (position - attemptCooldown > COOLDOWN_LENGTH){
 						attempts++;
 						attemptCooldown = position;
 					}
@@ -533,8 +540,7 @@ int regions_main( int argc, char** argv ){
 			args.threshold = thym_mu+2*thym_sigma;
 		}
 	}
-	else p = args.probability;
-
+	
 	//call regions
  	inFile.open( args.detectFilename );
 	if ( not inFile.is_open() ) throw IOerror( args.detectFilename );
@@ -609,12 +615,12 @@ int regions_main( int argc, char** argv ){
 			if ( startingPos == -1 ) startingPos = position;
 			gap = position - startingPos;
 
-			if ( B > LOG_LIKELIHOOD_THRESHOLD and position - callCooldown > 6 ){
+			if ( B > LOG_LIKELIHOOD_THRESHOLD and position - callCooldown > COOLDOWN_LENGTH ){
 				callCooldown = position;
 				calls++;
 				attempts++;
 			}
-			else if (position - attemptCooldown > 6){
+			else if (position - attemptCooldown > COOLDOWN_LENGTH){
 				attempts++;
 				attemptCooldown = position;
 			}

@@ -19,7 +19,7 @@ for ctr, line in enumerate(f):
 	
 	if line[0] == '<':
 
-		if ctr > 10000000:
+		if ctr > 1000000:
 			break
 
 		idx = 0

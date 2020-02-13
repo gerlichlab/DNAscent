@@ -7,7 +7,7 @@
 //----------------------------------------------------------
 
 //#define TEST_HMM 1
-#define TEST_LL 1
+//#define TEST_LL 1
 
 #include <fstream>
 #include "detect.h"
@@ -743,9 +743,9 @@ std::string llAcrossRead( read &r,
 
 		std::vector< double > eventSnippet;
 
-		//catch spans with lots of insertions or deletions
+		//catch spans with lots of insertions or deletions (this QC was set using results of tests/detect/hmm_falsePositives)
 		int spanOnQuery = (r.refToQuery)[posOnRef + windowLength+6] - (r.refToQuery)[posOnRef - windowLength];
-		if ( spanOnQuery > 3.5*windowLength or spanOnQuery < 1.5*windowLength ) continue;
+		if ( spanOnQuery > 3.5*windowLength or spanOnQuery < 2*windowLength ) continue;
 
 		/*get the events that correspond to the read snippet */
 		bool first = true;
@@ -807,8 +807,8 @@ std::string llAcrossRead( read &r,
 			}
 		}
 
-		//catch abnormally few or many events
-		if ( eventSnippet.size() > 8*windowLength or eventSnippet.size() < windowLength ) continue;
+		//catch abnormally few or many events (this QC was set using results of tests/detect/hmm_falsePositives)
+		if ( eventSnippet.size() > 8*windowLength or eventSnippet.size() < 3.5*windowLength ) continue;
 	
 		/*
 		TESTING - print out the read snippet, the ONT model, and the aligned events 
