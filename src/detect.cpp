@@ -7,6 +7,7 @@
 //----------------------------------------------------------
 
 //#define TEST_HMM 1
+#define TEST_LL 1
 
 #include <fstream>
 #include "detect.h"
@@ -290,7 +291,6 @@ double sequenceProbability( std::vector <double> &observations,
 #if TEST_HMM
 std::cerr << "<-------------------" << std::endl;
 std::cerr << useBrdU << std::endl;
-std::cerr << windowSize << std::endl;
 std::cerr << sequence << std::endl;
 for (auto ob = observations.begin(); ob < observations.end(); ob++){
 	std::cerr << *ob << " ";
@@ -845,6 +845,18 @@ std::string llAcrossRead( read &r,
 		double logProbAnalogue = sequenceProbability( eventSnippet, readSnippet, windowLength, true, r.scalings, BrdUStart, BrdUEnd );
 		double logProbThymidine = sequenceProbability( eventSnippet, readSnippet, windowLength, false, r.scalings, 0, 0 );
 		double logLikelihoodRatio = logProbAnalogue - logProbThymidine;
+
+#if TEST_LL
+std::cerr << "<-------------------" << std::endl;
+std::cerr << spanOnQuery << std::endl;
+std::cerr << readSnippet << std::endl;
+for (auto ob = eventSnippet.begin(); ob < eventSnippet.end(); ob++){
+	std::cerr << *ob << " ";
+}
+std::cerr << std::endl;
+std::cerr << logLikelihoodRatio << std::endl;
+#endif
+
 		if ( methylAware) {
 
 			std::string readSnippetMethylated = methylateSequence( readSnippet );

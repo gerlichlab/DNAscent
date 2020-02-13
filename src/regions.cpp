@@ -325,6 +325,8 @@ int regions_main( int argc, char** argv ){
 	unsigned int calls = 0, attempts = 0, gap = 0;
 	int startingPos = -1;
 	int progress = 0;
+	int callCooldown = 0;
+	int attemptCooldown = 0;
 
 	if ( not args.overrideProb ){
 
@@ -340,6 +342,8 @@ int regions_main( int argc, char** argv ){
 
 				progress++;
 				pb.displayProgress( progress, 0, 0 );
+				callCooldown = 0;
+				attemptCooldown = 0;
 				continue;
 			}
 
@@ -375,9 +379,17 @@ int regions_main( int argc, char** argv ){
 					// if B < LOG_LIKELIHOOD_THRESHOLD and BM < 0, then it's corrupted by methylation so don't count as attempt
 			}
 			else{
-
-					if ( B.get() > LOG_LIKELIHOOD_THRESHOLD ) calls++;
-					attempts++;
+					//testing
+					//std::cout << B.get() << " " << position << " " << callCooldown << std::endl;
+					if ( B.get() > LOG_LIKELIHOOD_THRESHOLD and position - callCooldown > 6 ){
+						callCooldown = position;
+						calls++;
+						attempts++;
+					}
+					else if (position - attemptCooldown > 6){
+						attempts++;
+						attemptCooldown = position;
+					}
 			}
 
 			if ( startingPos == -1 ) startingPos = position;
@@ -407,6 +419,7 @@ int regions_main( int argc, char** argv ){
 		calls = 0; attempts = 0; gap = 0;
 		startingPos = -1;
 		progress = 0;
+		callCooldown = 0; attemptCooldown = 0;
 		std::vector<double> allZScores;
 		while( std::getline( inFile, line ) ){
 
@@ -415,6 +428,8 @@ int regions_main( int argc, char** argv ){
 				progress++;
 				pb_z.displayProgress( progress, 0, 0 );
 				calls = 0, attempts = 0, gap = 0, startingPos = -1;
+				callCooldown = 0;
+				attemptCooldown = 0;
 			}
 			else{
 
@@ -452,8 +467,15 @@ int regions_main( int argc, char** argv ){
 				}
 				else{
 
-						if ( B.get() > LOG_LIKELIHOOD_THRESHOLD ) calls++;
+					if ( B.get() > LOG_LIKELIHOOD_THRESHOLD and position - callCooldown > 6 ){
+						callCooldown = position;
+						calls++;
 						attempts++;
+					}
+					else if (position - attemptCooldown > 6){
+						attempts++;
+						attemptCooldown = position;
+					}
 				}
 
 				if ( startingPos == -1 ) startingPos = position;
@@ -529,6 +551,7 @@ int regions_main( int argc, char** argv ){
 	calls = 0; attempts = 0; gap = 0;
 	startingPos = -1;
 	progress = 0;
+	callCooldown = 0; attemptCooldown = 0;
 	while( std::getline( inFile, line ) ){
 
 		if ( line.substr(0,1) == ">" ){
@@ -559,6 +582,8 @@ int regions_main( int argc, char** argv ){
 			header = line;
 			buffer.clear();
 			calls = 0, attempts = 0, gap = 0, startingPos = -1;
+			callCooldown = 0;
+			attemptCooldown = 0;
 			
 		}
 		else{
@@ -576,10 +601,6 @@ int regions_main( int argc, char** argv ){
 				else if ( cIndex == 1 ){
 
 					B = std::stof(column);
-					if ( B > LOG_LIKELIHOOD_THRESHOLD ){
-
-						calls++;
-					}
 				}
 				cIndex++;
 			}
@@ -587,7 +608,16 @@ int regions_main( int argc, char** argv ){
 
 			if ( startingPos == -1 ) startingPos = position;
 			gap = position - startingPos;
-			attempts++;
+
+			if ( B > LOG_LIKELIHOOD_THRESHOLD and position - callCooldown > 6 ){
+				callCooldown = position;
+				calls++;
+				attempts++;
+			}
+			else if (position - attemptCooldown > 6){
+				attempts++;
+				attemptCooldown = position;
+			}
 
 			if ( gap > args.resolution and attempts >= args.resolution / 30 ){
 
