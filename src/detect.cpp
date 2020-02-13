@@ -6,7 +6,7 @@
 // not, please Email the author.
 //----------------------------------------------------------
 
-//#define TEST_HMM 1
+#define TEST_HMM 1
 //#define TEST_LL 1
 
 #include <fstream>
@@ -291,6 +291,7 @@ double sequenceProbability( std::vector <double> &observations,
 #if TEST_HMM
 std::cerr << "<-------------------" << std::endl;
 std::cerr << useBrdU << std::endl;
+std::cerr << scalings.shift << " " << scalings.scale << " " << scalings.var << std::endl;
 std::cerr << sequence << std::endl;
 for (auto ob = observations.begin(); ob < observations.end(); ob++){
 	std::cerr << *ob << " ";
