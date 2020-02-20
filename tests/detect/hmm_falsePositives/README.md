@@ -1,11 +1,11 @@
-# DNAscent Test - HMM False Positives
+# DNAscent Test - Test HMM Positive Calls
 
-This test checks whether false positives are correlated with the number of events passed to the HMM, properties of the reference sequence at that point, or the span on the query sequence.
+This test looks at events that were called as BrdU and checks them against the span on the query sequence and the number of events passed to the HMM to determine whether we can add any meaningful QCs.
 
 ## Files
 
-`testFalsePositives.py`
+`testPositiveCalls.py`
 
 ## Running
 
-For a sample with no BrdU, run DNAscent detect on a single thread with #define TEST_LL 1 and stderr redirected to a file (call it eventTest.txt).  Run `python testFalsePositives.py eventTest.txt`. 
+Run DNAscent detect with #define TEST_LL 1 and redirect stderr to file.txt.  Then run `python testPositiveCalls.py file.txt` to produce the plots.

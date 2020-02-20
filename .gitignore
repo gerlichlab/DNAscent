@@ -17,6 +17,9 @@ hdf5-1.8.14/
 tensorflow/
 hdf5-1.8.14.tar.gz
 
+#generated
+.depend
+
 #ide
 .project
 .cproject

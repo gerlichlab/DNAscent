@@ -1,6 +1,6 @@
 //----------------------------------------------------------
 // Copyright 2019 University of Oxford
-// Written by Michael A. Boemo (michael.boemo@path.ox.ac.uk)
+// Written by Michael A. Boemo (mb915@cam.ac.uk)
 // This software is licensed under GPL-2.0.  You should have
 // received a copy of the license with this software.  If
 // not, please Email the author.
@@ -15,19 +15,17 @@
 #include "data_IO.h"
 #include "error_handling.h"
 #include <cmath>
- #define _USE_MATH_DEFINES
+#define _USE_MATH_DEFINES
 
  static const char *help=
 "index: DNAscent executable that builds an index file for DNAscent detect.\n"
 "To run DNAscent index, do:\n"
-"  ./DNAscent index [arguments]\n"
-"Example:\n"
-"  ./DNAscent index -f /path/to/detect_output.out\n"
+"  ./DNAscent index -f /path/to/fast5Directory\n"
 "Required arguments are:\n"
 "  -f,--files                path to fast5 files.\n"
 "Optional arguments are:\n"
 "  -o,--output               output file name (default is index.dnascent),\n"
-"  -s,--sequencing-summary   path to sequencing summary file from guppy/albacore basecalling.\n"
+"  -s,--sequencing-summary   path to sequencing summary file Guppy (optional but strongly recommended).\n"
 "Written by Michael Boemo, Department of Pathology, University of Cambridge.\n"
 "Please submit bug reports to GitHub Issues (https://github.com/MBoemo/DNAscent/issues).";
 

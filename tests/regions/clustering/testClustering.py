@@ -5,7 +5,7 @@ import numpy as np
 import sys
 
 #Usage: python testClustering.py DNAscentregions.stderr
-#where DNAscentregions.stderr is from stderr after running DNAscent regions with TEST_CLUSTERING
+#where DNAscentregions.stderr is from stderr after running DNAscent regions with #define TEST_CLUSTERING 1
 
 
 centroids = []

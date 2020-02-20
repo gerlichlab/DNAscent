@@ -1,11 +1,11 @@
-# DNAscent Test - htslib Interface
+# DNAscent Test - Event Alignment
 
-This test checks DNAscent's interface with htslib in order to parse and iterate on bam files, make sure we're getting genome coordinates right, and make sure we're handling reverse complements correctly.
+This test checks the quality of DNAscent's adaptive banded event alignment and makes sure that there are no features of the alignment that could indicate a whole read should be thrown out or a call should be avoided at a particular position.
 
 ## Files
 
-`reference.fasta` contains some simple sequences and `reads.fasta` shows different insertions, deletions, mismatches, and inversions of these sequences. `alignments.sorted.bam` is the result of aligning these reads to the reference with minimap2 and then sorting the bam file.
+`plotEventAlignments.py`
 
 ## Running
 
-`make` will compile the test program `test_htslib_interface`.  Running the test program will show the mapping details for each test read, as well as details of the reference-to-query map.
+Set #define TEST_ALIGNMENT 1 in detect.cpp and recompile.  Run DNAscent detect on 2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full barcode08 and barcode11, redirecting stderr to a file.  For each of these, run `python plotEventAlignments.py stderr.out DNAscentDetect.out`.

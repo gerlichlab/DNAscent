@@ -1,14 +1,15 @@
 //----------------------------------------------------------
 // Copyright 2017 University of Oxford
-// Written by Michael A. Boemo (michael.boemo@path.ox.ac.uk)
+// Written by Michael A. Boemo (mb915@cam.ac.uk)
 // This software is licensed under GPL-2.0.  You should have
 // received a copy of the license with this software.  If
 // not, please Email the author.
 //----------------------------------------------------------
 
 #define TEST_CLUSTERING 0
+//#define TEST_COOLDOWN 1
 
- #include <fstream>
+#include <fstream>
 #include "regions.h"
 #include "data_IO.h"
 #include "error_handling.h"
@@ -19,32 +20,30 @@
 #define _USE_MATH_DEFINES
 
 
-static double LOG_LIKELIHOOD_THRESHOLD = 0.0;
-static int COOLDOWN_LENGTH = 6;
-
 static const char *help=
 "regions: DNAscent executable that finds regions of analogue incorporation from the output of DNAscent detect.\n"
 "To run DNAscent regions, do:\n"
-"  ./DNAscent regions [arguments]\n"
-"Example:\n"
-"  ./DNAscent regions -d /path/to/regions_output.out -o /path/to/output_prefix\n"
+"  ./DNAscent regions -d /path/to/output.detect -o /path/to/output.regions\n"
 "Required arguments are:\n"
 "  -d,--detect               path to output file from DNAscent detect,\n"
 "  -o,--output               path to output directory for bedgraph files.\n"
 "Optional arguments are:\n"
 "     --replication          detect fork direction and call origin firing (default: off),\n"
+"  -l,--likelihood           log-likelihood threshold for a positive analogue call (default: 1.25),\n"
+"  -c,--cooldown             minimum gap between positive analogue calls (default: 4),\n"
+"  -r,--resolution           minimum length of regions (default is 2kb),\n"
 "  -p,--probability          override probability that a thymidine 6mer contains a BrdU (default: automatically calculated),\n"
-"  -r,--resolution           minimum length of regions (default is 2kb).\n"
-"  -z,--zScore               zScore threshold for BrdU call (default is 0).\n"
+"  -z,--zScore               override zScore threshold for BrdU call (default: automatically calculated).\n"
 "Written by Michael Boemo, Department of Pathology, University of Cambridge.\n"
 "Please submit bug reports to GitHub Issues (https://github.com/MBoemo/DNAscent/issues).";
 
  struct Arguments {
 
 	std::string detectFilename;
-	double probability, threshold;
+	double probability, threshold, likelihood;
 	bool overrideProb,overrideZ;
 	unsigned int resolution;
+	int cooldown;
 	std::string outputFilename;
 	bool callReplication;
 };
@@ -72,6 +71,8 @@ Arguments parseRegionsArguments( int argc, char** argv ){
 	args.callReplication = false;
 	args.overrideProb = false;
 	args.overrideZ = false;
+	args.likelihood = 1.25;
+	args.cooldown = 4;
 
  	/*parse the command line arguments */
 	for ( int i = 1; i < argc; ){
@@ -105,6 +106,16 @@ Arguments parseRegionsArguments( int argc, char** argv ){
 			args.callReplication = true;
 			i+=1;
 		}
+		else if ( flag == "-c" or flag == "--cooldown" ){
+ 			std::string strArg( argv[ i + 1 ] );
+			args.cooldown = std::stoi( strArg.c_str() );
+			i+=2;
+		}
+		else if ( flag == "-l" or flag == "--likelihood" ){
+ 			std::string strArg( argv[ i + 1 ] );
+			args.likelihood = std::stof( strArg.c_str() );
+			i+=2;
+		}
 		else if ( flag == "-r" or flag == "--resolution" ){
  			std::string strArg( argv[ i + 1 ] );
 			args.resolution = std::stoi( strArg.c_str() );
@@ -112,6 +123,8 @@ Arguments parseRegionsArguments( int argc, char** argv ){
 		}
 		else throw InvalidOption( flag );
 	}
+	if (args.outputFilename == args.detectFilename) throw OverwriteFailure();
+
 	return args;
 }
 
@@ -353,7 +366,7 @@ int regions_main( int argc, char** argv ){
 			std::string column;
 			std::stringstream ssLine(line);
 			int position = -1, cIndex = 0;
-			AnalogueScore B, BM;
+			AnalogueScore B, BM, M;
 			int countCol = std::count(line.begin(), line.end(), '\t');
 			while ( std::getline( ssLine, column, '\t' ) ){
 
@@ -369,27 +382,38 @@ int regions_main( int argc, char** argv ){
 
 					BM.set(std::stof(column));
 				}
+				else if ( cIndex == 3 and countCol > 3 ){ //methyl-aware detect file
+
+					M.set(std::stof(column));
+				}
 				cIndex++;
 			}
 			assert(position != -1);
 			if ( countCol > 3){
 
-					if ( B.get() > LOG_LIKELIHOOD_THRESHOLD and BM.get() > LOG_LIKELIHOOD_THRESHOLD ){
-						calls++;
-						attempts++;
-					}
-					else if ( B.get() < LOG_LIKELIHOOD_THRESHOLD and BM.get() > 0.0 ) attempts++;
-					// if B < LOG_LIKELIHOOD_THRESHOLD and BM < 0, then it's corrupted by methylation so don't count as attempt
-			}
-			else{
-					//testing
-					//std::cout << B.get() << " " << position << " " << callCooldown << std::endl;
-					if ( B.get() > LOG_LIKELIHOOD_THRESHOLD and position - callCooldown > COOLDOWN_LENGTH ){
+					if ( B.get() > args.likelihood and BM.get() > 0.0 and position - callCooldown >= args.cooldown ){
+					//looks like BrdU against thymidine, and looks more like BrdU than methylation, count as positive call
+						attemptCooldown = position;
 						callCooldown = position;
 						calls++;
 						attempts++;
 					}
-					else if (position - attemptCooldown > COOLDOWN_LENGTH){
+					else if ( M.get() < args.likelihood and B.get() < args.likelihood and position - attemptCooldown >= args.cooldown ){
+					//not strong enough to count as either BrdU or methylation counts as an attempt
+						attempts++;
+						attemptCooldown = position;
+					}
+			}
+			else{
+					//testing
+					//std::cout << B.get() << " " << position << " " << callCooldown << std::endl;
+					if ( B.get() > args.likelihood and position - callCooldown >= args.cooldown ){
+						attemptCooldown = position;
+						callCooldown = position;
+						calls++;
+						attempts++;
+					}
+					else if (position - attemptCooldown >= args.cooldown){
 						attempts++;
 						attemptCooldown = position;
 					}
@@ -443,7 +467,7 @@ int regions_main( int argc, char** argv ){
 				std::string column;
 				std::stringstream ssLine(line);
 				int position = -1, cIndex = 0;
-				AnalogueScore B, BM;
+				AnalogueScore B, BM, M;
 				int countCol = std::count(line.begin(), line.end(), '\t');
 				while ( std::getline( ssLine, column, '\t' ) ){
 
@@ -459,27 +483,38 @@ int regions_main( int argc, char** argv ){
 
 						BM.set(std::stof(column));
 					}
+					else if ( cIndex == 3 and countCol > 3 ){ //methyl-aware detect file
+
+						M.set(std::stof(column));
+					}
 					cIndex++;
 				}
 				assert(position != -1);
 
 				if ( countCol > 3){
 
-						if ( B.get() > LOG_LIKELIHOOD_THRESHOLD and BM.get() > LOG_LIKELIHOOD_THRESHOLD ){
-							calls++;
-							attempts++;
-						}
-						else if ( B.get() < LOG_LIKELIHOOD_THRESHOLD and BM.get() > 0 ) attempts++;
-						//not strong BrdU but more BrdU than methyl counts as an attempt
-				}
-				else{
-
-					if ( B.get() > LOG_LIKELIHOOD_THRESHOLD and position - callCooldown > COOLDOWN_LENGTH ){
+					if ( B.get() > args.likelihood and BM.get() > 0.0 and position - callCooldown >= args.cooldown ){
+					//looks like BrdU against thymidine, and looks more like BrdU than methylation, count as positive call
+						attemptCooldown = position;
 						callCooldown = position;
 						calls++;
 						attempts++;
 					}
-					else if (position - attemptCooldown > COOLDOWN_LENGTH){
+					else if ( M.get() < args.likelihood and B.get() < args.likelihood and position - attemptCooldown >= args.cooldown ){
+					//not strong enough to count as either BrdU or methylation counts as an attempt
+						attempts++;
+						attemptCooldown = position;
+					}
+				}
+				else{
+
+					if ( B.get() > args.likelihood and position - callCooldown >= args.cooldown){
+						callCooldown = position;
+						attemptCooldown = position;
+						calls++;
+						attempts++;
+					}
+					else if (position - attemptCooldown >= args.cooldown){
 						attempts++;
 						attemptCooldown = position;
 					}
@@ -597,7 +632,8 @@ int regions_main( int argc, char** argv ){
 			std::string column;
 			std::stringstream ssLine(line);
 			int position = -1, cIndex = 0;
-			double B;
+			AnalogueScore B, BM, M;
+			int countCol = std::count(line.begin(), line.end(), '\t');
 			while ( std::getline( ssLine, column, '\t' ) ){
 
 				if ( cIndex == 0 ){
@@ -606,7 +642,15 @@ int regions_main( int argc, char** argv ){
 				}
 				else if ( cIndex == 1 ){
 
-					B = std::stof(column);
+					B.set(std::stof(column));
+				}
+				else if ( cIndex == 2 and countCol > 3 ){ //methyl-aware detect file
+
+					BM.set(std::stof(column));
+				}
+				else if ( cIndex == 3 and countCol > 3 ){ //methyl-aware detect file
+
+					M.set(std::stof(column));
 				}
 				cIndex++;
 			}
@@ -615,14 +659,50 @@ int regions_main( int argc, char** argv ){
 			if ( startingPos == -1 ) startingPos = position;
 			gap = position - startingPos;
 
-			if ( B > LOG_LIKELIHOOD_THRESHOLD and position - callCooldown > COOLDOWN_LENGTH ){
-				callCooldown = position;
-				calls++;
-				attempts++;
+			if ( countCol > 3){
+
+				if ( B.get() > args.likelihood and BM.get() > 0.0 and position - callCooldown >= args.cooldown ){
+				//looks like BrdU against thymidine, and looks more like BrdU than methylation, count as positive call
+					attemptCooldown = position;
+					callCooldown = position;
+					calls++;
+					attempts++;
+				}
+				else if ( M.get() < args.likelihood and B.get() < args.likelihood and position - attemptCooldown >= args.cooldown ){
+				//not strong enough to count as either BrdU or methylation counts as an attempt
+					attempts++;
+					attemptCooldown = position;
+				}
 			}
-			else if (position - attemptCooldown > COOLDOWN_LENGTH){
-				attempts++;
-				attemptCooldown = position;
+			else{
+
+				if ( B.get() > args.likelihood and position - callCooldown >= args.cooldown){
+#if TEST_COOLDOWN
+std::cout << ">>>>>Call: " << line << std::endl;
+std::cout << "     Call Cooldown: " << callCooldown << std::endl;
+std::cout << "     Attempt Cooldown: " << attemptCooldown << std::endl;
+#endif
+					callCooldown = position;
+					attemptCooldown = position;
+					calls++;
+					attempts++;
+				}
+				else if (position - attemptCooldown >= args.cooldown){
+#if TEST_COOLDOWN
+std::cout << ">>>>>Attempt: " << line << std::endl;
+std::cout << "     Call Cooldown: " << callCooldown << std::endl;
+std::cout << "     Attempt Cooldown: " << attemptCooldown << std::endl;
+#endif
+					attempts++;
+					attemptCooldown = position;
+				}
+#if TEST_COOLDOWN
+			else{
+			std::cout << ">>>>>Ignored: " << line << std::endl;
+			std::cout << "     Call Cooldown: " << callCooldown << std::endl;
+			std::cout << "     Attempt Cooldown: " << attemptCooldown << std::endl;
+			}
+#endif
 			}
 
 			if ( gap > args.resolution and attempts >= args.resolution / 30 ){

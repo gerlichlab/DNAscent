@@ -4,13 +4,13 @@ from matplotlib import pyplot as plt
 import numpy as np
 import sys
 
-#Usage: python callsAgainstKL.py stderr.out DNAscent.detect
-#where stderr.out is the result of a stderr redirect after running DNAscent detect with the --testAlignment flag
+#Usage: python plotEventAlignments.py stderr.out DNAscent.detect
+#where stderr.out is the result of a stderr redirect after running DNAscent detect with #define TEST_ALIGNMENT 1
 
-maxReads = 20000
+maxReads = 2000
 plot = False
 
-threshold = 2.5 #log likelihood threshold for a positive BrdU call
+threshold = 1.25 #log likelihood threshold for a positive BrdU call (this should be the default value used by DNAscent regions)
 
 hist_emission = []
 hist_gap = []

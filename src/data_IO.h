@@ -1,6 +1,6 @@
 //----------------------------------------------------------
 // Copyright 2019 University of Oxford
-// Written by Michael A. Boemo (michael.boemo@path.ox.ac.uk)
+// Written by Michael A. Boemo (mb915@cam.ac.uk)
 // This software is licensed under GPL-2.0.  You should have
 // received a copy of the license with this software.  If
 // not, please Email the author.
@@ -73,5 +73,6 @@ struct read{
 std::map< std::string, std::string > import_reference( std::string );
 std::map< std::string, std::string > import_reference_pfasta( std::string );
 std::map< std::string, std::pair< double, double > > import_poreModel( std::string );
+std::string getExePath(void);
 
 #endif

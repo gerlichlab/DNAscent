@@ -1,6 +1,6 @@
 //----------------------------------------------------------
 // Copyright 2019 University of Oxford
-// Written by Michael A. Boemo (mb915@cam.ac.uk)
+// Written by Michael A. Boemo (michael.boemo@path.ox.ac.uk)
 // This software is licensed under GPL-2.0.  You should have
 // received a copy of the license with this software.  If
 // not, please Email the author.
@@ -8,7 +8,6 @@
 
 //#define TEST_HMM 1
 //#define TEST_LL 1
-//#define TEST_ALIGNMENT 1
 
 #include <fstream>
 #include "detect.h"
@@ -21,10 +20,18 @@
 #include "../fast5/include/fast5.hpp"
 #include "poreModels.h"
 
+
+#include "../Penthus/src/hmm.h"
+#include "../Penthus/src/probability.h"
+#include "../Penthus/src/states.h"
+
+
 static const char *help=
 "detect: DNAscent executable that detects BrdU in Oxford Nanopore reads.\n"
 "To run DNAscent detect, do:\n"
-		"  ./DNAscent detect -b /path/to/alignment.bam -r /path/to/reference.fasta -i /path/to/index.dnascent -o /path/to/output.detect\n"
+"  ./DNAscent detect [arguments]\n"
+"Example:\n"
+"  ./DNAscent detect -b /path/to/alignment.bam -r /path/to/reference.fasta -i /path/to/index.index -o /path/to/output.out -t 20\n"
 "Required arguments are:\n"
 "  -b,--bam                  path to alignment BAM file,\n"
 "  -r,--reference            path to genome reference in fasta format,\n"
@@ -43,7 +50,7 @@ struct Arguments {
 	std::string referenceFilename;
 	std::string outputFilename;
 	std::string indexFilename;
-	bool methylAware;
+	bool excludeCpG, methylAware, testAlignment;
 	double divergence;
 	int minQ;
 	int minL;
@@ -77,9 +84,11 @@ Arguments parseDetectArguments( int argc, char** argv ){
 	args.minL = 100;
 	args.methylAware = false;
 	args.divergence = 0;
+	args.testAlignment = false;
 
-	/*parse the command line arguments */
-
+	/*parse the command line arguments */#include "../Penthus/src/hmm.h"
+#include "../Penthus/src/probability.h"
+#include "../Penthus/src/states.h"
 	for ( int i = 1; i < argc; ){
 
 		std::string flag( argv[ i ] );
@@ -137,10 +146,13 @@ Arguments parseDetectArguments( int argc, char** argv ){
 			args.methylAware = true;
 			i+=1;
 		}
+		else if ( flag == "--testAlignment" ){
+
+			args.testAlignment = true;
+			i+=1;
+		}
 		else throw InvalidOption( flag );
 	}
-	if (args.outputFilename == args.indexFilename or args.outputFilename == args.referenceFilename or args.outputFilename == args.bamFilename) throw OverwriteFailure();
-
 	return args;
 }
 
@@ -163,7 +175,6 @@ double sequenceProbability( std::vector <double> &observations,
 				PoreParameters scalings,
 				size_t BrdUStart,
 				size_t BrdUEnd ){
-//covered in: tests/detect/hmm_forward
 
 	std::vector< double > I_curr(2*windowSize+1, NAN), D_curr(2*windowSize+1, NAN), M_curr(2*windowSize+1, NAN), I_prev(2*windowSize+1, NAN), D_prev(2*windowSize+1, NAN), M_prev(2*windowSize+1, NAN);
 	double firstI_curr = NAN, firstI_prev = NAN;
@@ -228,7 +239,7 @@ double sequenceProbability( std::vector <double> &observations,
 			//get model parameters
 			sixMer = sequence.substr(i, 6); 
 			insProb = eln( uniformPDF( 0, 250, observations[t] ) );
-			if ( useBrdU and BrdUStart <= i and i <= BrdUEnd and sixMer.find('T') != std::string::npos and analogueModel.count(sixMer) > 0 ){
+			if ( useBrdU and BrdUStart - 5 <= i and i <= BrdUEnd and sixMer.find('T') != std::string::npos and analogueModel.count(sixMer) > 0 ){
 
 				level_mu = scalings.shift + scalings.scale * analogueModel.at(sixMer).first;
 				level_sigma = scalings.var * analogueModel.at(sixMer).second;
@@ -299,7 +310,107 @@ std::cerr << forwardProb << std::endl;
 	return forwardProb;
 }
 
+double sequenceProbability_Penthus( std::vector <double> &observations,
+				std::string &sequence, 
+				size_t windowSize, 
+				bool useBrdU, 
+				PoreParameters scalings,
+				size_t BrdUStart,
+				size_t BrdUEnd ){
 
+	HiddenMarkovModel hmm = HiddenMarkovModel();
+
+	/*STATES - vector (of vectors) to hold the states at each position on the reference - fill with dummy values */
+	std::vector< std::vector< State > > states( 3, std::vector< State >( sequence.length() - 5, State( NULL, "", "", "", 1.0 ) ) );
+
+	/*DISTRIBUTIONS - vector to hold normal distributions, a single uniform and silent distribution to use for everything else */
+	std::vector< NormalDistribution > nd;
+	nd.reserve( sequence.length() - 5 );
+
+	SilentDistribution sd( 0.0, 0.0 );
+	UniformDistribution ud( 0, 250.0 );
+
+	std::string loc, sixMer;
+		
+	/*create make normal distributions for each reference position using the ONT 6mer model */
+	for ( unsigned int i = 0; i < sequence.length() - 5; i++ ){
+
+		sixMer = sequence.substr( i, 6 );
+
+		if ( useBrdU and BrdUStart - 5 <= i and i <= BrdUEnd and sixMer.find('T') != std::string::npos and analogueModel.count(sixMer) > 0 ){
+
+			nd.push_back( NormalDistribution( scalings.shift + scalings.scale * analogueModel.at(sixMer).first, scalings.var * analogueModel.at(sixMer).second ) );
+		}
+		else {
+
+			nd.push_back( NormalDistribution( scalings.shift + scalings.scale * thymidineModel.at(sixMer).first, scalings.var * thymidineModel.at(sixMer).second ) );
+		}
+	}
+
+	/*the first insertion state after start */
+	State firstI = State( &ud, "-1_I", "", "", 1.0 );
+	hmm.add_state( firstI );
+
+	/*add states to the model, handle internal module transitions */
+	for ( unsigned int i = 0; i < sequence.length() - 5; i++ ){
+
+		loc = std::to_string( i );
+		sixMer = sequence.substr( i, 6 );
+
+		states[ 0 ][ i ] = State( &sd,		loc + "_D", 	sixMer,	"", 		1.0 );		
+		states[ 1 ][ i ] = State( &ud,		loc + "_I", 	sixMer,	"", 		1.0 );
+		states[ 2 ][ i ] = State( &nd[i], 	loc + "_M1", 	sixMer,	loc + "_match", 1.0 );
+
+		/*add state to the model */
+		for ( unsigned int j = 0; j < 3; j++ ){
+
+			states[ j ][ i ].meta = sixMer;
+			hmm.add_state( states[ j ][ i ] );
+		}
+
+		/*transitions between states, internal to a single base */
+		/*from I */
+		hmm.add_transition( states[1][i], states[1][i], internalI2I );
+
+		/*from M1 */
+		hmm.add_transition( states[2][i], states[2][i], internalM12M1 );
+		hmm.add_transition( states[2][i], states[1][i], internalM12I );
+	}
+
+	/*add transitions between modules (external transitions) */
+	for ( unsigned int i = 0; i < sequence.length() - 6; i++ ){
+
+		/*from D */
+		hmm.add_transition( states[0][i], states[0][i + 1], externalD2D );
+		hmm.add_transition( states[0][i], states[2][i + 1], externalD2M1 );
+
+		/*from I */
+		hmm.add_transition( states[1][i], states[2][i + 1], externalI2M1 );
+
+		/*from M */
+		hmm.add_transition( states[2][i], states[0][i + 1], externalM12D );
+		hmm.add_transition( states[2][i], states[2][i + 1], externalM12M1 );
+	}
+
+	/*handle start states */
+	hmm.add_transition( hmm.start, firstI, 0.25 );
+	hmm.add_transition( hmm.start, states[0][0], 0.25 );
+	hmm.add_transition( hmm.start, states[2][0], 0.5 );
+
+	/*transitions from first insertion */
+	hmm.add_transition( firstI, firstI, 0.25 );
+	hmm.add_transition( firstI, states[0][0], 0.25 );
+	hmm.add_transition( firstI, states[2][0], 0.5 );
+
+	/*handle end states */
+	hmm.add_transition( states[0][sequence.length() - 6], hmm.end, 1.0 );
+	hmm.add_transition( states[1][sequence.length() - 6], hmm.end, externalI2M1 );
+	hmm.add_transition( states[2][sequence.length() - 6], hmm.end, externalM12M1 + externalM12D );
+
+	hmm.finalise();
+	//std::pair<double, std::vector<std::vector<double> > > dummy = hmm.forward( observations );
+	return hmm.sequenceProbability( observations );
+}
 
 double sequenceProbability_methyl( std::vector <double> &observations,
 				std::string &sequence,
@@ -309,7 +420,7 @@ double sequenceProbability_methyl( std::vector <double> &observations,
 				size_t MethylStart,
 				size_t MethylEnd ){
 
-	std::vector< double > I_curr(2*windowSize+1, NAN), D_curr(2*windowSize+1, NAN), M_curr(2*windowSize+1, NAN), I_prev(2*windowSize+1, NAN), D_prev(2*windowSize+1, NAN), M_prev(2*windowSize+1, NAN);
+	std::vector< double > I_curr(2*windowSize, NAN), D_curr(2*windowSize, NAN), M_curr(2*windowSize, NAN), I_prev(2*windowSize, NAN), D_prev(2*windowSize, NAN), M_prev(2*windowSize, NAN);
 	double firstI_curr = NAN, firstI_prev = NAN;
 	double start_curr = NAN, start_prev = 0.0;
 
@@ -337,10 +448,18 @@ double sequenceProbability_methyl( std::vector <double> &observations,
 		firstI_curr = NAN;
 
 		std::string sixMer = sequence.substr(0, 6);
-		std::string sixMer_methyl;
+		std::string sixMer_methyl = sequence_methylated.substr(0,6);
 
-		level_mu = scalings.shift + scalings.scale * thymidineModel.at(sixMer).first;
-		level_sigma = scalings.var * thymidineModel.at(sixMer).second;
+		if ( sixMer_methyl.find('M') != std::string::npos and methyl5mCModel.count(sixMer_methyl) > 0 ){
+
+			level_mu = scalings.shift + scalings.scale * methyl5mCModel.at(sixMer_methyl).first;
+			level_sigma = scalings.var * methyl5mCModel.at(sixMer_methyl).second;
+		}
+		else {
+
+			level_mu = scalings.shift + scalings.scale * thymidineModel.at(sixMer).first;
+			level_sigma = scalings.var * thymidineModel.at(sixMer).second;
+		}
 
 		//uncomment to scale events
 		//level_mu = thymidineModel.at(sixMer).first;
@@ -374,7 +493,7 @@ double sequenceProbability_methyl( std::vector <double> &observations,
 			sixMer = sequence.substr(i, 6);
 			sixMer_methyl = sequence_methylated.substr(i,6);
 			insProb = eln( uniformPDF( 0, 250, observations[t] ) );
-			if ( methyl5mCModel.count(sixMer_methyl) > 0 and MethylStart <= i and i <= MethylEnd ){
+			if ( methyl5mCModel.count(sixMer_methyl) > 0 and MethylStart - 5 <= i and i <= MethylEnd ){
 
 				level_mu = scalings.shift + scalings.scale * methyl5mCModel.at(sixMer_methyl).first;
 				level_sigma = scalings.var * methyl5mCModel.at(sixMer_methyl).second;
@@ -708,10 +827,6 @@ std::string llAcrossRead( read &r,
 		int posOnRef = POIs[i];
 		int posOnQuery = (r.refToQuery).at(posOnRef);
 
-		//sequence needs to be 6 bases longer than the span of events we catch
-		//so sequence goes from posOnRef - windowLength to posOnRef + windowLength + 6
-		//event span goes from posOnRef - windowLength to posOnRef + windowLength
-
 		std::string readSnippet = (r.referenceSeqMappedTo).substr(posOnRef - windowLength, 2*windowLength+6);
 
 		//make sure the read snippet is fully defined as A/T/G/C in reference
@@ -738,7 +853,7 @@ std::string llAcrossRead( read &r,
 		std::vector< double > eventSnippet;
 
 		//catch spans with lots of insertions or deletions (this QC was set using results of tests/detect/hmm_falsePositives)
-		unsigned int spanOnQuery = (r.refToQuery)[posOnRef + windowLength+6] - (r.refToQuery)[posOnRef - windowLength];
+		int spanOnQuery = (r.refToQuery)[posOnRef + windowLength+6] - (r.refToQuery)[posOnRef - windowLength];
 		if ( spanOnQuery > 3.5*windowLength or spanOnQuery < 2*windowLength ) continue;
 
 		/*get the events that correspond to the read snippet */
@@ -834,22 +949,17 @@ std::string llAcrossRead( read &r,
 
 		//make the BrdU call
 		std::string sixOI = (r.referenceSeqMappedTo).substr(posOnRef,6);
-		size_t BrdUStart = sixOI.find('T') + windowLength - 5;
-		size_t BrdUEnd = windowLength;//sixOI.rfind('T') + windowLength;
+		size_t BrdUStart = sixOI.find('T') + windowLength;
+		size_t BrdUEnd = sixOI.rfind('T') + windowLength;
 		double logProbAnalogue = sequenceProbability( eventSnippet, readSnippet, windowLength, true, r.scalings, BrdUStart, BrdUEnd );
 		double logProbThymidine = sequenceProbability( eventSnippet, readSnippet, windowLength, false, r.scalings, 0, 0 );
 		double logLikelihoodRatio = logProbAnalogue - logProbThymidine;
+		//test hard HMM implementation against Penthus implementation
+		//double logProbThymidine_Penthus = sequenceProbability_Penthus( eventSnippet, readSnippet, windowLength, false, r.scalings, BrdUStart, BrdUEnd );
+		//std::cerr << ">>>>" << logProbThymidine_Penthus << std::endl;
 
 #if TEST_LL
-double runningKL = 0.0;
-for (unsigned int s = 0; s < readSnippet.length() - 6; s++){
-	std::string sixMer = readSnippet.substr(s,6);
-	if ( BrdUStart <= s and s <= BrdUEnd and sixMer.find('T') != std::string::npos and analogueModel.count(sixMer) > 0 ){
-		runningKL += KLdivergence( thymidineModel.at(sixMer).first, thymidineModel.at(sixMer).second, analogueModel.at(sixMer).first, analogueModel.at(sixMer).second );
-	}
-}
 std::cerr << "<-------------------" << std::endl;
-std::cerr << runningKL << std::endl;
 std::cerr << spanOnQuery << std::endl;
 std::cerr << readSnippet << std::endl;
 for (auto ob = eventSnippet.begin(); ob < eventSnippet.end(); ob++){
@@ -862,7 +972,7 @@ std::cerr << logLikelihoodRatio << std::endl;
 		if ( methylAware) {
 
 			std::string readSnippetMethylated = methylateSequence( readSnippet );
-			std::string conflictSubseq = readSnippetMethylated.substr(BrdUStart, BrdUEnd - BrdUStart + 6);
+			std::string conflictSubseq = readSnippetMethylated.substr(BrdUStart-5,BrdUEnd+11-BrdUStart);
 
 			if (conflictSubseq.find("M") == std::string::npos){
 
@@ -870,8 +980,8 @@ std::cerr << logLikelihoodRatio << std::endl;
 			}
 			else{
 
-				size_t MethylStart = conflictSubseq.find('M') + BrdUStart - 5;
-				size_t MethylEnd = conflictSubseq.rfind('M') + BrdUStart;
+				size_t MethylStart = conflictSubseq.find('M') + BrdUStart-5;
+				size_t MethylEnd = conflictSubseq.rfind('M') + BrdUStart-5;
 
 				double logProbMethylated = sequenceProbability_methyl( eventSnippet, readSnippet, readSnippetMethylated, windowLength, r.scalings, MethylStart, MethylEnd );
 				double logLikelihood_BrdUvsMethyl = logProbAnalogue - logProbMethylated;
@@ -1021,15 +1131,15 @@ int detect_main( int argc, char** argv ){
 					prog++;
 					pb.displayProgress( prog, failed, failedEvents );
 
-#if TEST_ALIGNMENT
-					std::cerr << ">" << r.readID << std::endl;
-					for ( auto p_align = r.eventAlignment.begin(); p_align < r.eventAlignment.end(); p_align++ ){
+					if (args.testAlignment){
+						std::cerr << ">" << r.readID << std::endl;
+						for ( auto p_align = r.eventAlignment.begin(); p_align < r.eventAlignment.end(); p_align++ ){
 
-						std::cerr<< p_align -> first << " " << p_align -> second << std::endl;
+							std::cerr<< p_align -> first << " " << p_align -> second << std::endl;
+						}
+						r.alignmentQCs.printQCs();
+						r.printScalings();
 					}
-					r.alignmentQCs.printQCs();
-					r.printScalings();
-#endif
 				}
 			}
 			for ( unsigned int i = 0; i < buffer.size(); i++ ) bam_destroy1(buffer[i]);

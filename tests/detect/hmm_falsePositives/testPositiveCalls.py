@@ -7,12 +7,15 @@ import sys
 #Usage: python testFalsePositives.py DNAscentDetect.stderr
 #where DNAscentDetect.stderr is from stderr after running DNAscent detect with #define TEST_LL 1
 
-llThreshold = 2.5
+llThreshold = 1.25
 
 querySpan2positives = {}
 querySpan2count = {}
 events2positives = {}
 events2count = {}
+
+KL_scatter = []
+ll_scatter = []
 
 f = open(sys.argv[1],'r')
 for ctr, line in enumerate(f):
@@ -27,15 +30,18 @@ for ctr, line in enumerate(f):
 		idx += 1
 
 		if idx == 1:
+			KL = float(line.rstrip())
+			KL_scatter.append(KL)
+		if idx == 2:
 			span = int(line.rstrip())				
-		elif idx == 2:
+		elif idx == 3:
 			continue
 
-		elif idx == 3:
-			events = len(line.rstrip().split())
 		elif idx == 4:
+			events = len(line.rstrip().split())
+		elif idx == 5:
 			ll = float(line.rstrip())
-
+			ll_scatter.append(ll)
 			#look at query
 			if span in querySpan2positives:
 				querySpan2count[span] = querySpan2count[span] + 1
@@ -107,4 +113,10 @@ plt.ylabel('Number of Call Positions')
 plt.savefig('falsePositives_eventNumbers_positions.pdf')
 plt.close()
 
+plt.figure()
+plt.scatter(KL_scatter,ll_scatter,alpha=0.3)
+plt.xlabel('Running KL Divergence')
+plt.ylabel('Log Likelihood Ratio')
+plt.savefig('falsePositives_runningKL.pdf')
+plt.close()
 

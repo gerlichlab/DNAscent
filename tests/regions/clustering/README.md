@@ -1,11 +1,11 @@
-# DNAscent Test - htslib Interface
+# DNAscent Test - Clustering
 
-This test checks DNAscent's interface with htslib in order to parse and iterate on bam files, make sure we're getting genome coordinates right, and make sure we're handling reverse complements correctly.
+This test checks the ability of DNAscent regions to find the T-to-B substitution rate in BrdU-positive regions.
 
 ## Files
 
-`reference.fasta` contains some simple sequences and `reads.fasta` shows different insertions, deletions, mismatches, and inversions of these sequences. `alignments.sorted.bam` is the result of aligning these reads to the reference with minimap2 and then sorting the bam file.
+`testClustering.py`
 
 ## Running
 
-`make` will compile the test program `test_htslib_interface`.  Running the test program will show the mapping details for each test read, as well as details of the reference-to-query map.
+Set #define TEST_CLUSTERING 1 in DNAscent regions and recompile.  Run DNAscent regions on any run that has undergone a BrdU pulse and redirect stderr to file.txt.  Run `python testClustering.py file.txt`.

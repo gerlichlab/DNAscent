@@ -1,6 +1,6 @@
 //----------------------------------------------------------
-// Copyright 2017 University of Oxford
-// Written by Michael A. Boemo (michael.boemo@path.ox.ac.uk)
+// Copyright 2019 University of Oxford
+// Written by Michael A. Boemo (mb915@cam.ac.uk)
 // This software is licensed under GPL-2.0.  You should have
 // received a copy of the license with this software.  If
 // not, please Email the author.
@@ -27,10 +27,11 @@ static const char *help=
 "  ./DNAscent forkSense -d /path/to/BrdUCalls.detect -o /path/to/output.forkSense\n"
 "Required arguments are:\n"
 "  -d,--detect               path to output file from DNAscent detect,\n"
-"  -o,--output               path to output file for forkSense,\n"
-"  -m,--model                path to dnn forkSense model.\n"
+"  -o,--output               path to output file for forkSense.\n"
 "Optional arguments are:\n"
 "  -t,--threads              number of threads (default: 1 thread),\n"
+"  -l,--likelihood           log-likelihood threshold for a positive analogue call (default: 1.25),\n"
+"  -c,--cooldown             minimum gap between positive analogue calls (default: 4),\n"
 "  --markOrigins             writes replication origin locations to a bed file (default: off),\n"
 "  --markStalls              writes fork stall locations to a bed file (default: off).\n"
 "Written by Michael Boemo, Department of Pathology, University of Cambridge.\n"
@@ -40,10 +41,12 @@ struct Arguments {
 
 	std::string detectFilename;
 	std::string outputFilename;
-	std::string modelFilename;
 	bool markOrigins = false;
 	bool markStalls = false;
 	unsigned int threads = 1;
+	int cooldown;
+	double likelihood;
+
 };
 
 Arguments parseSenseArguments( int argc, char** argv ){
@@ -62,6 +65,8 @@ Arguments parseSenseArguments( int argc, char** argv ){
 	}
 
  	Arguments args;
+	args.likelihood = 1.25;
+	args.cooldown = 4;
 
  	/*parse the command line arguments */
 	for ( int i = 1; i < argc; ){
@@ -76,11 +81,6 @@ Arguments parseSenseArguments( int argc, char** argv ){
 		else if ( flag == "-o" or flag == "--output" ){
  			std::string strArg( argv[ i + 1 ] );
 			args.outputFilename = strArg;
-			i+=2;
-		}
-		else if ( flag == "-m" or flag == "--model" ){
- 			std::string strArg( argv[ i + 1 ] );
-			args.modelFilename = strArg;
 			i+=2;
 		}
 		else if ( flag == "-t" or flag == "--threads" ){
@@ -99,8 +99,20 @@ Arguments parseSenseArguments( int argc, char** argv ){
 			args.markStalls = true;
 			i+=1;
 		}
+		else if ( flag == "-c" or flag == "--cooldown" ){
+ 			std::string strArg( argv[ i + 1 ] );
+			args.cooldown = std::stoi( strArg.c_str() );
+			i+=2;
+		}
+		else if ( flag == "-l" or flag == "--likelihood" ){
+ 			std::string strArg( argv[ i + 1 ] );
+			args.likelihood = std::stof( strArg.c_str() );
+			i+=2;
+		}
 		else throw InvalidOption( flag );
 	}
+	if (args.outputFilename == args.detectFilename) throw OverwriteFailure();
+
 	return args;
 }
 
@@ -533,13 +545,13 @@ std::string runCNN(DetectedRead &r, std::string modelPath){
 }
 
 
-void emptyBuffer(std::vector< DetectedRead > &buffer, Arguments args, std::ofstream &outFile, std::ofstream &originFile, std::ofstream &stallFile, int trimFactor){
+void emptyBuffer(std::vector< DetectedRead > &buffer, Arguments args, std::string modelPath, std::ofstream &outFile, std::ofstream &originFile, std::ofstream &stallFile, int trimFactor){
 
 	#pragma omp parallel for schedule(dynamic) shared(args,outFile) num_threads(args.threads)
 	for ( auto b = buffer.begin(); b < buffer.end(); b++) {
 
 		b -> trim(trimFactor);
-		std::string readOutput = runCNN(*b, args.modelFilename);
+		std::string readOutput = runCNN(*b, modelPath);
 
 		std::string stallOutput, originOutput;
 		if (args.markStalls){
@@ -577,7 +589,11 @@ int sense_main( int argc, char** argv ){
 
 	Arguments args = parseSenseArguments( argc, argv );
 
-	unsigned int maxBufferSize = 8*(args.threads);
+	unsigned int maxBufferSize = 20*(args.threads);
+
+	//get the model
+	std::string pathExe = getExePath();
+	std::string modelPath = pathExe + "/dnn_models/" + "fork_stall.pb";
 
 	//get a read count
 	int readCount = 0;
@@ -614,6 +630,8 @@ int sense_main( int argc, char** argv ){
 
 	std::vector< DetectedRead > readBuffer;
 	int progress = 0;
+	int callCooldown = 0;
+	int attemptCooldown = 0;
 	while( std::getline( inFile, line ) ){
 
 		if ( line.substr(0,1) == ">" ){
@@ -626,7 +644,7 @@ int sense_main( int argc, char** argv ){
 			}
 
 			//empty the buffer if it's full
-			if (readBuffer.size() >= maxBufferSize) emptyBuffer(readBuffer,args, outFile, originFile, stallFile, trimFactor);
+			if (readBuffer.size() >= maxBufferSize) emptyBuffer(readBuffer, args, modelPath, outFile, originFile, stallFile, trimFactor);
 
 			progress++;
 			pb.displayProgress( progress, 0, 0 );
@@ -648,6 +666,8 @@ int sense_main( int argc, char** argv ){
 			}
 			assert(d.mappingUpper > d.mappingLower);
 			readBuffer.push_back(d);
+			callCooldown = 0;
+			attemptCooldown = 0;
 		}
 		else{
 
@@ -672,13 +692,22 @@ int sense_main( int argc, char** argv ){
 				}
 				cIndex++;
 			}
-			readBuffer.back().positions.push_back(position);
-			readBuffer.back().brduCalls.push_back(B.get());
+			if ( B.get() > args.likelihood and position - callCooldown >= args.cooldown ){
+				readBuffer.back().positions.push_back(position);
+				readBuffer.back().brduCalls.push_back(B.get());
+				attemptCooldown = position;
+				callCooldown = position;
+			}
+			else if (position - attemptCooldown >= args.cooldown) {
+				readBuffer.back().positions.push_back(position);
+				readBuffer.back().brduCalls.push_back(B.get());
+				attemptCooldown = position;
+			}
 		}
 	}
 
 	//empty the buffer at the end
-
+	emptyBuffer(readBuffer, args, modelPath, outFile, originFile, stallFile, trimFactor);
 
 	inFile.close();
 	outFile.close();
