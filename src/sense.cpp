@@ -10,7 +10,6 @@
 #include <fstream>
 #include "regions.h"
 #include "data_IO.h"
-#include "error_handling.h"
 #include "train.h"
 #include "sense.h"
 #include <cmath>
@@ -291,13 +290,15 @@ struct TensorShape{
 
 TF_Tensor *read2tensor(DetectedRead &r, const TensorShape &shape){
 
-	size_t size = r.brduCalls.size();
+	size_t size = r.brduCalls.size() * 4;
 	//put a check in here for size
+
+	r.generateInput();
 
 	auto output_array = std::make_unique<float[]>(size);
 	{
 		for(size_t i = 0; i < size; i++){
-			output_array[i] = r.brduCalls[i];
+			output_array[i] = r.tensorInput[i];
 		}
 	}
 
@@ -494,7 +495,7 @@ std::string callOrigins(DetectedRead &r, bool stallsMarked){
 std::string runCNN(DetectedRead &r, std::string modelPath){
 ;
 	auto session = std::unique_ptr<MySession>(my_model_load(modelPath.c_str(), "conv1d_input", "time_distributed_2/Reshape_1"));
-	TensorShape input_shape={{1, r.brduCalls.size(), 1}, 3};
+	TensorShape input_shape={{1, r.brduCalls.size(), 4}, 3};
 	auto input_values = tf_obj_unique_ptr(read2tensor(r, input_shape));
 	if(!input_values){
 		std::cerr << "Tensor creation failure." << std::endl;
@@ -522,13 +523,13 @@ std::string runCNN(DetectedRead &r, std::string modelPath){
 	}
 
 	std::string str_output;
-	unsigned int outputFields = 4;	
+	unsigned int outputFields = 3;
 	{
 		str_output += r.readID + " " + r.chromosome + " " + std::to_string(r.mappingLower) + " " + std::to_string(r.mappingUpper) + " " + r.strand + "\n"; //header
 		size_t output_size = TF_TensorByteSize(&output) / sizeof(float);
 		assert(output_size == r.brduCalls.size() * outputFields);
 		auto output_array = (const float *)TF_TensorData(&output);
-		unsigned int pos = 1;
+		unsigned int pos = 0;
 		str_output += std::to_string(r.positions[0]);
 		for(size_t i = 0; i < output_size; i++){
 			str_output += "\t" + std::to_string(output_array[i]);
@@ -537,9 +538,9 @@ std::string runCNN(DetectedRead &r, std::string modelPath){
 				str_output += "\n";
 				pos++;
 				if (i != output_size-1) str_output += std::to_string(r.positions[pos]);
+
 			}
 		}
-		str_output += "\n";
 	}
 	return str_output;
 }
@@ -593,7 +594,7 @@ int sense_main( int argc, char** argv ){
 
 	//get the model
 	std::string pathExe = getExePath();
-	std::string modelPath = pathExe + "/dnn_models/" + "fork_stall.pb";
+	std::string modelPath = pathExe + "/dnn_models/" + "forks.pb";
 
 	//get a read count
 	int readCount = 0;
@@ -692,13 +693,16 @@ int sense_main( int argc, char** argv ){
 				}
 				cIndex++;
 			}
+
 			if ( B.get() > args.likelihood and position - callCooldown >= args.cooldown ){
+
 				readBuffer.back().positions.push_back(position);
 				readBuffer.back().brduCalls.push_back(B.get());
 				attemptCooldown = position;
 				callCooldown = position;
 			}
-			else if (position - attemptCooldown >= args.cooldown) {
+			else if ( B.get() < args.likelihood and position - attemptCooldown >= args.cooldown) {
+
 				readBuffer.back().positions.push_back(position);
 				readBuffer.back().brduCalls.push_back(B.get());
 				attemptCooldown = position;
@@ -718,3 +722,4 @@ int sense_main( int argc, char** argv ){
 
 	return 0;
 }
+

@@ -1,7 +1,7 @@
 import sys
 import os
 
-includeStall = True
+includeStall = False
 
 ####################################################################################################################################
 #PARSE AND RECORD REGIONS FILE
