@@ -377,7 +377,7 @@ std::string callOrigins(DetectedRead &r, bool stallsMarked){
 	//rightward-moving forks
 	for (size_t i = 1; i < r.probabilities.size(); i++){
 
-		if (r.probabilities[i][2] > threshold and not inFork){ //initilise the stall site
+		if (r.probabilities[i][2] > threshold and not inFork){ //initialise the site
 
 			forkStart = r.positions[i];
 			inFork = true;
@@ -386,7 +386,7 @@ std::string callOrigins(DetectedRead &r, bool stallsMarked){
 
 			potentialEnd = r.positions[i];
 		}
-		else if (inFork and (r.probabilities[i][0] > threshold or r.probabilities[i][1] > threshold or r.probabilities[i][3] > threshold)){//close if we've confidently moved to something else
+		else if (inFork and (r.probabilities[i][0] > threshold or r.probabilities[i][1] > threshold)){//close if we've confidently moved to something else
 
 			assert(forkStart != -1 and potentialEnd != -1);
 			rightForks.push_back(std::make_pair(forkStart,potentialEnd));
@@ -417,7 +417,7 @@ std::string callOrigins(DetectedRead &r, bool stallsMarked){
 	//leftward-moving forks
 	for (size_t i = 1; i < revProbabilities.size(); i++){
 
-		if (revProbabilities[i][0] > threshold and not inFork){ //initilise the stall site
+		if (revProbabilities[i][0] > threshold and not inFork){ //initialise the site
 
 			forkStart = revPositions[i];
 			inFork = true;
@@ -426,7 +426,7 @@ std::string callOrigins(DetectedRead &r, bool stallsMarked){
 
 			potentialEnd = revPositions[i];
 		}
-		else if (inFork and (revProbabilities[i][1] > threshold or revProbabilities[i][2] > threshold or revProbabilities[i][3] > threshold)){//close if we've confidently moved to something else
+		else if (inFork and (revProbabilities[i][1] > threshold or revProbabilities[i][2] > threshold)){//close if we've confidently moved to something else
 
 			assert(forkStart != -1 and potentialEnd != -1);
 			leftForks.push_back(std::make_pair(potentialEnd,forkStart));
@@ -493,7 +493,7 @@ std::string callOrigins(DetectedRead &r, bool stallsMarked){
 
 
 std::string runCNN(DetectedRead &r, std::string modelPath){
-;
+
 	auto session = std::unique_ptr<MySession>(my_model_load(modelPath.c_str(), "conv1d_input", "time_distributed_2/Reshape_1"));
 	TensorShape input_shape={{1, r.brduCalls.size(), 4}, 3};
 	auto input_values = tf_obj_unique_ptr(read2tensor(r, input_shape));
@@ -534,7 +534,7 @@ std::string runCNN(DetectedRead &r, std::string modelPath){
 		for(size_t i = 0; i < output_size; i++){
 			str_output += "\t" + std::to_string(output_array[i]);
 			if((i+1)%outputFields==0){
-				r.probabilities.push_back({output_array[i-3],output_array[i-2],output_array[i-1],output_array[i]});
+				r.probabilities.push_back({output_array[i-2],output_array[i-1],output_array[i]});
 				str_output += "\n";
 				pos++;
 				if (i != output_size-1) str_output += std::to_string(r.positions[pos]);
