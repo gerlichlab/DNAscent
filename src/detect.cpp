@@ -9,6 +9,7 @@
 //#define TEST_HMM 1
 //#define TEST_LL 1
 //#define TEST_ALIGNMENT 1
+//#define TEST_METHYL 1
 
 #include <fstream>
 #include "detect.h"
@@ -555,7 +556,7 @@ void parseCigar(bam1_t *record, std::map< unsigned int, unsigned int > &ref2quer
 					queryPosition++;
 				}
 			}
-			//N.B. hard clipping advances neither refernce nor query, so ignore it
+			//N.B. hard clipping advances neither reference nor query, so ignore it
 		}
 	}
 	else {
@@ -873,6 +874,15 @@ std::cerr << logLikelihoodRatio << std::endl;
 
 				size_t MethylStart = conflictSubseq.find('M') + BrdUStart - 5;
 				size_t MethylEnd = conflictSubseq.rfind('M') + BrdUStart;
+
+#if TEST_METHYL
+std::cerr << "<-------------------" << std::endl;
+std::cerr << "Read snippet: " << readSnippet << std::endl;
+std::cerr << "Methylated:   " << readSnippetMethylated << std::endl;
+std::cerr << "Conflict subseq: " << conflictSubseq << std::endl;
+std::cerr << "BrdU start/end: " << BrdUStart << " " << BrdUEnd << std::endl;
+std::cerr << "Methyl start/end: " << MethylStart << " " << MethylEnd  << std::endl;
+#endif
 
 				double logProbMethylated = sequenceProbability_methyl( eventSnippet, readSnippet, readSnippetMethylated, windowLength, r.scalings, MethylStart, MethylEnd );
 				double logLikelihood_BrdUvsMethyl = logProbAnalogue - logProbMethylated;

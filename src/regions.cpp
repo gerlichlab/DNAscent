@@ -398,11 +398,12 @@ int regions_main( int argc, char** argv ){
 						calls++;
 						attempts++;
 					}
-					else if ( M.get() < args.likelihood and B.get() < args.likelihood and position - attemptCooldown >= args.cooldown ){
+					else if ( M.get() < 0 and B.get() < args.likelihood and position - attemptCooldown >= args.cooldown ){
 					//not strong enough to count as either BrdU or methylation counts as an attempt
 						attempts++;
 						attemptCooldown = position;
 					}
+					//don't count methyl calls as either positive calls or attempts
 			}
 			else{
 					//testing
@@ -500,11 +501,12 @@ int regions_main( int argc, char** argv ){
 						calls++;
 						attempts++;
 					}
-					else if ( M.get() < args.likelihood and B.get() < args.likelihood and position - attemptCooldown >= args.cooldown ){
+					else if ( M.get() < 0 and B.get() < args.likelihood and position - attemptCooldown >= args.cooldown ){
 					//not strong enough to count as either BrdU or methylation counts as an attempt
 						attempts++;
 						attemptCooldown = position;
 					}
+					//don't count methyl calls as either positive calls or attempts
 				}
 				else{
 
@@ -668,11 +670,12 @@ int regions_main( int argc, char** argv ){
 					calls++;
 					attempts++;
 				}
-				else if ( M.get() < args.likelihood and B.get() < args.likelihood and position - attemptCooldown >= args.cooldown ){
+				else if ( M.get() < 0 and B.get() < args.likelihood and position - attemptCooldown >= args.cooldown ){
 				//not strong enough to count as either BrdU or methylation counts as an attempt
 					attempts++;
 					attemptCooldown = position;
 				}
+				//don't count methyl calls as either positive calls or attempts
 			}
 			else{
 
