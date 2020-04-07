@@ -49,7 +49,7 @@ struct read{
 
 	std::string basecall, referenceSeqMappedTo, referenceMappedTo, filename, readID;
 	PoreParameters scalings;
-	std::vector< double > raw, normalisedEvents;
+	std::vector< double > raw, normalisedEvents, eventLengths;
 	std::map< unsigned int, unsigned int > refToQuery;
 	std::vector< std::pair< unsigned int, unsigned int > > eventAlignment;
 	std::map<unsigned int, double> posToScore;

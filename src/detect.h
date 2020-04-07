@@ -30,5 +30,7 @@ double sequenceProbability( std::vector <double> &,
 				bool,
 				PoreParameters,
 				int );
+void getRefEnd(bam1_t *, int &, int & );
+
 
 #endif

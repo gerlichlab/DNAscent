@@ -19,6 +19,7 @@
 #include "train.h"
 #include "common.h"
 #include "poreModels.h"
+#include "data.h"
 
 /*prototype */
 int show_options( int, char** );
@@ -26,6 +27,7 @@ int show_options( int, char** );
 /*map from name of the DNAscent function passed as argument on the command line to the function that it should call */
 static std::map< std::string, std::function< int( int, char** ) > > executables = {
 	{"detect", 	detect_main},
+	{"trainingData", 	data_main},
 	{"psl", 	psl_main},
 	{"regions", 	regions_main},
 	{"index", 	index_main},

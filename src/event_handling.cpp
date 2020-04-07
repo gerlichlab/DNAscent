@@ -703,17 +703,20 @@ void normaliseEvents( read &r ){
 	assert(et.n > 0);
 
 	/*we only care about the event mean, so pull these out so they're easier to work with */
-	std::vector< double > events_mu;
+	std::vector< double > events_mu, events_length;
 	events_mu.reserve( et.n );
+	events_length.reserve( et.n );
+
 
 	for ( unsigned int i = 0; i < et.n; i++ ){
 
-		if (et.event[i].mean > 0) events_mu.push_back( et.event[i].mean );
-#if EVENT_LENGTHS
-		if (et.event[i].mean > 0) std::cerr << et.event[i].length << std::endl;
-#endif
+		if (et.event[i].mean > 0) {
+			events_mu.push_back( et.event[i].mean );
+			events_length.push_back(et.event[i].length);
+		}
 	}
 	r.normalisedEvents = events_mu;
+	r.eventLengths = events_length;
 	free(et.event);
 
 	/*rough calculation of shift and scale so that we can align events */

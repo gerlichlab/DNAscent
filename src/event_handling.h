@@ -13,7 +13,7 @@
 
 struct eventDataForRead {
 
-	std::vector< double > normalisedEvents;
+	std::vector< double > normalisedEvents, eventLengths;
 	std::vector< std::pair< unsigned int, unsigned int > > eventAlignment;
 	std::map<unsigned int, double> posToScore;
 	bool failed = false;
