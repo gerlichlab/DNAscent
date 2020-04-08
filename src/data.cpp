@@ -168,81 +168,93 @@ std::map<int, std::vector<std::pair<double,double>>> referenceToEvents( read &r)
 }
 
 
-std::string getAlignedEvents( read &r,
-                              unsigned int windowLength){
+std::string getAlignedEvents(read &r, unsigned int windowLength){
 
 	std::string out;
 	//get the positions on the reference subsequence where we could attempt to make a call
-	std::vector< unsigned int > POIs = getPOIs( r.referenceSeqMappedTo, windowLength );
 	std::string strand;
-	if ( r.isReverse ){
-
-		strand = "rev";
-		std::reverse( POIs.begin(), POIs.end() );
-	}
-	else{
-
-		strand = "fwd";
-	}
+	if ( r.isReverse ) strand = "rev";
+	else strand = "fwd";
 
 	std::map<int, std::vector<std::pair<double,double>>> composedMaps = referenceToEvents( r);
 
 	out += ">" + r.readID + " " + r.referenceMappedTo + " " + std::to_string(r.refStart) + " " + std::to_string(r.refEnd) + " " + strand + "\n";
 
-	for ( unsigned int i = 0; i < POIs.size(); i++ ){
+	for (unsigned int posOnRef = 2*windowLength; posOnRef < r.referenceSeqMappedTo.size() - 2*windowLength; posOnRef++){
 
-		int posOnRef = POIs[i];
-		int posOnQuery = (r.refToQuery).at(posOnRef);
+		if (composedMaps.count(posOnRef) > 0){
 
-		//sequence needs to be 6 bases longer than the span of events we catch
-		//so sequence goes from posOnRef - windowLength to posOnRef + windowLength + 6
-		//event span goes from posOnRef - windowLength to posOnRef + windowLength
+			std::string callLL = "";
+			//decide if we're going to make a call here
+			if ((r.referenceSeqMappedTo).substr(posOnRef,1) == "T"){
+				std::string readSnippet = (r.referenceSeqMappedTo).substr(posOnRef - windowLength, 2*windowLength+6);
 
-		std::string readSnippet = (r.referenceSeqMappedTo).substr(posOnRef - windowLength, 2*windowLength+6);
+				//make sure the read snippet is fully defined as A/T/G/C in reference
+				unsigned int As = 0, Ts = 0, Cs = 0, Gs = 0;
+				for ( std::string::iterator i = readSnippet.begin(); i < readSnippet.end(); i++ ){
 
-		//make sure the read snippet is fully defined as A/T/G/C in reference
-		unsigned int As = 0, Ts = 0, Cs = 0, Gs = 0;
-		for ( std::string::iterator i = readSnippet.begin(); i < readSnippet.end(); i++ ){
-
-			switch( *i ){
-				case 'A' :
-					As++;
-					break;
-				case 'T' :
-					Ts++;
-					break;
-				case 'G' :
-					Gs++;
-					break;
-				case 'C' :
-					Cs++;
-					break;
-			}
-		}
-		if ( readSnippet.length() != (As + Ts + Gs + Cs) ) continue;
-
-		std::vector< double > eventSnippet;
-
-		//catch spans with lots of insertions or deletions (this QC was set using results of tests/detect/hmm_falsePositives)
-		unsigned int spanOnQuery = (r.refToQuery)[posOnRef + windowLength+6] - (r.refToQuery)[posOnRef - windowLength];
-		if ( spanOnQuery > 3.5*windowLength or spanOnQuery < 2*windowLength ) continue;
-
-		for (unsigned int j = posOnRef - windowLength; j < posOnRef + windowLength; j++){
-
-			if (composedMaps.count(j) > 0){
-				for (auto e = composedMaps[j].begin(); e < composedMaps[j].end(); e++){
-
-					double scaledEvent = (e -> first - r.scalings.shift) / r.scalings.scale;
-					std::string sixMer = r.referenceSeqMappedTo.substr(j,6);
-
-					out += sixMer + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(e -> second) + "\t" + std::to_string(thymidineModel.at(sixMer).first) + "\n";  //reference 6mer, event, event length
+					switch( *i ){
+						case 'A' :
+							As++;
+							break;
+						case 'T' :
+							Ts++;
+							break;
+						case 'G' :
+							Gs++;
+							break;
+						case 'C' :
+							Cs++;
+							break;
+					}
 				}
+				if ( readSnippet.length() != (As + Ts + Gs + Cs) ) continue;
+
+				std::vector< double > eventSnippet;
+				unsigned int readHead = 0;
+				bool first = true;
+				for ( unsigned int j = readHead; j < (r.eventAlignment).size(); j++ ){
+
+					/*if an event has been aligned to a position in the window, add it */
+					if ( (r.eventAlignment)[j].second >= (r.refToQuery)[posOnRef - windowLength] and (r.eventAlignment)[j].second < (r.refToQuery)[posOnRef + windowLength] ){
+
+						if (first){
+							readHead = j;
+							first = false;
+							//std::cout << "READHEAD:" << j << " " << readHead << std::endl;
+						}
+
+						double ev = (r.normalisedEvents)[(r.eventAlignment)[j].first];
+						if (ev > 0 and ev < 250){
+							eventSnippet.push_back( ev );
+						}
+					}
+
+					/*stop once we get to the end of the window */
+					if ( (r.eventAlignment)[j].second >= (r.refToQuery)[posOnRef + windowLength] ) break;
+				}
+
+				std::string sixOI = (r.referenceSeqMappedTo).substr(posOnRef,6);
+				size_t BrdUStart = sixOI.find('T') + windowLength - 5;
+				size_t BrdUEnd = windowLength;//sixOI.rfind('T') + windowLength;
+				double logProbAnalogue = sequenceProbability( eventSnippet, readSnippet, windowLength, true, r.scalings, BrdUStart, BrdUEnd );
+				double logProbThymidine = sequenceProbability( eventSnippet, readSnippet, windowLength, false, r.scalings, 0, 0 );
+				double logLikelihoodRatio = logProbAnalogue - logProbThymidine;
+				callLL = std::to_string(logLikelihoodRatio);
 			}
-			else{
-				out += "NNNNNN\t0\t0\n";  //reference 6mer, event, event length
+
+			for (auto e = composedMaps[posOnRef].begin(); e < composedMaps[posOnRef].end(); e++){
+
+				double scaledEvent = (e -> first - r.scalings.shift) / r.scalings.scale;
+				std::string sixMer = r.referenceSeqMappedTo.substr(posOnRef,6);
+
+				out += sixMer + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(e -> second) + "\t" + std::to_string(thymidineModel.at(sixMer).first) + "\t" + callLL + "\n";  //reference 6mer, event, event length
 			}
 		}
-		out += "---------------\n";
+		else{
+
+			out += "NNNNNN\t0\t0\n";  //reference 6mer, event, event length
+		}
 	}
 	return out;
 }
