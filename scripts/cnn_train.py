@@ -6,7 +6,7 @@ import tensorflow as tf
 from tensorflow.python.keras.models import Sequential, model_from_json
 from tensorflow.python.keras.layers import Dense, Dropout
 from tensorflow.python.keras.layers import Embedding, Flatten, MaxPooling1D,AveragePooling1D
-from tensorflow.python.keras.layers import Conv1D, MaxPooling1D, Activation
+from tensorflow.python.keras.layers import Conv1D, MaxPooling1D, Activation, LSTM
 from tensorflow.python.keras.layers import TimeDistributed, Bidirectional, Reshape, Activation, BatchNormalization
 from tensorflow.python.keras.callbacks import EarlyStopping
 from tensorflow.python.keras import Input
@@ -27,21 +27,36 @@ from scipy.stats import halfnorm
 
 folderPath = 'data'
 validationSplit = 0.2
-inputFiles = [(0., sys.argv[1])]
+inputFiles = [(0., 'trainingData.barcode08.dnascent'),(0.26, 'trainingData.barcode10.dnascent'),(0.5, 'trainingData.barcode11.dnascent'),(0.8, 'trainingData.barcode12.dnascent')]
+#inputFiles = [(0., 'trainingData.barcode08.dnascent'),(0.8, 'trainingData.barcode12.dnascent')]
+maxLen = 1000
 
+
+#static params
+truePositive = 0.7
+trueNegative = 0.95
+falsePositive = 1. - trueNegative
+llThreshold = 1.25
+
+#for data scaling
+maxEvent = 0.
+minEvent = 1000.
+minEventLength = 1000.
+maxEventLength = 0.
 
 #-------------------------------------------------
 #
-class trainingSet:
-	def __init__(self, sixMers, eventMags, eventLengths, readID, index, analogueConc, analogueLL):
-		self.sixMers = sixMers
-		self.eventMags = eventMags
-		self.eventLengths = eventLengths
+class trainingRead:
+	def __init__(self, sixMers, eventMags, eventLengths, llScores, modelMeans, readID, analogueConc):
+		self.sixMers = sixMers[0:maxLen]
+		self.eventMags = eventMags[0:maxLen]
+		self.eventLengths = eventLengths[0:maxLen]
 		self.length = len(sixMers)
+		self.llScores = llScores[0:maxLen]
+		self.modelMeans = modelMeans
 		self.readID = readID
-		self.index = index
 		self.analogueConc = analogueConc
-		self.analogueLL = analogueLL
+
 
 
 #-------------------------------------------------
@@ -58,25 +73,38 @@ for i,s in enumerate(all6mers):
 
 #-------------------------------------------------
 #
-def trainingSetToTensor(t, maxLen):
+def trainingReadToTensor(t):
 
+	global maxEvent, minEvent, minEventLength, maxEventLength
 	oneSet = []
 	for i, s in enumerate(t.sixMers):
 		oneHot = [0]*4**6
 		index = sixMerToInt[s]
 		oneHot[index] = 1
-		oneHot.append(t.eventMags[i])
-		oneHot.append(t.eventLengths[i])
+		oneHot.append((t.eventMags[i] - minEvent)/(maxEvent - minEvent) )
+		oneHot.append((t.eventLengths[i] - minEventLength)/(maxEventLength - minEventLength))
+		oneHot.append((t.modelMeans[i] - minEvent)/(maxEvent - minEvent))# - (t.eventMags[i] - minEvent)/(maxEvent - minEvent) )
 		oneSet.append(oneHot)
 
-	#padding
-	if len(t.sixMers) < maxLen:
-		for k in range(0, maxLen - len(t.sixMers)):
-			oneHot = [0]*4**6
-			oneHot += [0, 0]
-			oneSet.append(oneHot)
-
 	return np.array(oneSet)
+
+#-------------------------------------------------
+#
+def trainingReadToLabel(t):
+	label =[]
+	for s in t.llScores:
+		if s == '-':
+			label.append([1., 0.])
+		else:
+			score = float(s)
+			if score > llThreshold:
+				l = (truePositive*t.analogueConc)/(truePositive*t.analogueConc + falsePositive*(1-t.analogueConc))
+				label.append([1.-l,l])
+			else:
+				l = ((1-truePositive)*t.analogueConc)/((1-truePositive)*t.analogueConc + (1-falsePositive)*(1-t.analogueConc))
+				label.append([1.-l,l])
+
+	return np.array(label)
 
 
 #-------------------------------------------------
@@ -121,46 +149,45 @@ class DataGenerator(Sequence):
 		#'Generates data containing batch_size samples' # X : (n_samples, *dim, n_channels)
 		# Initialization
 		X = np.empty((self.batch_size, *self.dim))
-		y = np.empty((self.batch_size), dtype=float)
+		y = np.empty((self.batch_size, maxLen, 2), dtype=float)
 		#print(list_IDs_temp)
 		# Generate data
 		for i, ID in enumerate(list_IDs_temp):
 			# Store sample
 			splitID = ID.split(';')
 
-			print('Loading training set: ',splitID)
-
 			#pull data for this 6mer from the appropriate pickled read
-			trainingSets = pickle.load(open(folderPath + '/' + splitID[0] + '.p', "rb"))
-			thisTrainingSet = trainingSets[int(splitID[1])]
-			tensor = trainingSetToTensor(thisTrainingSet, maxLen)
+			trainingRead = pickle.load(open(folderPath + '/' + ID + '.p', "rb"))
+			tensor = trainingReadToTensor(trainingRead)
 			
 			X[i,] = tensor
 
 			# Store class
-			y[i] = 0.#self.labels[ID]
-			#print(i)
-
+			y[i] = trainingReadToLabel(trainingRead)
+			
+		y = y.reshape(y.shape[0],y.shape[1],2)
 		return X, y
 
 
 #-------------------------------------------------
 #reshape into tensors
-def saveRead(trainingSets, readID):
+def saveRead(trainingRead, readID):
 
 	f = open(folderPath + '/' + readID + '.p', 'wb')
-	pickle.dump(trainingSets, f)
+	pickle.dump(trainingRead, f)
 	f.close()
 
 
 #-------------------------------------------------
 #pull from training data file
-def importFromFile(fname, analogueConc, maxLen, readIDs):
+def importFromFile(fname, analogueConc, readIDs):
 	print('Parsing training data file...')
-	trainingSets = {}
+	global maxEvent, minEvent, minEventLength, maxEventLength
 	sixMers = []
 	eventMags = []
 	eventLengths = []
+	llScores = []
+	modelMeans = []
 	f = open(fname,'r')
 	ctr = 0
 	first = True
@@ -168,45 +195,42 @@ def importFromFile(fname, analogueConc, maxLen, readIDs):
 	for line in f:
 		if line[0] == '>':
 
-			if not first:
-				saveRead(trainingSets, readID)
+			if not first and len(sixMers) > maxLen:
+				readIDs.append(readID)
+				tr = trainingRead(sixMers, eventMags, eventLengths, llScores, modelMeans, readID, analogueConc)
+				saveRead(tr, readID)
 			first = False
 
 			splitLine = line.rstrip().split()
 			readID = splitLine[0][1:]
-			ctr = 0
-			trainingSets = {}
-			readsLoaded += 1
-			print('Reads loaded: ',readsLoaded)
-
-		elif line[0] == '-':
-			if len(sixMers) > 0:
-				ctr += 1
-				readIDs.append(readID+';'+str(ctr))
-
-				#PLACEHOLDER
-				analogueLL = 0
-
-
-				trainingSets[ctr] = trainingSet(sixMers, eventMags, eventLengths, readID, str(ctr), analogueConc, analogueLL)
-				if len(sixMers) > maxLen:
-					maxLen = len(sixMers)
 
 			sixMers = []
 			eventMags = []
 			eventLengths = []
+			llScores = []
+			modelMeans = []
 
-		elif line[0] == '#':
-			analogueLL = float(line.rstrip()[1:])
-
+			readsLoaded += 1
+			print('Reads loaded: ',readsLoaded)
 		else:
-			splitLine = line.rstrip().split()
+			splitLine = line.rstrip().split('\t')
 			sixMers.append(splitLine[0])
 			eventMags.append(float(splitLine[1]))
 			eventLengths.append(float(splitLine[2]))
+			modelMeans.append(float(splitLine[3]))
+			if len(splitLine) == 5:
+				llScores.append(splitLine[4])
+			else:
+				llScores.append('-')
+
+			#sort out min/max
+			minEvent = min([minEvent, float(splitLine[1]), float(splitLine[3])])
+			maxEvent = max([maxEvent, float(splitLine[1]), float(splitLine[3])])
+			minEventLength = min([minEventLength, float(splitLine[2])])
+			maxEventLength = max([maxEventLength, float(splitLine[2])])
+
 	f.close()
-	saveRead(trainingSets, readID)
-	return maxLen, readIDs
+	return readIDs
 	print('Done.')
 
 
@@ -215,9 +239,14 @@ def importFromFile(fname, analogueConc, maxLen, readIDs):
 os.system('mkdir '+folderPath)
 
 readIDs = []
-maxLen = 0
 for tup in inputFiles:
-	maxLen, readIDs = importFromFile(tup[1], tup[0], maxLen, readIDs)
+	readIDs = importFromFile(tup[1], tup[0], readIDs)
+
+print('Scalings:')
+print('MinEvent: ',minEvent)
+print('MaxEvent: ',maxEvent)
+print('MinEventLength: ',minEventLength)
+print('MaxEventLength: ',maxEventLength)
 
 random.shuffle(readIDs)
 divideIndex = int(validationSplit*len(readIDs))
@@ -226,7 +255,7 @@ partition = {'training':readIDs[divideIndex+1:], 'validation':readIDs[0:divideIn
 labels = {}
 
 # Parameters
-params = {'dim': (maxLen,4**6+2),
+params = {'dim': (maxLen,4**6+3),
           'batch_size': 16,
           'n_classes': 1,
           'n_channels': 1,
@@ -240,23 +269,34 @@ validation_generator = DataGenerator(partition['validation'], labels, **params)
 #-------------------------------------------------
 #CNN architecture
 model = Sequential()
-model.add(Conv1D(16,(4),padding='same',activation='relu',input_shape=(maxLen,4**6+2)))
-model.add(MaxPooling1D(pool_size=4,strides=2,padding='same'))
-model.add(Conv1D(16,(4),padding='same',activation='relu'))
-model.add(MaxPooling1D(pool_size=4,strides=2,padding='same'))
-model.add(Flatten())
+
+'''
+model.add(Bidirectional(LSTM(16,return_sequences=True),input_shape=(None,4**6+3)))
+model.add(TimeDistributed(Dense(100,activation='tanh')))
 model.add(Dropout(0.5))
-model.add(Dense(100,activation='relu'))
+model.add(TimeDistributed(Dense(2,activation='softmax')))
+'''
+model.add(Conv1D(16,(16),padding='same',activation='tanh',input_shape=(maxLen,4**6+3)))
+#model.add(BatchNormalization())
+model.add(Conv1D(16,(16),padding='same',activation='tanh'))
+#model.add(BatchNormalization())
+model.add(Conv1D(16,(16),padding='same',activation='tanh'))
+#model.add(BatchNormalization())
+model.add(Conv1D(16,(16),padding='same',activation='tanh'))
+#model.add(BatchNormalization())
 model.add(Dropout(0.5))
-model.add(Dense(100,activation='relu'))
+model.add(TimeDistributed(Dense(100,activation='tanh')))
 model.add(Dropout(0.5))
-model.add(Dense(1,activation='softmax'))
-op = Adam(lr=0.00001, beta_1=0.9, beta_2=0.999, epsilon=None, decay=0.0, amsgrad=False)
-model.compile(optimizer=op, metrics=['accuracy'], loss='binary_crossentropy')
+model.add(TimeDistributed(Dense(100,activation='tanh')))
+model.add(Dropout(0.5))
+model.add(TimeDistributed(Dense(2,activation='softmax')))
+
+
+model.compile(optimizer='adam', loss='categorical_crossentropy')
 print(model.summary())
 
 es = EarlyStopping(monitor='val_loss', min_delta=0, patience=10, verbose=1, mode='auto', baseline=None, restore_best_weights=True) 
-model.fit_generator(generator=training_generator, validation_data=validation_generator,verbose=2)#,epochs=1000,callbacks=[es], verbose=2)
+model.fit_generator(generator=training_generator, validation_data=validation_generator,epochs=100,verbose=1,callbacks=[es])
 
 # serialize model to JSON
 model_json = model.to_json()
