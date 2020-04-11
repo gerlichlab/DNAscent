@@ -8,7 +8,7 @@ from tensorflow.python.keras.layers import Dense, Dropout
 from tensorflow.python.keras.layers import Embedding, Flatten, MaxPooling1D,AveragePooling1D
 from tensorflow.python.keras.layers import Conv1D, MaxPooling1D, Activation, LSTM
 from tensorflow.python.keras.layers import TimeDistributed, Bidirectional, Reshape, Activation, BatchNormalization
-from tensorflow.python.keras.callbacks import EarlyStopping
+from tensorflow.python.keras.callbacks import EarlyStopping, ModelCheckpoint
 from tensorflow.python.keras import Input
 from tensorflow.python.keras.regularizers import l2
 from tensorflow.python.keras.optimizers import Adam
@@ -26,9 +26,9 @@ from scipy.stats import halfnorm
 
 
 folderPath = 'data'
+checkpointPath = ''
 validationSplit = 0.2
 inputFiles = [(0., 'trainingData.barcode08.dnascent'),(0.26, 'trainingData.barcode10.dnascent'),(0.5, 'trainingData.barcode11.dnascent'),(0.8, 'trainingData.barcode12.dnascent')]
-#inputFiles = [(0., 'trainingData.barcode08.dnascent'),(0.8, 'trainingData.barcode12.dnascent')]
 maxLen = 1000
 
 
@@ -295,8 +295,9 @@ model.add(TimeDistributed(Dense(2,activation='softmax')))
 model.compile(optimizer='adam', loss='categorical_crossentropy')
 print(model.summary())
 
-es = EarlyStopping(monitor='val_loss', min_delta=0, patience=10, verbose=1, mode='auto', baseline=None, restore_best_weights=True) 
-model.fit_generator(generator=training_generator, validation_data=validation_generator,epochs=100,verbose=1,callbacks=[es])
+es = EarlyStopping(monitor='val_loss', min_delta=0, patience=10, verbose=1, mode='auto', baseline=None, restore_best_weights=True)
+chk = ModelCheckpoint(checkpointPath + '/weights.{epoch:02d}-{val_loss:.2f}.h5', monitor='val_loss', verbose=0, save_best_only=False, save_weights_only=False, mode='auto', period=1)
+model.fit_generator(generator=training_generator, validation_data=validation_generator,epochs=100,verbose=1,callbacks=[es,chk])
 
 # serialize model to JSON
 model_json = model.to_json()
