@@ -35,7 +35,8 @@ static const char *help=
 "Optional arguments are:\n"
 "  -t,--threads              number of threads (default is 1 thread),\n"
 "  --methyl-aware            account for CpG, Dcm, and Dam methylation in BrdU calling,\n"
-"  -q,--quality              minimum mapping quality (default is 20).\n"
+"  -m,--maxReads             maximum number of reads to consider,\n"
+"  -q,--quality              minimum mapping quality (default is 20),\n"
 "  -l,--length               minimum read length in bp (default is 100).\n"
 "Written by Michael Boemo, Department of Pathology, University of Cambridge.\n"
 "Please submit bug reports to GitHub Issues (https://github.com/MBoemo/DNAscent/issues).";
@@ -45,9 +46,9 @@ struct Arguments {
 	std::string referenceFilename;
 	std::string outputFilename;
 	std::string indexFilename;
-	bool methylAware;
+	bool methylAware, capReads;
 	double divergence;
-	int minQ;
+	int minQ, maxReads;
 	int minL;
 	unsigned int threads;
 };
@@ -79,6 +80,8 @@ Arguments parseDataArguments( int argc, char** argv ){
 	args.minL = 100;
 	args.methylAware = false;
 	args.divergence = 0;
+	args.capReads = false;
+	args.maxReads = 0;
 
 	/*parse the command line arguments */
 
@@ -126,6 +129,13 @@ Arguments parseDataArguments( int argc, char** argv ){
 
 			std::string strArg( argv[ i + 1 ] );
 			args.outputFilename = strArg;
+			i+=2;
+		}
+		else if ( flag == "-m" or flag == "--maxReads" ){
+
+			std::string strArg( argv[ i + 1 ] );
+			args.capReads = true;
+			args.maxReads = std::stoi( strArg.c_str() );
 			i+=2;
 		}
 		else if ( flag == "--divergence" ){
@@ -248,7 +258,7 @@ std::string getAlignedEvents(read &r, unsigned int windowLength){
 				double scaledEvent = (e -> first - r.scalings.shift) / r.scalings.scale;
 				std::string sixMer = r.referenceSeqMappedTo.substr(posOnRef,6);
 
-				out += sixMer + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(e -> second) + "\t" + std::to_string(thymidineModel.at(sixMer).first) + "\t" + callLL + "\n";  //reference 6mer, event, event length
+				out += std::to_string(posOnRef) + "\t" + sixMer + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(e -> second) + "\t" + std::to_string(thymidineModel.at(sixMer).first) + "\t" + std::to_string(thymidineModel.at(sixMer).second) + "\t" + callLL + "\n";  //reference 6mer, event, event length
 			}
 		}
 		else{
@@ -400,7 +410,11 @@ int data_main( int argc, char** argv ){
 			for ( unsigned int i = 0; i < buffer.size(); i++ ) bam_destroy1(buffer[i]);
 			buffer.clear();
 		}
-		pb.displayProgress( prog, failed, failedEvents );	
+		pb.displayProgress( prog, failed, failedEvents );
+		if (args.capReads and prog > args.maxReads){
+			sam_itr_destroy(itr);
+			return 0;
+		}
 	} while (result > 0);
 	sam_itr_destroy(itr);
 	std::cout << std::endl;
