@@ -262,7 +262,7 @@ std::pair< double, std::vector< std::string > > eventViterbi( std::vector <doubl
 
 
 std::string eventalign( read &r,
-                 unsigned int windowLength ){
+            unsigned int windowLength ){
 
 	std::string out;
 	//get the positions on the reference subsequence where we could attempt to make a call
@@ -301,6 +301,7 @@ std::string eventalign( read &r,
 			continue;
 		}
 		std::vector< double > eventSnippet;
+		std::vector< double > eventLengthsSnippet;
 
 		//catch spans with lots of insertions or deletions (this QC was set using results of tests/detect/hmm_falsePositives)
 		//unsigned int spanOnQuery = (r.refToQuery)[posOnRef + windowLength+6] - (r.refToQuery)[posOnRef - windowLength];
@@ -315,6 +316,7 @@ std::string eventalign( read &r,
 				double ev = (r.normalisedEvents)[(r.eventAlignment)[j].first];
 				if (ev > r.scalings.shift + 1.0 and ev < 250.0){
 					eventSnippet.push_back( ev );
+					eventLengthsSnippet.push_back( (r.eventLengths)[(r.eventAlignment)[j].first] );
 				}
 			}
 
@@ -367,6 +369,7 @@ std::string eventalign( read &r,
 			std::string sixMerStrand = (r.referenceSeqMappedTo).substr(posOnRef + pos, 6);
 
 			double scaledEvent = (eventSnippet[evIdx] - r.scalings.shift) / r.scalings.scale;
+			double eventLength = eventLengthsSnippet[evIdx];
 
 			assert(scaledEvent > 0.0);
 
@@ -382,10 +385,10 @@ std::string eventalign( read &r,
 			}
 
 			if (label == "M"){
-				out += std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string(scaledEvent) + "\t" + sixMerStrand + "\t" + std::to_string(thymidineModel.at(sixMerStrand).first) + "\t" + std::to_string(thymidineModel.at(sixMerStrand).second) + "\n";
+				out += std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(eventLength) + "\t" + sixMerStrand + "\t" + std::to_string(thymidineModel.at(sixMerStrand).first) + "\t" + std::to_string(thymidineModel.at(sixMerStrand).second) + "\n";
 			}
 			else if (label == "I"){
-				out += std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string(scaledEvent) + "\t" + "NNNNNN" + "\t" + "0" + "\t" + "0" + "\n";
+				out += std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(eventLength) + "\t" + "NNNNNN" + "\t" + "0" + "\t" + "0" + "\n";
 			}
 
 	        if (label == "M"){
@@ -496,17 +499,6 @@ int align_main( int argc, char** argv ){
 				//open fast5 and normalise events to pA
 				r.filename = readID2path[s_queryName];
 
-				try{
-
-					if (bulkFast5) bulk_getEvents(r.filename, r.readID, r.raw);
-					else getEvents( r.filename, r.raw );
-				}
-				catch ( BadFast5Field &bf5 ){
-
-					failed++;
-					prog++;
-					continue;
-				}
 				/*get the subsequence of the reference this read mapped to */
 				r.referenceSeqMappedTo = reference.at(r.referenceMappedTo).substr(r.refStart, r.refEnd - r.refStart);
 
@@ -521,7 +513,7 @@ int align_main( int argc, char** argv ){
 					r.isReverse = true;
 				}
 
-				normaliseEvents(r);
+				normaliseEvents(r, bulkFast5);
 
 				//catch reads with rough event alignments that fail the QC
 				if ( r.eventAlignment.size() == 0 ){

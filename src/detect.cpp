@@ -997,17 +997,6 @@ int detect_main( int argc, char** argv ){
 				//open fast5 and normalise events to pA
 				r.filename = readID2path[s_queryName];
 
-				try{
-
-					if (bulkFast5) bulk_getEvents(r.filename, r.readID, r.raw);			
-					else getEvents( r.filename, r.raw );
-				}
-				catch ( BadFast5Field &bf5 ){
-
-					failed++;
-					prog++;
-					continue;
-				}
 				/*get the subsequence of the reference this read mapped to */
 				r.referenceSeqMappedTo = reference.at(r.referenceMappedTo).substr(r.refStart, r.refEnd - r.refStart);
 
@@ -1022,7 +1011,7 @@ int detect_main( int argc, char** argv ){
 					r.isReverse = true;
 				}
 
-				normaliseEvents(r);
+				normaliseEvents(r, bulkFast5);
 
 				//catch reads with rough event alignments that fail the QC
 				if ( r.eventAlignment.size() == 0 ){

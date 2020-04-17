@@ -52,7 +52,7 @@ float fast5_read_float_attribute(hid_t group, const char *attribute) {
 //end scrappie
 
 
-void bulk_getEvents( std::string fast5Filename, std::string readID, std::vector<double> &raw ){
+void bulk_getEvents( std::string fast5Filename, std::string readID, std::vector<double> &raw, float &sample_rate ){
 
 	//open the file
 	hid_t hdf5_file = H5Fopen(fast5Filename.c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
@@ -64,7 +64,7 @@ void bulk_getEvents( std::string fast5Filename, std::string readID, std::vector<
 	float digitisation = fast5_read_float_attribute(scaling_group, "digitisation");
 	float offset = fast5_read_float_attribute(scaling_group, "offset");
 	float range = fast5_read_float_attribute(scaling_group, "range");
-	//float sample_rate = fast5_read_float_attribute(scaling_group, "sampling_rate");
+	sample_rate = fast5_read_float_attribute(scaling_group, "sampling_rate");
 	H5Gclose(scaling_group);
 
 	//get the raw signal
@@ -98,7 +98,7 @@ void bulk_getEvents( std::string fast5Filename, std::string readID, std::vector<
 }
 
 
-void getEvents( std::string fast5Filename, std::vector<double> &raw ){
+void getEvents( std::string fast5Filename, std::vector<double> &raw, float &sample_rate ){
 
 	//open the file
 	hid_t hdf5_file = H5Fopen(fast5Filename.c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
@@ -110,7 +110,7 @@ void getEvents( std::string fast5Filename, std::vector<double> &raw ){
 	float digitisation = fast5_read_float_attribute(scaling_group, "digitisation");
 	float offset = fast5_read_float_attribute(scaling_group, "offset");
 	float range = fast5_read_float_attribute(scaling_group, "range");
-	//float sample_rate = fast5_read_float_attribute(scaling_group, "sampling_rate");
+	sample_rate = fast5_read_float_attribute(scaling_group, "sampling_rate");
 	H5Gclose(scaling_group);
 
 	//get the raw signal
@@ -699,7 +699,18 @@ PoreParameters roughRescale( std::vector< double > &means, std::string &basecall
 }
 
 
-void normaliseEvents( read &r ){
+void normaliseEvents( read &r, bool bulkFast5 ){
+
+	float sample_rate;
+	try{
+
+		if (bulkFast5) bulk_getEvents(r.filename, r.readID, r.raw, sample_rate);
+		else getEvents( r.filename, r.raw, sample_rate);
+	}
+	catch ( BadFast5Field &bf5 ){
+
+		return;
+	}
 
 	event_table et = detect_events(&(r.raw)[0], (r.raw).size(), event_detection_defaults);
 	assert(et.n > 0);
@@ -714,7 +725,7 @@ void normaliseEvents( read &r ){
 
 		if (et.event[i].mean > 1.0) {
 			events_mu.push_back( et.event[i].mean );
-			events_length.push_back(et.event[i].length);
+			events_length.push_back(et.event[i].length / sample_rate);
 		}
 	}
 	r.normalisedEvents = events_mu;
