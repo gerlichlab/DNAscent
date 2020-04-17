@@ -9,3 +9,6 @@
 [submodule "tinydir"]
 	path = tinydir
 	url = https://github.com/cxong/tinydir.git
+[submodule "Penthus"]
+	path = Penthus
+	url = https://github.com/MBoemo/Penthus.git

@@ -20,6 +20,7 @@
 #include "common.h"
 #include "poreModels.h"
 #include "data.h"
+#include "alignment.h"
 
 /*prototype */
 int show_options( int, char** );
@@ -34,6 +35,7 @@ static std::map< std::string, std::function< int( int, char** ) > > executables 
 	{"annotate", 	annotate_main},
 	{"train", 	train_main},
 	{"forkSense", 	sense_main},
+	{"align", 	align_main},
 	{"--help",	show_options},
 	{"-h",		show_options},
 	{"-v",		show_version},

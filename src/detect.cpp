@@ -22,6 +22,11 @@
 #include "../fast5/include/fast5.hpp"
 #include "poreModels.h"
 
+
+#include "../Penthus/src/hmm.h"
+#include "../Penthus/src/probability.h"
+#include "../Penthus/src/states.h"
+
 static const char *help=
 "detect: DNAscent executable that detects BrdU in Oxford Nanopore reads.\n"
 "To run DNAscent detect, do:\n"
@@ -759,7 +764,7 @@ std::string llAcrossRead( read &r,
 					}
 
 					double ev = (r.normalisedEvents)[(r.eventAlignment)[j].first];
-					if (ev > 0 and ev < 250){
+					if (ev > 1.0 and ev < 250.0){
 						eventSnippet.push_back( ev );
 					}
 					else{
@@ -789,7 +794,7 @@ std::string llAcrossRead( read &r,
 					}
 
 					double ev = (r.normalisedEvents)[(r.eventAlignment)[j].first];
-					if (ev > 0 and ev < 250){
+					if (ev > 1.0 and ev < 250.0){
 						eventSnippet.push_back( ev );
 					}
 					else{

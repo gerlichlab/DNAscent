@@ -20,6 +20,9 @@
 #include "poreModels.h"
 #include "train.h"
 
+#include "../Penthus/src/probability.h"
+
+
 static const char *help=
 "train: DNAscent executable that determines the mean and standard deviation of a base analogue's current.\n"
 "To run DNAscent train, do:\n"

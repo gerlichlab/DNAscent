@@ -16,6 +16,8 @@
 #include "event_handling.h"
 #include "../fast5/include/fast5.hpp"
 #include "poreModels.h"
+#include "../Penthus/src/probability.h"
+
 
 //extern "C" {
 #include "scrappie/event_detection.h"
@@ -710,7 +712,7 @@ void normaliseEvents( read &r ){
 
 	for ( unsigned int i = 0; i < et.n; i++ ){
 
-		if (et.event[i].mean > 0) {
+		if (et.event[i].mean > 1.0) {
 			events_mu.push_back( et.event[i].mean );
 			events_length.push_back(et.event[i].length);
 		}
