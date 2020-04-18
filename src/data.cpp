@@ -22,6 +22,7 @@
 #include "../fast5/include/fast5.hpp"
 #include "poreModels.h"
 #include "detect.h"
+#include "alignment.h"
 
 static const char *help=
 "trainingData: DNAscent executable that generates training data for DNAscent LSTM analogue detection.\n"
@@ -157,118 +158,6 @@ Arguments parseDataArguments( int argc, char** argv ){
 }
 
 
-std::map<int, std::vector<std::pair<double,double>>> referenceToEvents( read &r){
-
-	std::map<int, std::vector<std::pair<double,double>>> composedMaps;
-
-	for (size_t i = 0; i != r.refToQuery.size(); i++){
-
-		size_t posOnRef = i;
-		size_t posOnQuery = r.refToQuery[i];
-		for (size_t j = 0; j < r.eventAlignment.size(); j++){
-
-			if (r.eventAlignment[j].second == posOnQuery){
-
-				composedMaps[posOnRef].push_back(std::make_pair(r.normalisedEvents[r.eventAlignment[j].first], r.eventLengths[r.eventAlignment[j].first]));
-			}
-			if (r.eventAlignment[j].second > posOnQuery) break;
-		}
-	}
-	return composedMaps;
-}
-
-
-std::string getAlignedEvents(read &r, unsigned int windowLength){
-
-	std::string out;
-	//get the positions on the reference subsequence where we could attempt to make a call
-	std::string strand;
-	if ( r.isReverse ) strand = "rev";
-	else strand = "fwd";
-
-	std::map<int, std::vector<std::pair<double,double>>> composedMaps = referenceToEvents( r);
-
-	out += ">" + r.readID + " " + r.referenceMappedTo + " " + std::to_string(r.refStart) + " " + std::to_string(r.refEnd) + " " + strand + "\n";
-
-	for (unsigned int posOnRef = 2*windowLength; posOnRef < r.referenceSeqMappedTo.size() - 2*windowLength; posOnRef++){
-
-		if (composedMaps.count(posOnRef) > 0){
-
-			std::string callLL = "";
-			//decide if we're going to make a call here
-			if ((r.referenceSeqMappedTo).substr(posOnRef,1) == "T"){
-				std::string readSnippet = (r.referenceSeqMappedTo).substr(posOnRef - windowLength, 2*windowLength+6);
-
-				//make sure the read snippet is fully defined as A/T/G/C in reference
-				unsigned int As = 0, Ts = 0, Cs = 0, Gs = 0;
-				for ( std::string::iterator i = readSnippet.begin(); i < readSnippet.end(); i++ ){
-
-					switch( *i ){
-						case 'A' :
-							As++;
-							break;
-						case 'T' :
-							Ts++;
-							break;
-						case 'G' :
-							Gs++;
-							break;
-						case 'C' :
-							Cs++;
-							break;
-					}
-				}
-				if ( readSnippet.length() != (As + Ts + Gs + Cs) ) continue;
-
-				std::vector< double > eventSnippet;
-				unsigned int readHead = 0;
-				bool first = true;
-				for ( unsigned int j = readHead; j < (r.eventAlignment).size(); j++ ){
-
-					/*if an event has been aligned to a position in the window, add it */
-					if ( (r.eventAlignment)[j].second >= (r.refToQuery)[posOnRef - windowLength] and (r.eventAlignment)[j].second < (r.refToQuery)[posOnRef + windowLength] ){
-
-						if (first){
-							readHead = j;
-							first = false;
-							//std::cout << "READHEAD:" << j << " " << readHead << std::endl;
-						}
-
-						double ev = (r.normalisedEvents)[(r.eventAlignment)[j].first];
-						if (ev > 0 and ev < 250){
-							eventSnippet.push_back( ev );
-						}
-					}
-
-					/*stop once we get to the end of the window */
-					if ( (r.eventAlignment)[j].second >= (r.refToQuery)[posOnRef + windowLength] ) break;
-				}
-
-				std::string sixOI = (r.referenceSeqMappedTo).substr(posOnRef,6);
-				size_t BrdUStart = sixOI.find('T') + windowLength - 5;
-				size_t BrdUEnd = windowLength;//sixOI.rfind('T') + windowLength;
-				double logProbAnalogue = sequenceProbability( eventSnippet, readSnippet, windowLength, true, r.scalings, BrdUStart, BrdUEnd );
-				double logProbThymidine = sequenceProbability( eventSnippet, readSnippet, windowLength, false, r.scalings, 0, 0 );
-				double logLikelihoodRatio = logProbAnalogue - logProbThymidine;
-				callLL = std::to_string(logLikelihoodRatio);
-			}
-
-			for (auto e = composedMaps[posOnRef].begin(); e < composedMaps[posOnRef].end(); e++){
-
-				double scaledEvent = (e -> first - r.scalings.shift) / r.scalings.scale;
-				std::string sixMer = r.referenceSeqMappedTo.substr(posOnRef,6);
-
-				out += std::to_string(posOnRef) + "\t" + sixMer + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(e -> second) + "\t" + std::to_string(thymidineModel.at(sixMer).first) + "\t" + std::to_string(thymidineModel.at(sixMer).second) + "\t" + callLL + "\n";  //reference 6mer, event, event length
-			}
-		}
-		else{
-
-			out += "NNNNNN\t0\t0\n";  //reference 6mer, event, event length
-		}
-	}
-	return out;
-}
-
 
 int data_main( int argc, char** argv ){
 
@@ -387,7 +276,8 @@ int data_main( int argc, char** argv ){
 					continue;
 				}
 
-				std::string readOut = getAlignedEvents(r, windowLength);
+				std::map<unsigned int, double> BrdUCalls = llAcrossRead_forTraining( r, windowLength);
+				std::string readOut = eventalign_train( r, 100, BrdUCalls);
 
 				#pragma omp critical
 				{

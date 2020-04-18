@@ -26,6 +26,6 @@ void parseCigar(bam1_t *, std::map< unsigned int, unsigned int > &, int &, int &
 std::string getQuerySequence( bam1_t * ); 
 double sequenceProbability( std::vector <double> &, std::string &, size_t, bool, PoreParameters, size_t, size_t );
 void getRefEnd(bam1_t *, int &, int & );
-
+std::map<unsigned int, double> llAcrossRead_forTraining( read &, unsigned int);
 
 #endif

@@ -686,6 +686,175 @@ std::string methylateSequence( std::string &inSeq ){
 }
 
 
+std::map<unsigned int, double> llAcrossRead_forTraining( read &r, unsigned int windowLength){
+
+	std::map<unsigned int, double> refPos2likelihood;
+
+	//get the positions on the reference subsequence where we could attempt to make a call
+	std::vector< unsigned int > POIs = getPOIs( r.referenceSeqMappedTo, windowLength );
+	std::string strand;
+	unsigned int readHead = 0;
+	if ( r.isReverse ){
+
+		strand = "rev";
+		readHead = (r.eventAlignment).size() - 1;
+		std::reverse( POIs.begin(), POIs.end() );
+	}
+	else{
+
+		strand = "fwd";
+		readHead = 0;
+	}
+
+	for ( unsigned int i = 0; i < POIs.size(); i++ ){
+
+		int posOnRef = POIs[i];
+		int posOnQuery = (r.refToQuery).at(posOnRef);
+
+		//sequence needs to be 6 bases longer than the span of events we catch
+		//so sequence goes from posOnRef - windowLength to posOnRef + windowLength + 6
+		//event span goes from posOnRef - windowLength to posOnRef + windowLength
+
+		std::string readSnippet = (r.referenceSeqMappedTo).substr(posOnRef - windowLength, 2*windowLength+6);
+
+		//make sure the read snippet is fully defined as A/T/G/C in reference
+		unsigned int As = 0, Ts = 0, Cs = 0, Gs = 0;
+		for ( std::string::iterator i = readSnippet.begin(); i < readSnippet.end(); i++ ){
+
+			switch( *i ){
+				case 'A' :
+					As++;
+					break;
+				case 'T' :
+					Ts++;
+					break;
+				case 'G' :
+					Gs++;
+					break;
+				case 'C' :
+					Cs++;
+					break;
+			}
+		}
+		if ( readSnippet.length() != (As + Ts + Gs + Cs) ) continue;
+
+		//calculate where we are on the assembly - if we're a reverse complement, we're moving backwards down the reference genome
+		int globalPosOnRef;
+		std::string sixMerQuery = (r.basecall).substr(posOnQuery, 6);
+		std::string sixMerRef = (r.referenceSeqMappedTo).substr(posOnRef, 6);
+		if ( r.isReverse ){
+
+			globalPosOnRef = r.refEnd - posOnRef - 6;
+			sixMerQuery = reverseComplement( sixMerQuery );
+			sixMerRef = reverseComplement( sixMerRef );
+		}
+		else{
+
+			globalPosOnRef = r.refStart + posOnRef;
+		}
+
+
+		std::vector< double > eventSnippet;
+
+		//catch spans with lots of insertions or deletions (this QC was set using results of tests/detect/hmm_falsePositives)
+		unsigned int spanOnQuery = (r.refToQuery)[posOnRef + windowLength+6] - (r.refToQuery)[posOnRef - windowLength];
+		if ( spanOnQuery > 3.5*windowLength or spanOnQuery < 2*windowLength ){
+			refPos2likelihood[globalPosOnRef] = -20000; //tag an abort based on query span
+			continue;
+		}
+
+		/*get the events that correspond to the read snippet */
+		bool first = true;
+		if ( r.isReverse ){
+
+			for ( unsigned int j = readHead; j >= 0; j-- ){
+
+				/*if an event has been aligned to a position in the window, add it */
+				if ( (r.eventAlignment)[j].second >= (r.refToQuery)[posOnRef - windowLength] and (r.eventAlignment)[j].second < (r.refToQuery)[posOnRef + windowLength] ){
+
+					if (first){
+						readHead = j;
+						first = false;
+						//std::cout << "READHEAD:" << j << " " << readHead << std::endl;
+					}
+
+					double ev = (r.normalisedEvents)[(r.eventAlignment)[j].first];
+					if (ev > 1.0 and ev < 250.0){
+						eventSnippet.push_back( ev );
+					}
+				}
+
+				/*stop once we get to the end of the window */
+				if ( (r.eventAlignment)[j].second < (r.refToQuery)[posOnRef - windowLength] ){
+
+					std::reverse(eventSnippet.begin(), eventSnippet.end());
+					break;
+				}
+			}
+		}
+		else{
+			for ( unsigned int j = readHead; j < (r.eventAlignment).size(); j++ ){
+
+				/*if an event has been aligned to a position in the window, add it */
+				if ( (r.eventAlignment)[j].second >= (r.refToQuery)[posOnRef - windowLength] and (r.eventAlignment)[j].second < (r.refToQuery)[posOnRef + windowLength] ){
+
+					if (first){
+						readHead = j;
+						first = false;
+						//std::cout << "READHEAD:" << j << " " << readHead << std::endl;
+					}
+
+					double ev = (r.normalisedEvents)[(r.eventAlignment)[j].first];
+					if (ev > 1.0 and ev < 250.0){
+						eventSnippet.push_back( ev );
+					}
+				}
+
+				/*stop once we get to the end of the window */
+				if ( (r.eventAlignment)[j].second >= (r.refToQuery)[posOnRef + windowLength] ) break;
+			}
+		}
+
+		//make the BrdU call
+		std::string sixOI = (r.referenceSeqMappedTo).substr(posOnRef,6);
+		size_t BrdUStart = sixOI.find('T') + windowLength - 5;
+		size_t BrdUEnd = windowLength;//sixOI.rfind('T') + windowLength;
+		double logProbAnalogue = sequenceProbability( eventSnippet, readSnippet, windowLength, true, r.scalings, BrdUStart, BrdUEnd );
+		double logProbThymidine = sequenceProbability( eventSnippet, readSnippet, windowLength, false, r.scalings, 0, 0 );
+		double logLikelihoodRatio = logProbAnalogue - logProbThymidine;
+
+		//catch abnormally few or many events (this QC was set using results of tests/detect/hmm_falsePositives)
+		if ( eventSnippet.size() < 3.5*windowLength ){
+
+			refPos2likelihood[globalPosOnRef] = -10000;//tag an abort based on number of events
+			continue;
+		}
+
+#if TEST_LL
+double runningKL = 0.0;
+for (unsigned int s = 0; s < readSnippet.length() - 6; s++){
+	std::string sixMer = readSnippet.substr(s,6);
+	if ( BrdUStart <= s and s <= BrdUEnd and sixMer.find('T') != std::string::npos and analogueModel.count(sixMer) > 0 ){
+		runningKL += KLdivergence( thymidineModel.at(sixMer).first, thymidineModel.at(sixMer).second, analogueModel.at(sixMer).first, analogueModel.at(sixMer).second );
+	}
+}
+std::cerr << "<-------------------" << std::endl;
+std::cerr << runningKL << std::endl;
+std::cerr << spanOnQuery << std::endl;
+std::cerr << readSnippet << std::endl;
+for (auto ob = eventSnippet.begin(); ob < eventSnippet.end(); ob++){
+	std::cerr << *ob << " ";
+}
+std::cerr << std::endl;
+std::cerr << logLikelihoodRatio << std::endl;
+#endif
+
+		refPos2likelihood[globalPosOnRef] = logLikelihoodRatio;
+	}
+	return refPos2likelihood;
+}
+
+
 std::string llAcrossRead( read &r,
                           unsigned int windowLength, 
                           int &failedEvents,

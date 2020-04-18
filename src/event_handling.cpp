@@ -720,7 +720,6 @@ void normaliseEvents( read &r, bool bulkFast5 ){
 	events_mu.reserve( et.n );
 	events_length.reserve( et.n );
 
-
 	for ( unsigned int i = 0; i < et.n; i++ ){
 
 		if (et.event[i].mean > 1.0) {
@@ -737,4 +736,5 @@ void normaliseEvents( read &r, bool bulkFast5 ){
 
 	/*align 5mers to events using the basecall */
 	adaptive_banded_simple_event_align(events_mu, r, s);
+	r.scalings.eventsPerBase = std::max(1.25, (double) r.eventAlignment.size() / (double) (r.basecall.size() - 5));
 }

@@ -12,6 +12,7 @@
 #include "math.h"
 #include "common.h"
 #include "error_handling.h"
+#include <math.h>
 
 
 int show_version( int, char** ){
@@ -55,6 +56,24 @@ std::vector< std::string > split( std::string s, char delim ){
 		splitString.push_back( entry );
 	}
 	return splitString;
+}
+
+
+double vectorMean( std::vector< double > &obs ){
+
+	double total = 0.0;
+	for ( size_t i = 0; i < obs.size(); i++ ) total += obs[i];
+	return total / (double) obs.size();
+}
+
+
+double vectorStdv( std::vector< double > &obs, double &mean ){
+
+	double total = 0.0;
+	for ( size_t i = 0; i < obs.size(); i++ ){
+		total += pow(obs[i] - mean, 2.0);
+	}
+	return total / (double) obs.size();
 }
 
 

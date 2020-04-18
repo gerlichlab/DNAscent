@@ -14,9 +14,10 @@
 #include <limits>
 #include "common.h"
 #include "event_handling.h"
-#include "probability.h"
 #include "../fast5/include/fast5.hpp"
 #include "poreModels.h"
+#include "alignment.h"
+#include "error_handling.h"
 
 #include "../Penthus/src/hmm.h"
 #include "../Penthus/src/probability.h"
@@ -157,22 +158,21 @@ Arguments parseAlignArguments( int argc, char** argv ){
 }
 
 
-//Initial transitions within modules (internal transitions)
-static double internalM12I = 0.001;
-static double internalI2I = 0.001;
-static double internalM12M1 = 0.4;
-
-//Initial transitions between modules (external transitions)
-static double externalD2D = 0.3;
-static double externalD2M1 = 0.7;
-static double externalI2M1 = 0.999;
-static double externalM12D = 0.0025;
-static double externalM12M1 = 0.5965;
-
-
 std::pair< double, std::vector< std::string > > eventViterbi( std::vector <double> &observations,
 														      std::string &sequence,
 															  PoreParameters scalings){
+
+	//Initial transitions within modules (internal transitions)
+	double internalM12I = 0.001;
+	double internalI2I = 0.001;
+	double internalM12M1 = 1. - (1./scalings.eventsPerBase);//0.4;
+
+	//Initial transitions between modules (external transitions)
+	double externalD2D = 0.3;
+	double externalD2M1 = 0.7;
+	double externalI2M1 = 0.999;
+	double externalM12D = 0.0025;
+	double externalM12M1 = 1.0 - externalM12D - internalM12I - internalM12M1;//0.5965;
 
 	HiddenMarkovModel hmm = HiddenMarkovModel();
 
@@ -303,9 +303,322 @@ std::string eventalign( read &r,
 		std::vector< double > eventSnippet;
 		std::vector< double > eventLengthsSnippet;
 
-		//catch spans with lots of insertions or deletions (this QC was set using results of tests/detect/hmm_falsePositives)
-		//unsigned int spanOnQuery = (r.refToQuery)[posOnRef + windowLength+6] - (r.refToQuery)[posOnRef - windowLength];
-		//if ( spanOnQuery > 3.5*windowLength or spanOnQuery < 2*windowLength ) continue;
+		/*get the events that correspond to the read snippet */
+		for ( unsigned int j = readHead; j < (r.eventAlignment).size(); j++ ){
+
+			/*if an event has been aligned to a position in the window, add it */
+			if ( (r.eventAlignment)[j].second >= (r.refToQuery)[posOnRef] and (r.eventAlignment)[j].second < (r.refToQuery)[posOnRef + windowLength] ){
+
+				double ev = (r.normalisedEvents)[(r.eventAlignment)[j].first];
+				if (ev > r.scalings.shift + 1.0 and ev < 250.0){
+					eventSnippet.push_back( ev );
+					eventLengthsSnippet.push_back( (r.eventLengths)[(r.eventAlignment)[j].first] );
+				}
+			}
+
+			/*stop once we get to the end of the window */
+			if ( (r.eventAlignment)[j].second >= (r.refToQuery)[posOnRef + windowLength] ) break;
+		}
+
+		//pass on this window if we have a deletion
+		//TODO: make sure this does actually catch deletion cases properly
+		if ( eventSnippet.size() < 2 ){
+
+			posOnRef += windowLength;
+			continue;
+		}
+
+		/*
+		TESTING - print out the read snippet, the ONT model, and the aligned events
+		std::cout << readSnippet << std::endl;
+		for ( int pos = 0; pos < readSnippet.length()-5; pos++ ){
+
+			std::cout << readSnippet.substr(pos,6) << "\t" << thymidineModel.at( readSnippet.substr(pos,6) ).first << std::endl;
+		}
+		for ( auto ev = eventSnippet.begin(); ev < eventSnippet.end(); ev++){
+			double scaledEv =  (*ev - r.scalings.shift) / r.scalings.scale;
+			std::cout << scaledEv << std::endl;
+		}
+		*/
+
+		//calculate where we are on the assembly - if we're a reverse complement, we're moving backwards down the reference genome
+		int globalPosOnRef;
+		if ( r.isReverse ) globalPosOnRef = r.refEnd - posOnRef - 6;
+		else globalPosOnRef = r.refStart + posOnRef;
+
+		std::pair< double, std::vector< std::string > > localAlignment = eventViterbi( eventSnippet, readSnippet, r.scalings);
+
+		std::vector< std::string > stateLabels = localAlignment.second;
+		size_t lastM_ev = 0;
+		size_t lastM_ref = 0;
+
+		size_t evIdx = 0;
+
+		//grab the index of the last match so we don't print insertions where we shouldn't
+		for (size_t i = 1; i < stateLabels.size(); i++){
+
+			assert(stateLabels[i] != "START");
+			if (stateLabels[i] == "END") continue;
+
+			std::string label = stateLabels[i].substr(stateLabels[i].find('_')+1);
+
+	        if (label == "D") continue; //silent states don't emit an event
+
+	        int pos = std::stoi(stateLabels[i].substr(0,stateLabels[i].find('_')));
+
+	        if (label == "M"){
+	        	lastM_ev = evIdx;
+	        	lastM_ref = pos;
+	        }
+	        evIdx ++;
+		}
+
+		//do a second pass to print the alignment
+		evIdx = 0;
+		for (size_t i = 1; i < stateLabels.size(); i++){
+
+			assert(stateLabels[i] != "START");
+			if (stateLabels[i] == "END") continue;
+
+			std::string label = stateLabels[i].substr(stateLabels[i].find('_')+1);
+
+	        if (label == "D") continue; //silent states don't emit an event
+
+	        int pos = std::stoi(stateLabels[i].substr(0,stateLabels[i].find('_')));
+			std::string sixMerStrand = (r.referenceSeqMappedTo).substr(posOnRef + pos, 6);
+
+			double scaledEvent = (eventSnippet[evIdx] - r.scalings.shift) / r.scalings.scale;
+			double eventLength = eventLengthsSnippet[evIdx];
+
+			assert(scaledEvent > 0.0);
+
+			unsigned int evPos;
+			std::string sixMerRef;
+			if (r.isReverse){
+				evPos = globalPosOnRef - pos;
+				sixMerRef = reverseComplement(sixMerStrand);
+			}
+			else{
+				evPos = globalPosOnRef + pos;
+				sixMerRef = sixMerStrand;
+			}
+
+			if (label == "M"){
+				out += std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(eventLength) + "\t" + sixMerStrand + "\t" + std::to_string(thymidineModel.at(sixMerStrand).first) + "\t" + std::to_string(thymidineModel.at(sixMerStrand).second) + "\n";
+			}
+			else if (label == "I" and evIdx < lastM_ev){ //don't print insertions after the last match because we're going to align these in the next segment
+				out += std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(eventLength) + "\t" + "NNNNNN" + "\t" + "0" + "\t" + "0" + "\n";
+			}
+
+	        evIdx ++;
+		}
+
+		//TESTING - make sure nothing sketchy happens at the breakpoint
+		//out += "BREAKPOINT\n";
+
+		//go again starting at posOnRef + lastM_ref using events starting at readHead + lastM_ev
+		readHead += lastM_ev + 1;
+		posOnRef += lastM_ref;
+	}
+	return out;
+}
+
+
+std::string eventalign_train( read &r,
+            unsigned int windowLength,
+			std::map<unsigned int, double> &BrdULikelihood){
+
+	std::string out;
+	//get the positions on the reference subsequence where we could attempt to make a call
+	std::string strand;
+	unsigned int readHead = 0;
+	if ( r.isReverse ) strand = "rev";
+	else strand = "fwd";
+
+	out += ">" + r.readID + " " + r.referenceMappedTo + " " + std::to_string(r.refStart) + " " + std::to_string(r.refEnd) + " " + strand + "\n";
+
+	unsigned int posOnRef = 0;
+	while ( posOnRef < r.referenceSeqMappedTo.size() - windowLength - 7 ){ //-7 because we need to reach forward 6 bases when we process the match states
+
+		std::string readSnippet = (r.referenceSeqMappedTo).substr(posOnRef, windowLength);
+
+		//make sure the read snippet is fully defined as A/T/G/C in reference
+		unsigned int As = 0, Ts = 0, Cs = 0, Gs = 0;
+		for ( std::string::iterator i = readSnippet.begin(); i < readSnippet.end(); i++ ){
+
+			switch( *i ){
+				case 'A' :
+					As++;
+					break;
+				case 'T' :
+					Ts++;
+					break;
+				case 'G' :
+					Gs++;
+					break;
+				case 'C' :
+					Cs++;
+					break;
+			}
+		}
+		if ( readSnippet.length() != (As + Ts + Gs + Cs) ){
+			continue;
+		}
+		std::vector< double > eventSnippet;
+		std::vector< double > eventLengthsSnippet;
+
+		//get events for the alignment
+		for ( unsigned int j = readHead; j < (r.eventAlignment).size(); j++ ){
+
+			/*if an event has been aligned to a position in the window, add it */
+			if ( (r.eventAlignment)[j].second >= (r.refToQuery)[posOnRef] and (r.eventAlignment)[j].second < (r.refToQuery)[posOnRef + windowLength] ){
+
+				double ev = (r.normalisedEvents)[(r.eventAlignment)[j].first];
+				if (ev > r.scalings.shift + 1.0 and ev < 250.0){
+					eventSnippet.push_back( ev );
+					eventLengthsSnippet.push_back( (r.eventLengths)[(r.eventAlignment)[j].first] );
+				}
+			}
+
+			/*stop once we get to the end of the window */
+			if ( (r.eventAlignment)[j].second >= (r.refToQuery)[posOnRef + windowLength] ) break;
+		}
+
+		//pass on this window if we have a deletion
+		if ( eventSnippet.size() < 2 ){
+
+			posOnRef += windowLength;
+			continue;
+		}
+
+
+		//calculate where we are on the assembly - if we're a reverse complement, we're moving backwards down the reference genome
+		int globalPosOnRef;
+		if ( r.isReverse ) globalPosOnRef = r.refEnd - posOnRef - 6;
+		else globalPosOnRef = r.refStart + posOnRef;
+
+		std::pair< double, std::vector< std::string > > localAlignment = eventViterbi( eventSnippet, readSnippet, r.scalings);
+
+		std::vector< std::string > stateLabels = localAlignment.second;
+		size_t lastM_ev = 0;
+		size_t lastM_ref = 0;
+
+		size_t evIdx = 0;
+
+		//grab the index of the last match so we don't print insertions where we shouldn't
+		for (size_t i = 1; i < stateLabels.size(); i++){
+
+			assert(stateLabels[i] != "START");
+			if (stateLabels[i] == "END") continue;
+
+			std::string label = stateLabels[i].substr(stateLabels[i].find('_')+1);
+
+	        if (label == "D") continue; //silent states don't emit an event
+
+	        int pos = std::stoi(stateLabels[i].substr(0,stateLabels[i].find('_')));
+
+	        if (label == "M"){
+	        	lastM_ev = evIdx;
+	        	lastM_ref = pos;
+	        }
+	        evIdx ++;
+		}
+
+		//do a second pass to print the alignment
+		evIdx = 0;
+		for (size_t i = 1; i < stateLabels.size(); i++){
+
+			assert(stateLabels[i] != "START");
+			if (stateLabels[i] == "END") continue;
+
+			std::string label = stateLabels[i].substr(stateLabels[i].find('_')+1);
+
+	        if (label == "D") continue; //silent states don't emit an event
+
+	        int pos = std::stoi(stateLabels[i].substr(0,stateLabels[i].find('_')));
+			std::string sixMerStrand = (r.referenceSeqMappedTo).substr(posOnRef + pos, 6);
+
+			double scaledEvent = (eventSnippet[evIdx] - r.scalings.shift) / r.scalings.scale;
+			double eventLength = eventLengthsSnippet[evIdx];
+
+			assert(scaledEvent > 0.0);
+
+			unsigned int evPos;
+			std::string sixMerRef;
+			if (r.isReverse){
+				evPos = globalPosOnRef - pos;
+				sixMerRef = reverseComplement(sixMerStrand);
+			}
+			else{
+				evPos = globalPosOnRef + pos;
+				sixMerRef = sixMerStrand;
+			}
+
+			if (label == "M" and BrdULikelihood.count(evPos) > 0){
+				out += std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(eventLength) + "\t" + sixMerStrand + "\t" + std::to_string(thymidineModel.at(sixMerStrand).first) + "\t" + std::to_string(thymidineModel.at(sixMerStrand).second) + "\t" + std::to_string(BrdULikelihood[evPos]) + "\n";
+			}
+			else if (label == "M"){
+				out += std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(eventLength) + "\t" + sixMerStrand + "\t" + std::to_string(thymidineModel.at(sixMerStrand).first) + "\t" + std::to_string(thymidineModel.at(sixMerStrand).second) + "\n";
+			}
+			else if (label == "I" and evIdx < lastM_ev){ //don't print insertions after the last match because we're going to align these in the next segment
+				out += std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(eventLength) + "\t" + "NNNNNN" + "\t" + "0" + "\t" + "0" + "\n";
+			}
+
+	        evIdx ++;
+		}
+
+		//TESTING - make sure nothing sketchy happens at the breakpoint
+		//out += "BREAKPOINT\n";
+
+		//go again starting at posOnRef + lastM_ref using events starting at readHead + lastM_ev
+		readHead += lastM_ev + 1;
+		posOnRef += lastM_ref;
+	}
+	return out;
+}
+
+
+AlignedRead eventalign_detect( read &r,
+            unsigned int windowLength ){
+
+	std::string out;
+	//get the positions on the reference subsequence where we could attempt to make a call
+	std::string strand;
+	unsigned int readHead = 0;
+	if ( r.isReverse ) strand = "rev";
+	else strand = "fwd";
+
+	AlignedRead ar(r.readID, r.referenceMappedTo, strand, r.refStart, r.refEnd);
+
+	unsigned int posOnRef = 0;
+	while ( posOnRef < r.referenceSeqMappedTo.size() - windowLength - 7 ){ //-7 because we need to reach forward 6 bases when we process the match states
+
+		std::string readSnippet = (r.referenceSeqMappedTo).substr(posOnRef, windowLength);
+
+		//make sure the read snippet is fully defined as A/T/G/C in reference
+		unsigned int As = 0, Ts = 0, Cs = 0, Gs = 0;
+		for ( std::string::iterator i = readSnippet.begin(); i < readSnippet.end(); i++ ){
+
+			switch( *i ){
+				case 'A' :
+					As++;
+					break;
+				case 'T' :
+					Ts++;
+					break;
+				case 'G' :
+					Gs++;
+					break;
+				case 'C' :
+					Cs++;
+					break;
+			}
+		}
+		if ( readSnippet.length() != (As + Ts + Gs + Cs) ){
+			continue;
+		}
+		std::vector< double > eventSnippet;
+		std::vector< double > eventLengthsSnippet;
 
 		/*get the events that correspond to the read snippet */
 		for ( unsigned int j = readHead; j < (r.eventAlignment).size(); j++ ){
@@ -325,7 +638,7 @@ std::string eventalign( read &r,
 		}
 
 		//pass on this window if we have a deletion
-		if ( eventSnippet.size() == 0 ){
+		if ( eventSnippet.size() < 2 ){
 
 			posOnRef += windowLength;
 			continue;
@@ -373,7 +686,7 @@ std::string eventalign( read &r,
 
 			assert(scaledEvent > 0.0);
 
-			unsigned int evPos;
+			size_t evPos;
 			std::string sixMerRef;
 			if (r.isReverse){
 				evPos = globalPosOnRef - pos;
@@ -385,13 +698,7 @@ std::string eventalign( read &r,
 			}
 
 			if (label == "M"){
-				out += std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(eventLength) + "\t" + sixMerStrand + "\t" + std::to_string(thymidineModel.at(sixMerStrand).first) + "\t" + std::to_string(thymidineModel.at(sixMerStrand).second) + "\n";
-			}
-			else if (label == "I"){
-				out += std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(eventLength) + "\t" + "NNNNNN" + "\t" + "0" + "\t" + "0" + "\n";
-			}
-
-	        if (label == "M"){
+				ar.addEvent(sixMerStrand, evPos, scaledEvent, eventLength);
 	        	lastM_ev = evIdx;
 	        	lastM_ref = pos;
 	        }
@@ -400,9 +707,9 @@ std::string eventalign( read &r,
 
 		//go again starting at posOnRef + lastM_ref using events starting at readHead + lastM_ev
 		readHead += lastM_ev + 1;
-		posOnRef += lastM_ref + 1;
+		posOnRef += lastM_ref;
 	}
-	return out;
+	return ar;
 }
 
 
@@ -448,7 +755,7 @@ int align_main( int argc, char** argv ){
 	const char *allReads = ".";
 	itr = sam_itr_querys(bam_idx,bam_hdr,allReads);
 
-	unsigned int windowLength = 20;
+	unsigned int windowLength = 100;
 	int result;
 	int failedEvents = 0;
 	unsigned int maxBufferSize;

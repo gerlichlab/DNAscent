@@ -11,6 +11,7 @@
 
 #include <fstream>
 #include "regions.h"
+#include "common.h"
 #include "data_IO.h"
 #include "error_handling.h"
 #include "train.h"
@@ -136,14 +137,6 @@ struct region{
 	double score;
 	std::string forkDir="";
 };
-
-
-double vectorMean( std::vector< double > &obs ){
-
-	double total = 0.0;
-	for ( size_t i = 0; i < obs.size(); i++ ) total += obs[i];
-	return total / (double) obs.size();
-}
 
 
 std::pair< double, double > twoMeans( std::vector< double > &observations ){

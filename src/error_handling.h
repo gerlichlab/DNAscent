@@ -143,5 +143,11 @@ struct OverwriteFailure : public std::exception {
 	}
 };
 
+struct UnrecognisedBase : public std::exception {
+	const char * what () const throw () {
+		return "Input sequence contains an unrecognised base - must be A, T, G, C, or N.";
+	}
+};
+
 #endif
 

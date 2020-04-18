@@ -22,6 +22,7 @@ struct PoreParameters {
 	double drift = 0.0;
 	double scale;
 	double var = 1.0;
+	double eventsPerBase = 0.0;
 };
 
 class EventAlignment{
