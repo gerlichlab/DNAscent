@@ -77,7 +77,7 @@ double vectorStdv( std::vector< double > &obs, double &mean ){
 }
 
 
-int argMin( std::vector< double > &vec ){
+int argMin( std::vector< double > vec ){
 
 	double smallest = vec[0];
 	int index = 0;
@@ -87,6 +87,23 @@ int argMin( std::vector< double > &vec ){
 		if ( vec[i] < smallest ){
 
 			smallest = vec[i];
+			index = i;
+		}
+	}
+	return index;
+}
+
+
+int argMax( std::vector< double > vec ){
+
+	double highest = vec[0];
+	int index = 0;
+
+	for ( unsigned int i = 1; i < vec.size(); i++ ){
+
+		if ( vec[i] > highest ){
+
+			highest = vec[i];
 			index = i;
 		}
 	}

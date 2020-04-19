@@ -180,7 +180,8 @@ inline std::string complement( std::string DNAseq ){
 /*function prototypes */
 void displayProgress( int, int );
 std::vector< std::string > split( std::string, char );
-int argMin( std::vector< double > & );
+int argMin( std::vector< double > );
+int argMax( std::vector< double > );
 double vectorMean( std::vector< double > & );
 double vectorStdv( std::vector< double > &, double & );
 

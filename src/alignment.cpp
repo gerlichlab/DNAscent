@@ -18,6 +18,7 @@
 #include "poreModels.h"
 #include "alignment.h"
 #include "error_handling.h"
+#include "probability.h"
 
 #include "../Penthus/src/hmm.h"
 #include "../Penthus/src/probability.h"
@@ -155,6 +156,337 @@ Arguments parseAlignArguments( int argc, char** argv ){
 	if (args.outputFilename == args.indexFilename or args.outputFilename == args.referenceFilename or args.outputFilename == args.bamFilename) throw OverwriteFailure();
 
 	return args;
+}
+
+
+double lnVecMax(std::vector<double> v){
+
+	double maxVal = v[0];
+	for (size_t i = 1; i < v.size(); i++){
+		if (lnGreaterThan( v[i], maxVal )){
+			maxVal = v[i];
+		}
+	}
+	return maxVal;
+}
+
+
+int lnArgMax(std::vector<double> v){
+
+	double maxVal = v[0];
+	int maxarg = 0;
+
+	for (size_t i = 1; i < v.size(); i++){
+		if (lnGreaterThan( v[i], maxVal )){
+			maxVal = v[i];
+			maxarg = i;
+		}
+	}
+	return maxarg;
+}
+
+
+std::vector<std::string> sequenceViterbi( std::vector <double> &observations,
+				std::string &sequence,
+				PoreParameters scalings){
+
+	//Initial transitions within modules (internal transitions)
+	double internalM12I = 0.001;
+	double internalI2I = 0.001;
+	double internalM12M1 = 1. - (1./scalings.eventsPerBase);
+
+	//Initial transitions between modules (external transitions)
+	double externalD2D = 0.3;
+	double externalD2M1 = 0.7;
+	double externalI2M1 = 0.999;
+	double externalM12D = 0.0025;
+	double externalM12M1 = 1.0 - externalM12D - internalM12I - internalM12M1;
+	int maxindex;
+
+	size_t n_states = sequence.length() - 5;
+
+	std::vector< std::vector< size_t > > backtraceS( 3*n_states, std::vector< size_t >( observations.size() + 1 ) ); /*stores state indices for the Viterbi backtrace */
+	std::vector< std::vector< size_t > > backtraceT( 3*n_states, std::vector< size_t >( observations.size() + 1 ) ); /*stores observation indices for the Viterbi backtrace */
+
+	//reserve 0 for start
+	size_t D_offset = 0;
+	size_t M_offset = n_states;
+	size_t I_offset = 2*n_states;
+
+	std::vector< double > I_curr(n_states, NAN), D_curr(n_states, NAN), M_curr(n_states, NAN), I_prev(n_states, NAN), D_prev(n_states, NAN), M_prev(n_states, NAN);
+	double start_curr = NAN, start_prev = 0.0;
+
+	double matchProb, insProb;
+
+	/*-----------INITIALISATION----------- */
+	//transitions from the start state
+	D_prev[0] = lnProd( start_prev, eln( externalM12D ) );
+	backtraceS[0 + D_offset][0] = -1;
+	backtraceT[0 + D_offset][0] = 0;
+
+	//account for transitions between deletion states before we emit the first observation
+	for ( unsigned int i = 1; i < n_states; i++ ){
+
+		D_prev[i] = lnProd( D_prev[i-1], eln ( externalD2D ) );
+		backtraceS[i + D_offset][0] = i -1 + D_offset;
+		backtraceT[i + D_offset][0] = 0;
+	}
+
+
+	/*-----------RECURSION----------- */
+	/*complexity is O(T*N^2) where T is the number of observations and N is the number of states */
+	double level_mu, level_sigma;
+	for ( unsigned int t = 0; t < observations.size(); t++ ){
+
+		std::fill( I_curr.begin(), I_curr.end(), NAN );
+		std::fill( M_curr.begin(), M_curr.end(), NAN );
+		std::fill( D_curr.begin(), D_curr.end(), NAN );
+
+		std::string sixMer = sequence.substr(0, 6);
+
+		level_mu = scalings.shift + scalings.scale * thymidineModel.at(sixMer).first;
+		level_sigma = scalings.var * thymidineModel.at(sixMer).second;
+
+		matchProb = eln( normalPDF( level_mu, level_sigma, observations[t] ) );
+		insProb = eln( uniformPDF( 0, 250, observations[t] ) );
+
+		//to the base 1 insertion
+		I_curr[0] = lnVecMax({lnProd( lnProd( I_prev[0], eln( internalI2I ) ), insProb ),
+			                  lnProd( lnProd( M_prev[0], eln( internalM12I ) ), insProb ),
+							  lnProd( lnProd( start_prev, eln( internalM12I ) ), insProb )
+		                     });
+		maxindex = lnArgMax({lnProd( lnProd( I_prev[0], eln( internalI2I ) ), insProb ),
+					         lnProd( lnProd( M_prev[0], eln( internalM12I ) ), insProb ),
+							 lnProd( lnProd( start_prev, eln( internalM12I ) ), insProb )
+						     });
+		switch(maxindex){
+			case 0:
+				backtraceS[0 + I_offset][t+1] = 0 + I_offset;
+				backtraceT[0 + I_offset][t+1] = t;
+				break;
+			case 1:
+				backtraceS[0 + I_offset][t+1] = 0 + M_offset;
+				backtraceT[0 + I_offset][t+1] = t;
+				break;
+			case 2:
+				backtraceS[0 + I_offset][t+1] = -1;
+				backtraceT[0 + I_offset][t+1] = t;
+				break;
+			default:
+				std::cout << "problem" << std::endl;
+				exit(EXIT_FAILURE);
+		}
+
+		//to the base 1 match
+		M_curr[0] = lnVecMax({lnProd( lnProd( M_prev[0], eln( internalM12M1 ) ), matchProb ),
+							  lnProd( lnProd( start_prev, eln( externalM12M1 + internalM12M1 ) ), matchProb )
+							 });
+		maxindex = lnArgMax({lnProd( lnProd( M_prev[0], eln( internalM12M1 ) ), matchProb ),
+							 lnProd( lnProd( start_prev, eln( externalM12M1 + internalM12M1 ) ), matchProb )
+							});
+		switch(maxindex){
+			case 0:
+				backtraceS[0 + M_offset][t+1] = 0 + M_offset;
+				backtraceT[0 + M_offset][t+1] = t;
+				break;
+			case 1:
+				backtraceS[0 + M_offset][t+1] = -1;
+				backtraceT[0 + M_offset][t+1] = t;
+				break;
+			default:
+				std::cout << "problem" << std::endl;
+				exit(EXIT_FAILURE);
+		}
+
+		//to the base 1 deletion
+		D_curr[0] = lnProd( NAN, eln( externalM12D ) );  //start to D
+		backtraceS[0 + D_offset][t+1] = -1;
+		backtraceT[0 + D_offset][t+1] = t + 1;
+
+
+		//the rest of the sequence
+		for ( unsigned int i = 1; i < n_states; i++ ){
+
+			//get model parameters
+			sixMer = sequence.substr(i, 6);
+			insProb = eln( uniformPDF( 0, 250, observations[t] ) );
+
+			level_mu = scalings.shift + scalings.scale * thymidineModel.at(sixMer).first;
+			level_sigma = scalings.var * thymidineModel.at(sixMer).second;
+
+			//uncomment if you scale events
+			//level_mu = thymidineModel.at(sixMer).first;
+			//level_sigma = scalings.var / scalings.scale * thymidineModel.at(sixMer).second;
+
+			matchProb = eln( normalPDF( level_mu, level_sigma, observations[t] ) );
+
+			//to the insertion
+			I_curr[i] = lnVecMax({lnProd( lnProd( I_prev[i], eln( internalI2I ) ), insProb ),
+								  lnProd( lnProd( M_prev[i], eln( internalM12I ) ), insProb )
+								 });
+			maxindex = lnArgMax({lnProd( lnProd( I_prev[i], eln( internalI2I ) ), insProb ),
+							     lnProd( lnProd( M_prev[i], eln( internalM12I ) ), insProb )
+								});
+			switch(maxindex){
+				case 0:
+					backtraceS[i + I_offset][t+1] = i + I_offset;
+					backtraceT[i + I_offset][t+1] = t;
+					break;
+				case 1:
+					backtraceS[i + I_offset][t+1] = i + M_offset;
+					backtraceT[i + I_offset][t+1] = t;
+					break;
+				default:
+					std::cout << "problem" << std::endl;
+					exit(EXIT_FAILURE);
+			}
+
+			//to the match
+			M_curr[i] = lnVecMax({lnProd( lnProd( I_prev[i-1], eln( externalI2M1 ) ), matchProb ),
+								   lnProd( lnProd( M_prev[i-1], eln( externalM12M1 ) ), matchProb ),
+								   lnProd( lnProd( M_prev[i], eln( internalM12M1 ) ), matchProb ),
+								   lnProd( lnProd( D_prev[i-1], eln( externalD2M1 ) ), matchProb )
+								   });
+			maxindex = lnArgMax({lnProd( lnProd( I_prev[i-1], eln( externalI2M1 ) ), matchProb ),
+							   lnProd( lnProd( M_prev[i-1], eln( externalM12M1 ) ), matchProb ),
+							   lnProd( lnProd( M_prev[i], eln( internalM12M1 ) ), matchProb ),
+							   lnProd( lnProd( D_prev[i-1], eln( externalD2M1 ) ), matchProb )
+							   });
+			switch(maxindex){
+				case 0:
+					backtraceS[i + M_offset][t+1] = i - 1 + I_offset;
+					backtraceT[i + M_offset][t+1] = t;
+					break;
+				case 1:
+					backtraceS[i + M_offset][t+1] = i - 1 + M_offset;
+					backtraceT[i + M_offset][t+1] = t;
+					break;
+				case 2:
+					backtraceS[i + M_offset][t+1] = i + M_offset;
+					backtraceT[i + M_offset][t+1] = t;
+					break;
+				case 3:
+					backtraceS[i + M_offset][t+1] = i - 1 + D_offset;
+					backtraceT[i + M_offset][t+1] = t;
+					break;
+				default:
+					std::cout << "problem" << std::endl;
+					exit(EXIT_FAILURE);
+			}
+		}
+
+		for ( unsigned int i = 1; i < n_states; i++ ){
+
+			//to the deletion
+			D_curr[i] = lnVecMax({lnProd( M_curr[i-1], eln( externalM12D ) ),
+				                  lnProd( D_curr[i-1], eln( externalD2D ) )
+			                     });
+			maxindex = lnArgMax({lnProd( M_curr[i-1], eln( externalM12D ) ),
+                               lnProd( D_curr[i-1], eln( externalD2D ) )
+			                  });
+			switch(maxindex){
+				case 0:
+					backtraceS[i + D_offset][t+1] = i - 1 + M_offset;
+					backtraceT[i + D_offset][t+1] = t + 1;
+					break;
+				case 1:
+					backtraceS[i + D_offset][t+1] = i - 1 + D_offset;
+					backtraceT[i + D_offset][t+1] = t + 1;
+					break;
+				default:
+					std::cout << "problem" << std::endl;
+					exit(EXIT_FAILURE);
+			}
+		}
+
+		//TESTING - print out a single time iteration
+		/*
+		for ( unsigned int i = 0; i < n_states; i++ ){
+			std::cout << M_curr[i] << std::endl;
+			std::cout << I_curr[i] << std::endl;
+			std::cout << D_curr[i] << std::endl;
+		}
+		exit(EXIT_SUCCESS);
+		 */
+
+		I_prev = I_curr;
+		M_prev = M_curr;
+		D_prev = D_curr;
+		start_prev = start_curr;
+	}
+
+	/*
+	for (int i = 0; i < backtraceS.size(); i++){
+		for (int j = 0; j < backtraceS[i].size(); j++){
+			std::cout << backtraceS[i][j] << "\t";
+		}
+		std::cout << std::endl;
+	}
+	std::cout << "----------------------------------------------------------------------" << std::endl;
+	*/
+
+	/*-----------TERMINATION----------- */
+	double viterbiScore = NAN;
+	viterbiScore = lnVecMax( {lnProd( D_curr.back(), eln( 1.0 ) ), //D to end
+							  lnProd( M_curr.back(), eln( externalM12M1 + externalM12D ) ),//M to end
+							  lnProd( I_curr.back(), eln( externalI2M1 ) )//I to end
+							 });
+	std::cout << "Builtin Viterbi score: " << viterbiScore << std::endl;
+
+
+	//figure out where to go from the end state
+	maxindex = lnArgMax({lnProd( D_curr.back(), eln( 1.0 ) ),
+	                   lnProd( M_curr.back(), eln( externalM12M1 + externalM12D ) ),
+					   lnProd( I_curr.back(), eln( externalI2M1 ) )
+	                   });
+
+	size_t traceback_new;
+	size_t traceback_old;
+	size_t traceback_t = observations.size();
+	switch(maxindex){
+		case 0:
+			traceback_old = D_offset + n_states - 1;
+			break;
+		case 1:
+			traceback_old = M_offset + n_states - 1;
+			break;
+		case 2:
+			traceback_old = I_offset + n_states - 1;
+			break;
+		default:
+			std::cout << "problem" << std::endl;
+			exit(EXIT_FAILURE);
+	}
+
+	std::vector<std::string> stateIndices;
+	stateIndices.push_back("END");
+	while (traceback_old != -1){
+
+		traceback_new = backtraceS[ traceback_old ][ traceback_t ];
+		traceback_t = backtraceT[ traceback_old ][ traceback_t ];
+
+		if (traceback_old < M_offset){ //Del
+
+			//std::cout << "D " << traceback_old << std::endl;
+			stateIndices.push_back(std::to_string(traceback_old) + "_D");
+
+		}
+		else if (traceback_old < I_offset){ //M
+
+			//std::cout << "M " << traceback_old - M_offset << std::endl;
+			stateIndices.push_back(std::to_string(traceback_old- M_offset) + "_M");
+		}
+		else { //I
+
+			//std::cout << "I " << traceback_old - I_offset << std::endl;
+			stateIndices.push_back(std::to_string(traceback_old - I_offset) + "_I");
+
+		}
+		traceback_old = traceback_new;
+	}
+	stateIndices.push_back("START");
+	std::reverse( stateIndices.begin(), stateIndices.end() );
+	return stateIndices;
 }
 
 
@@ -347,6 +679,25 @@ std::string eventalign( read &r,
 		else globalPosOnRef = r.refStart + posOnRef;
 
 		std::pair< double, std::vector< std::string > > localAlignment = eventViterbi( eventSnippet, readSnippet, r.scalings);
+
+		std::vector<std::string> builtinAlignment = sequenceViterbi( eventSnippet, readSnippet, r.scalings);
+
+		//TESTING -check builtin against Penthus
+		std::cout << localAlignment.second.size() << " " << builtinAlignment.size() << std::endl;
+		std::cout << "Penthus Viterbi score: " << localAlignment.first << std::endl;
+
+		for (size_t path = 0; path < std::min(localAlignment.second.size(), builtinAlignment.size()); path++){
+			std::cout << localAlignment.second[path] << " " << builtinAlignment[path] <<  std::endl;
+		}
+
+		for (size_t path = 0; path < std::min(localAlignment.second.size(), builtinAlignment.size()); path++){
+			std::cout << localAlignment.second[path] << " " << builtinAlignment[path] <<  std::endl;
+			assert(localAlignment.second[path] == builtinAlignment[path]);
+		}
+		std::cout << "###############################################################################################################" << std::endl;
+
+		assert(localAlignment.second.size() == builtinAlignment.size());
+		//END TESTING
 
 		std::vector< std::string > stateLabels = localAlignment.second;
 		size_t lastM_ev = 0;
