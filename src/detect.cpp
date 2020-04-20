@@ -23,10 +23,6 @@
 #include "poreModels.h"
 
 
-#include "../Penthus/src/hmm.h"
-#include "../Penthus/src/probability.h"
-#include "../Penthus/src/states.h"
-
 static const char *help=
 "detect: DNAscent executable that detects BrdU in Oxford Nanopore reads.\n"
 "To run DNAscent detect, do:\n"
@@ -150,17 +146,7 @@ Arguments parseDetectArguments( int argc, char** argv ){
 	return args;
 }
 
-//Initial transitions within modules (internal transitions)
-static double internalM12I = 0.3475;
-static double internalI2I = 0.5;
-static double internalM12M1 = 0.4;
 
-//Initial transitions between modules (external transitions)
-static double externalD2D = 0.3;
-static double externalD2M1 = 0.7;
-static double externalI2M1 = 0.5;
-static double externalM12D = 0.0025;
-static double externalM12M1 = 0.25;
 
 double sequenceProbability( std::vector <double> &observations,
 				std::string &sequence, 
@@ -170,6 +156,18 @@ double sequenceProbability( std::vector <double> &observations,
 				size_t BrdUStart,
 				size_t BrdUEnd ){
 //covered in: tests/detect/hmm_forward
+
+	//Initial transitions within modules (internal transitions)
+	double internalM12I = 0.3475;
+	double internalI2I = 0.5;
+	double internalM12M1 = 0.4;
+
+	//Initial transitions between modules (external transitions)
+	double externalD2D = 0.3;
+	double externalD2M1 = 0.7;
+	double externalI2M1 = 0.5;
+	double externalM12D = 0.0025;
+	double externalM12M1 = 0.25;
 
 	std::vector< double > I_curr(2*windowSize+1, NAN), D_curr(2*windowSize+1, NAN), M_curr(2*windowSize+1, NAN), I_prev(2*windowSize+1, NAN), D_prev(2*windowSize+1, NAN), M_prev(2*windowSize+1, NAN);
 	double firstI_curr = NAN, firstI_prev = NAN;
@@ -314,6 +312,18 @@ double sequenceProbability_methyl( std::vector <double> &observations,
 				PoreParameters scalings,
 				size_t MethylStart,
 				size_t MethylEnd ){
+
+	//Initial transitions within modules (internal transitions)
+	double internalM12I = 0.3475;
+	double internalI2I = 0.5;
+	double internalM12M1 = 0.4;
+
+	//Initial transitions between modules (external transitions)
+	double externalD2D = 0.3;
+	double externalD2M1 = 0.7;
+	double externalI2M1 = 0.5;
+	double externalM12D = 0.0025;
+	double externalM12M1 = 0.25;
 
 	std::vector< double > I_curr(2*windowSize+1, NAN), D_curr(2*windowSize+1, NAN), M_curr(2*windowSize+1, NAN), I_prev(2*windowSize+1, NAN), D_prev(2*windowSize+1, NAN), M_prev(2*windowSize+1, NAN);
 	double firstI_curr = NAN, firstI_prev = NAN;

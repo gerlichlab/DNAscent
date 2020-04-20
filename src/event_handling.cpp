@@ -16,8 +16,7 @@
 #include "event_handling.h"
 #include "../fast5/include/fast5.hpp"
 #include "poreModels.h"
-#include "../Penthus/src/probability.h"
-
+#include <chrono>
 
 //extern "C" {
 #include "scrappie/event_detection.h"
@@ -89,6 +88,7 @@ void bulk_getEvents( std::string fast5Filename, std::string readID, std::vector<
 	H5Dclose(dset);
 	
 	raw_unit = range / digitisation;
+	raw.reserve(nsample);
 	for ( size_t i = 0; i < nsample; i++ ){
 
 		raw.push_back( (rawptr[i] + offset) * raw_unit );
@@ -346,6 +346,10 @@ inline std::pair<bool,float> logProbabilityMatch(std::string sixMer, double x, d
 
 void adaptive_banded_simple_event_align( std::vector< double > &raw, read &r, PoreParameters &s ){
 
+	//benchmarking
+    //std::chrono::steady_clock::time_point tp1 = std::chrono::steady_clock::now();
+
+
 	std::string sequence = r.basecall;
 
 	//initialise vectors to solve A*x = b to recompute shift and scale
@@ -523,6 +527,10 @@ void adaptive_banded_simple_event_align( std::vector< double > &raw, read &r, Po
 		}
 	}
 
+	//benchmarking
+    //std::chrono::steady_clock::time_point tp2 = std::chrono::steady_clock::now();
+    //std::cout << "banded alignment: " << std::chrono::duration_cast<std::chrono::microseconds>(tp2 - tp1).count() << std::endl;
+
 	//
 	// Backtrack to compute alignment
 	//
@@ -530,9 +538,7 @@ void adaptive_banded_simple_event_align( std::vector< double > &raw, read &r, Po
 	double eventDiffs = 0.0;
 	double n_aligned_events = 0;
 	//std::vector<AlignedPair> out;
-	std::vector< std::pair< unsigned int, unsigned int > > eventSeqLocPairs;
-	std::vector<bool> useBrdUDistribution;
-	std::map<unsigned int, double> eventToScore;
+	//std::map<unsigned int, double> eventToScore;
     
 	float max_score = -INFINITY;
 	int curr_event_idx = 0;
@@ -551,13 +557,24 @@ void adaptive_banded_simple_event_align( std::vector< double > &raw, read &r, Po
 			}
 		}
 	}
+	//end:from nanopolish
+
+
+	//benchmarking
+    //std::chrono::steady_clock::time_point tp3 = std::chrono::steady_clock::now();
+    //std::cout << "calculate end index: " << std::chrono::duration_cast<std::chrono::microseconds>(tp3 - tp2).count() << std::endl;
+
+
+	r.eventAlignment.reserve(raw.size());
+	std::vector<bool> useBrdUDistribution;
+	useBrdUDistribution.reserve(raw.size());
 
 	int curr_gap = 0;
 	int max_gap = 0;
 	while(curr_kmer_idx >= 0 && curr_event_idx >= 0) {
         
 		// emit alignment
-		eventSeqLocPairs.push_back(std::make_pair(curr_event_idx, curr_kmer_idx));
+		r.eventAlignment.push_back(std::make_pair(curr_event_idx, curr_kmer_idx));
 
 		// qc stats
 		//size_t kmer_rank = sixMerRank_nanopolish(sequence.substr(curr_kmer_idx, k).c_str());
@@ -607,20 +624,27 @@ void adaptive_banded_simple_event_align( std::vector< double > &raw, read &r, Po
 			max_gap = std::max(curr_gap, max_gap);
 		}   
 	}
-	std::reverse(eventSeqLocPairs.begin(), eventSeqLocPairs.end());
+	std::reverse(r.eventAlignment.begin(), r.eventAlignment.end());
 	std::reverse(useBrdUDistribution.begin(), useBrdUDistribution.end());
     
+
+	//benchmarking
+    //std::chrono::steady_clock::time_point tp4 = std::chrono::steady_clock::now();
+    //std::cout << "backtrace: " << std::chrono::duration_cast<std::chrono::microseconds>(tp4 - tp3).count() << std::endl;
+
+
+
 	// QC results
 	double avg_log_emission = sum_emission / n_aligned_events;
-	bool spanned = eventSeqLocPairs.front().second == 0 && eventSeqLocPairs.back().second == n_kmers - 1;
+	bool spanned = r.eventAlignment.front().second == 0 && r.eventAlignment.back().second == n_kmers - 1;
     
 	r.alignmentQCs.recordQCs(avg_log_emission, spanned, max_gap);
 
 	if(avg_log_emission < min_average_log_emission || !spanned || max_gap > max_gap_threshold) {
 		
 		//bool failed = true;		
-		eventSeqLocPairs.clear();
-    		//fprintf(stderr, "ada\t\t%s\t%s\t%.2lf\t%zu\t%.2lf\t%.2lf\t%d\t%d\t%d\n", failed ? "FAILED" : "OK",spanned ? "SPAN" : "NOTS", events_per_kmer, sequence.size(), avg_log_emission, avg_eventDiffs, curr_event_idx, max_gap, fills);
+		r.eventAlignment.clear();
+    	//fprintf(stderr, "ada\t\t%s\t%s\t%.2lf\t%zu\t%.2lf\t%.2lf\t%d\t%d\t%d\n", failed ? "FAILED" : "OK",spanned ? "SPAN" : "NOTS", events_per_kmer, sequence.size(), avg_log_emission, avg_eventDiffs, curr_event_idx, max_gap, fills);
 	}
 	else{
 
@@ -632,10 +656,10 @@ void adaptive_banded_simple_event_align( std::vector< double > &raw, read &r, Po
 
 		//compute var
 		rescale.var = 0.0;
-		for (unsigned int i = 0; i < eventSeqLocPairs.size(); i++){
+		for (unsigned int i = 0; i < r.eventAlignment.size(); i++){
 
-			double event = raw[eventSeqLocPairs[i].first];
-			std::string sixMer = sequence.substr(eventSeqLocPairs[i].second, k);
+			double event = raw[r.eventAlignment[i].first];
+			std::string sixMer = sequence.substr(r.eventAlignment[i].second, k);
 			double mu,stdv;
 			if (not useBrdUDistribution[i]){
 				mu = thymidineModel.at(sixMer).first;
@@ -655,11 +679,13 @@ void adaptive_banded_simple_event_align( std::vector< double > &raw, read &r, Po
 	}
 	//fprintf(stderr,"%f %f %f %f %f\n",s.shift,rescale.shift,s.scale,rescale.scale,rescale.var);
 
-	r.eventAlignment = eventSeqLocPairs;
-	r.posToScore = eventToScore;
 	r.scalings = rescale;
+
+	//benchmarking
+    //std::chrono::steady_clock::time_point tp5 = std::chrono::steady_clock::now();
+    //std::cout << "calculate shift and scale: " << std::chrono::duration_cast<std::chrono::microseconds>(tp5 - tp4).count() << std::endl;
+
 }
-//end:from nanopolish
 
 
 PoreParameters roughRescale( std::vector< double > &means, std::string &basecall ){
@@ -715,26 +741,22 @@ void normaliseEvents( read &r, bool bulkFast5 ){
 	event_table et = detect_events(&(r.raw)[0], (r.raw).size(), event_detection_defaults);
 	assert(et.n > 0);
 
-	/*we only care about the event mean, so pull these out so they're easier to work with */
-	std::vector< double > events_mu, events_length;
-	events_mu.reserve( et.n );
-	events_length.reserve( et.n );
-
+	//get the event mean and length
+	r.normalisedEvents.reserve(et.n);
+	r.eventLengths.reserve(et.n);
 	for ( unsigned int i = 0; i < et.n; i++ ){
 
 		if (et.event[i].mean > 1.0) {
-			events_mu.push_back( et.event[i].mean );
-			events_length.push_back(et.event[i].length / sample_rate);
+			r.normalisedEvents.push_back( et.event[i].mean );
+			r.eventLengths.push_back(et.event[i].length / sample_rate);
 		}
 	}
-	r.normalisedEvents = events_mu;
-	r.eventLengths = events_length;
 	free(et.event);
 
 	/*rough calculation of shift and scale so that we can align events */
-	PoreParameters s = roughRescale( events_mu, r.basecall );
+	PoreParameters s = roughRescale( r.normalisedEvents, r.basecall );
 
 	/*align 5mers to events using the basecall */
-	adaptive_banded_simple_event_align(events_mu, r, s);
+	adaptive_banded_simple_event_align(r.normalisedEvents, r, s);
 	r.scalings.eventsPerBase = std::max(1.25, (double) r.eventAlignment.size() / (double) (r.basecall.size() - 5));
 }

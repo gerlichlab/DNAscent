@@ -20,10 +20,6 @@
 #include "error_handling.h"
 #include "probability.h"
 
-#include "../Penthus/src/hmm.h"
-#include "../Penthus/src/probability.h"
-#include "../Penthus/src/states.h"
-
 
 static const char *help=
 "align: DNAscent executable that generates a BrdU-aware event alignment.\n"
@@ -186,7 +182,7 @@ int lnArgMax(std::vector<double> v){
 }
 
 
-std::pair< double, std::vector< std::string > > sequenceViterbi( std::vector <double> &observations,
+std::pair< double, std::vector< std::string > > builtinViterbi( std::vector <double> &observations,
 				std::string &sequence,
 				PoreParameters scalings){
 
@@ -249,6 +245,7 @@ std::pair< double, std::vector< std::string > > sequenceViterbi( std::vector <do
 
 		matchProb = eln( normalPDF( level_mu, level_sigma, observations[t] ) );
 		insProb = eln( uniformPDF( 0, 250, observations[t] ) );
+		//insProb = 0.0; //log(1) = 0
 
 		//to the base 1 insertion
 		I_curr[0] = lnVecMax({lnProd( lnProd( I_prev[0], eln( internalI2I ) ), insProb ),
@@ -310,6 +307,7 @@ std::pair< double, std::vector< std::string > > sequenceViterbi( std::vector <do
 			//get model parameters
 			sixMer = sequence.substr(i, 6);
 			insProb = eln( uniformPDF( 0, 250, observations[t] ) );
+			//insProb = 0.0; //log(1) = 0
 
 			level_mu = scalings.shift + scalings.scale * thymidineModel.at(sixMer).first;
 			level_sigma = scalings.var * thymidineModel.at(sixMer).second;
@@ -399,16 +397,6 @@ std::pair< double, std::vector< std::string > > sequenceViterbi( std::vector <do
 			}
 		}
 
-		//TESTING - print out a single time iteration
-		/*
-		for ( unsigned int i = 0; i < n_states; i++ ){
-			std::cout << M_curr[i] << std::endl;
-			std::cout << I_curr[i] << std::endl;
-			std::cout << D_curr[i] << std::endl;
-		}
-		exit(EXIT_SUCCESS);
-		 */
-
 		I_prev = I_curr;
 		M_prev = M_curr;
 		D_prev = D_curr;
@@ -459,7 +447,6 @@ std::pair< double, std::vector< std::string > > sequenceViterbi( std::vector <do
 	}
 
 	std::vector<std::string> stateIndices;
-	stateIndices.push_back("END");
 	while (traceback_old != -1){
 
 		traceback_new = backtraceS[ traceback_old ][ traceback_t ];
@@ -484,112 +471,8 @@ std::pair< double, std::vector< std::string > > sequenceViterbi( std::vector <do
 		}
 		traceback_old = traceback_new;
 	}
-	stateIndices.push_back("START");
 	std::reverse( stateIndices.begin(), stateIndices.end() );
 	return std::make_pair( viterbiScore,stateIndices);
-}
-
-
-std::pair< double, std::vector< std::string > > eventViterbi( std::vector <double> &observations,
-														      std::string &sequence,
-															  PoreParameters scalings){
-
-	//Initial transitions within modules (internal transitions)
-	double internalM12I = 0.001;
-	double internalI2I = 0.001;
-	double internalM12M1 = 1. - (1./scalings.eventsPerBase);
-
-	//Initial transitions between modules (external transitions)
-	double externalD2D = 0.3;
-	double externalD2M1 = 0.7;
-	double externalI2M1 = 0.999;
-	double externalM12D = 0.0025;
-	double externalM12M1 = 1.0 - externalM12D - internalM12I - internalM12M1;
-
-	HiddenMarkovModel hmm = HiddenMarkovModel();
-
-	/*STATES - vector (of vectors) to hold the states at each position on the reference - fill with dummy values */
-	std::vector< std::vector< State > > states( 3, std::vector< State >( sequence.length() - 5, State( NULL, "", "", "", 1.0 ) ) );
-
-	/*DISTRIBUTIONS - vector to hold normal distributions, a single uniform and silent distribution to use for everything else */
-	std::vector< NormalDistribution > nd;
-	nd.reserve( sequence.length() - 5 );
-
-	SilentDistribution sd( 0.0, 0.0 );
-	UniformDistribution ud( 0, 250.0 );
-
-	std::string loc, sixMer;
-
-	/*create make normal distributions for each reference position using the ONT 6mer model */
-	for ( unsigned int i = 0; i < sequence.length() - 5; i++ ){
-
-		sixMer = sequence.substr( i, 6 );
-		nd.push_back( NormalDistribution( scalings.shift + scalings.scale * thymidineModel.at(sixMer).first, scalings.var * thymidineModel.at(sixMer).second ) );
-	}
-
-	/*the first insertion state after start */
-	//State firstI = State( &ud, "-1_I", "", "", 1.0 );
-	//hmm.add_state( firstI );
-
-	/*add states to the model, handle internal module transitions */
-	for ( unsigned int i = 0; i < sequence.length() - 5; i++ ){
-
-		loc = std::to_string( i );
-		sixMer = sequence.substr( i, 6 );
-
-		states[ 0 ][ i ] = State( &sd,		loc + "_D", 	sixMer,	"", 		1.0 );
-		states[ 1 ][ i ] = State( &ud,		loc + "_I", 	sixMer,	"", 		1.0 );
-		states[ 2 ][ i ] = State( &nd[i], 	loc + "_M", 	sixMer,	loc + "_match", 1.0 );
-
-		/*add state to the model */
-		for ( unsigned int j = 0; j < 3; j++ ){
-
-			states[ j ][ i ].meta = sixMer;
-			hmm.add_state( states[ j ][ i ] );
-		}
-
-		/*transitions between states, internal to a single base */
-		/*from I */
-		hmm.add_transition( states[1][i], states[1][i], internalI2I );
-
-		/*from M1 */
-		hmm.add_transition( states[2][i], states[2][i], internalM12M1 );
-		hmm.add_transition( states[2][i], states[1][i], internalM12I );
-	}
-
-	/*add transitions between modules (external transitions) */
-	for ( unsigned int i = 0; i < sequence.length() - 6; i++ ){
-
-		/*from D */
-		hmm.add_transition( states[0][i], states[0][i + 1], externalD2D );
-		hmm.add_transition( states[0][i], states[2][i + 1], externalD2M1 );
-
-		/*from I */
-		hmm.add_transition( states[1][i], states[2][i + 1], externalI2M1 );
-
-		/*from M */
-		hmm.add_transition( states[2][i], states[0][i + 1], externalM12D );
-		hmm.add_transition( states[2][i], states[2][i + 1], externalM12M1 );
-	}
-
-	/*handle start states */
-	//hmm.add_transition( hmm.start, firstI, 0.25 );
-	hmm.add_transition( hmm.start, states[0][0], externalM12D );
-	hmm.add_transition( hmm.start, states[1][0], internalM12I );
-	hmm.add_transition( hmm.start, states[2][0], externalM12M1 + internalM12M1);
-
-	/*transitions from first insertion */
-	//hmm.add_transition( firstI, firstI, 0.25 );
-	//hmm.add_transition( firstI, states[0][0], 0.25 );
-	//hmm.add_transition( firstI, states[2][0], 0.5 );
-
-	/*handle end states */
-	hmm.add_transition( states[0][sequence.length() - 6], hmm.end, 1.0 );
-	hmm.add_transition( states[1][sequence.length() - 6], hmm.end, externalI2M1 );
-	hmm.add_transition( states[2][sequence.length() - 6], hmm.end, externalM12M1 + externalM12D );
-
-	hmm.finalise();
-	return hmm.viterbi( observations );
 }
 
 
@@ -606,7 +489,11 @@ std::string eventalign( read &r,
 	out += ">" + r.readID + " " + r.referenceMappedTo + " " + std::to_string(r.refStart) + " " + std::to_string(r.refEnd) + " " + strand + "\n";
 
 	unsigned int posOnRef = 0;
-	while ( posOnRef < r.referenceSeqMappedTo.size() - windowLength - 7 ){ //-7 because we need to reach forward 6 bases when we process the match states
+	while ( posOnRef < r.referenceSeqMappedTo.size() - 5 ){ //-5 because we need to reach forward 6 bases when we process the match states
+
+		//adjust so we can get the last bit of the read if it doesn't line up with the windows nicely
+		unsigned int basesToEnd = r.referenceSeqMappedTo.size() - 5 - posOnRef;
+		windowLength = std::min(basesToEnd, windowLength);
 
 		std::string readSnippet = (r.referenceSeqMappedTo).substr(posOnRef, windowLength);
 
@@ -636,10 +523,17 @@ std::string eventalign( read &r,
 		std::vector< double > eventLengthsSnippet;
 
 		/*get the events that correspond to the read snippet */
+		//out += "readHead at start: " + std::to_string(readHead) + "\n";
+		bool firstMatch = true;
 		for ( unsigned int j = readHead; j < (r.eventAlignment).size(); j++ ){
 
 			/*if an event has been aligned to a position in the window, add it */
-			if ( (r.eventAlignment)[j].second >= (r.refToQuery)[posOnRef] and (r.eventAlignment)[j].second < (r.refToQuery)[posOnRef + windowLength] ){
+			if ( (r.refToQuery)[posOnRef] <= (r.eventAlignment)[j].second and (r.eventAlignment)[j].second < (r.refToQuery)[posOnRef + windowLength-5] ){
+
+				if (firstMatch){
+					readHead = j;
+					firstMatch = false;
+				}
 
 				double ev = (r.normalisedEvents)[(r.eventAlignment)[j].first];
 				if (ev > r.scalings.shift + 1.0 and ev < 250.0){
@@ -649,7 +543,7 @@ std::string eventalign( read &r,
 			}
 
 			/*stop once we get to the end of the window */
-			if ( (r.eventAlignment)[j].second >= (r.refToQuery)[posOnRef + windowLength] ) break;
+			if ( (r.eventAlignment)[j].second >= (r.refToQuery)[posOnRef + windowLength - 5] ) break;
 		}
 
 		//pass on this window if we have a deletion
@@ -660,116 +554,42 @@ std::string eventalign( read &r,
 			continue;
 		}
 
-		/*
-		TESTING - print out the read snippet, the ONT model, and the aligned events
-		std::cout << readSnippet << std::endl;
-		for ( int pos = 0; pos < readSnippet.length()-5; pos++ ){
-
-			std::cout << readSnippet.substr(pos,6) << "\t" << thymidineModel.at( readSnippet.substr(pos,6) ).first << std::endl;
-		}
-		for ( auto ev = eventSnippet.begin(); ev < eventSnippet.end(); ev++){
-			double scaledEv =  (*ev - r.scalings.shift) / r.scalings.scale;
-			std::cout << scaledEv << std::endl;
-		}
-		*/
-
 		//calculate where we are on the assembly - if we're a reverse complement, we're moving backwards down the reference genome
 		int globalPosOnRef;
 		if ( r.isReverse ) globalPosOnRef = r.refEnd - posOnRef - 6;
 		else globalPosOnRef = r.refStart + posOnRef;
 
-		//START TESTING
-		//#####################################################################################################################################
-		std::pair< double, std::vector< std::string > > localAlignment = eventViterbi( eventSnippet, readSnippet, r.scalings);
-		std::pair< double, std::vector<std::string> > builtinAlignment = sequenceViterbi( eventSnippet, readSnippet, r.scalings);
+		std::pair< double, std::vector<std::string> > builtinAlignment = builtinViterbi( eventSnippet, readSnippet, r.scalings);
 
-		size_t evIdx = 0;
-		bool printLog = false;
-		std::string strLog;
-		for (size_t path = 0; path < std::min(localAlignment.second.size(), builtinAlignment.second.size()); path++){
-			//std::cout << localAlignment.second[path] << " " << builtinAlignment[path] <<  std::endl;
-
-
-			//PRINT OUT SIXMER
-			if (builtinAlignment.second[path] == "END" or builtinAlignment.second[path] == "START") continue;
-
-			std::string label = builtinAlignment.second[path].substr(builtinAlignment.second[path].find('_')+1);
-
-	        if (label == "D") continue; //silent states don't emit an event
-
-	        int pos = std::stoi(builtinAlignment.second[path].substr(0,builtinAlignment.second[path].find('_')));
-			std::string sixMerStrand = (r.referenceSeqMappedTo).substr(posOnRef + pos, 6);
-
-			double scaledEvent = (eventSnippet[evIdx] - r.scalings.shift) / r.scalings.scale;
-			double eventLength = eventLengthsSnippet[evIdx];
-
-			assert(scaledEvent > 0.0);
-
-			unsigned int evPos;
-			std::string sixMerRef;
-			if (r.isReverse){
-				evPos = globalPosOnRef - pos;
-				sixMerRef = reverseComplement(sixMerStrand);
-			}
-			else{
-				evPos = globalPosOnRef + pos;
-				sixMerRef = sixMerStrand;
-			}
-	        evIdx ++;
-	        strLog +=  localAlignment.second[path] + " " + builtinAlignment.second[path] + " " + sixMerStrand + "\n";
-			//END PRINT OUT SIXMER
-
-			if (localAlignment.second[path] != builtinAlignment.second[path]) printLog = true;
-		}
-		if (printLog){
-			std::cout << "###############################################################################################################" << std::endl;
-			std::cout << strLog;
-			std::cout << localAlignment.second.size() << " " << builtinAlignment.second.size() << std::endl;
-			std::cout << "Penthus Viterbi score: " << localAlignment.first << std::endl;
-			std::cout << "Buildin Viterbi score: " << builtinAlignment.first << std::endl;
-		}
-
-		assert(localAlignment.second.size() == builtinAlignment.second.size());
-		//END TESTING
-		//#####################################################################################################################################
-
-		std::vector< std::string > stateLabels = localAlignment.second;
+		std::vector< std::string > stateLabels = builtinAlignment.second;
 		size_t lastM_ev = 0;
 		size_t lastM_ref = 0;
 
-		evIdx = 0;
+		size_t evIdx = 0;
 
 		//grab the index of the last match so we don't print insertions where we shouldn't
-		for (size_t i = 1; i < stateLabels.size(); i++){
-
-			assert(stateLabels[i] != "START");
-			if (stateLabels[i] == "END") continue;
+		for (size_t i = 0; i < stateLabels.size(); i++){
 
 			std::string label = stateLabels[i].substr(stateLabels[i].find('_')+1);
-
-	        if (label == "D") continue; //silent states don't emit an event
-
 	        int pos = std::stoi(stateLabels[i].substr(0,stateLabels[i].find('_')));
 
 	        if (label == "M"){
 	        	lastM_ev = evIdx;
 	        	lastM_ref = pos;
 	        }
-	        evIdx ++;
+
+	        if (label != "D") evIdx++; //silent states don't emit an event
 		}
 
 		//do a second pass to print the alignment
 		evIdx = 0;
-		for (size_t i = 1; i < stateLabels.size(); i++){
-
-			assert(stateLabels[i] != "START");
-			if (stateLabels[i] == "END") continue;
+		for (size_t i = 0; i < stateLabels.size(); i++){
 
 			std::string label = stateLabels[i].substr(stateLabels[i].find('_')+1);
+	        int pos = std::stoi(stateLabels[i].substr(0,stateLabels[i].find('_')));
 
 	        if (label == "D") continue; //silent states don't emit an event
 
-	        int pos = std::stoi(stateLabels[i].substr(0,stateLabels[i].find('_')));
 			std::string sixMerStrand = (r.referenceSeqMappedTo).substr(posOnRef + pos, 6);
 
 			double scaledEvent = (eventSnippet[evIdx] - r.scalings.shift) / r.scalings.scale;
@@ -823,7 +643,11 @@ std::string eventalign_train( read &r,
 	out += ">" + r.readID + " " + r.referenceMappedTo + " " + std::to_string(r.refStart) + " " + std::to_string(r.refEnd) + " " + strand + "\n";
 
 	unsigned int posOnRef = 0;
-	while ( posOnRef < r.referenceSeqMappedTo.size() - windowLength - 7 ){ //-7 because we need to reach forward 6 bases when we process the match states
+	while ( posOnRef < r.referenceSeqMappedTo.size() - 5 ){ //-5 because we need to reach forward 6 bases when we process the match states
+
+		//adjust so we can get the last bit of the read if it doesn't line up with the windows nicely
+		unsigned int basesToEnd = r.referenceSeqMappedTo.size() - 5 - posOnRef;
+		windowLength = std::min(basesToEnd, windowLength);
 
 		std::string readSnippet = (r.referenceSeqMappedTo).substr(posOnRef, windowLength);
 
@@ -852,11 +676,17 @@ std::string eventalign_train( read &r,
 		std::vector< double > eventSnippet;
 		std::vector< double > eventLengthsSnippet;
 
-		//get events for the alignment
+		/*get the events that correspond to the read snippet */
+		bool firstMatch = true;
 		for ( unsigned int j = readHead; j < (r.eventAlignment).size(); j++ ){
 
 			/*if an event has been aligned to a position in the window, add it */
-			if ( (r.eventAlignment)[j].second >= (r.refToQuery)[posOnRef] and (r.eventAlignment)[j].second < (r.refToQuery)[posOnRef + windowLength] ){
+			if ( (r.refToQuery)[posOnRef] <= (r.eventAlignment)[j].second and (r.eventAlignment)[j].second < (r.refToQuery)[posOnRef + windowLength-5] ){
+
+				if (firstMatch){
+					readHead = j;
+					firstMatch = false;
+				}
 
 				double ev = (r.normalisedEvents)[(r.eventAlignment)[j].first];
 				if (ev > r.scalings.shift + 1.0 and ev < 250.0){
@@ -866,61 +696,53 @@ std::string eventalign_train( read &r,
 			}
 
 			/*stop once we get to the end of the window */
-			if ( (r.eventAlignment)[j].second >= (r.refToQuery)[posOnRef + windowLength] ) break;
+			if ( (r.eventAlignment)[j].second >= (r.refToQuery)[posOnRef + windowLength - 5] ) break;
 		}
 
 		//pass on this window if we have a deletion
+		//TODO: make sure this does actually catch deletion cases properly
 		if ( eventSnippet.size() < 2 ){
 
 			posOnRef += windowLength;
 			continue;
 		}
 
-
 		//calculate where we are on the assembly - if we're a reverse complement, we're moving backwards down the reference genome
 		int globalPosOnRef;
 		if ( r.isReverse ) globalPosOnRef = r.refEnd - posOnRef - 6;
 		else globalPosOnRef = r.refStart + posOnRef;
 
-		std::pair< double, std::vector< std::string > > localAlignment = eventViterbi( eventSnippet, readSnippet, r.scalings);
+		std::pair< double, std::vector<std::string> > builtinAlignment = builtinViterbi( eventSnippet, readSnippet, r.scalings);
 
-		std::vector< std::string > stateLabels = localAlignment.second;
+		std::vector< std::string > stateLabels = builtinAlignment.second;
 		size_t lastM_ev = 0;
 		size_t lastM_ref = 0;
 
 		size_t evIdx = 0;
 
 		//grab the index of the last match so we don't print insertions where we shouldn't
-		for (size_t i = 1; i < stateLabels.size(); i++){
-
-			assert(stateLabels[i] != "START");
-			if (stateLabels[i] == "END") continue;
+		for (size_t i = 0; i < stateLabels.size(); i++){
 
 			std::string label = stateLabels[i].substr(stateLabels[i].find('_')+1);
-
-	        if (label == "D") continue; //silent states don't emit an event
-
 	        int pos = std::stoi(stateLabels[i].substr(0,stateLabels[i].find('_')));
 
 	        if (label == "M"){
 	        	lastM_ev = evIdx;
 	        	lastM_ref = pos;
 	        }
-	        evIdx ++;
+
+	        if (label != "D") evIdx++; //silent states don't emit an event
 		}
 
 		//do a second pass to print the alignment
 		evIdx = 0;
-		for (size_t i = 1; i < stateLabels.size(); i++){
-
-			assert(stateLabels[i] != "START");
-			if (stateLabels[i] == "END") continue;
+		for (size_t i = 0; i < stateLabels.size(); i++){
 
 			std::string label = stateLabels[i].substr(stateLabels[i].find('_')+1);
+	        int pos = std::stoi(stateLabels[i].substr(0,stateLabels[i].find('_')));
 
 	        if (label == "D") continue; //silent states don't emit an event
 
-	        int pos = std::stoi(stateLabels[i].substr(0,stateLabels[i].find('_')));
 			std::string sixMerStrand = (r.referenceSeqMappedTo).substr(posOnRef + pos, 6);
 
 			double scaledEvent = (eventSnippet[evIdx] - r.scalings.shift) / r.scalings.scale;
@@ -1047,7 +869,7 @@ AlignedRead eventalign_detect( read &r,
 		if ( r.isReverse ) globalPosOnRef = r.refEnd - posOnRef - 6;
 		else globalPosOnRef = r.refStart + posOnRef;
 
-		std::pair< double, std::vector< std::string > > localAlignment = eventViterbi( eventSnippet, readSnippet, r.scalings);
+		std::pair< double, std::vector< std::string > > localAlignment = builtinViterbi( eventSnippet, readSnippet, r.scalings);
 
 		std::vector< std::string > stateLabels = localAlignment.second;
 		size_t lastM_ev = 0;
