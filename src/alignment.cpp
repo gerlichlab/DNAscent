@@ -186,7 +186,7 @@ int lnArgMax(std::vector<double> v){
 }
 
 
-std::vector<std::string> sequenceViterbi( std::vector <double> &observations,
+std::pair< double, std::vector< std::string > > sequenceViterbi( std::vector <double> &observations,
 				std::string &sequence,
 				PoreParameters scalings){
 
@@ -431,7 +431,7 @@ std::vector<std::string> sequenceViterbi( std::vector <double> &observations,
 							  lnProd( M_curr.back(), eln( externalM12M1 + externalM12D ) ),//M to end
 							  lnProd( I_curr.back(), eln( externalI2M1 ) )//I to end
 							 });
-	std::cout << "Builtin Viterbi score: " << viterbiScore << std::endl;
+	//std::cout << "Builtin Viterbi score: " << viterbiScore << std::endl;
 
 
 	//figure out where to go from the end state
@@ -486,7 +486,7 @@ std::vector<std::string> sequenceViterbi( std::vector <double> &observations,
 	}
 	stateIndices.push_back("START");
 	std::reverse( stateIndices.begin(), stateIndices.end() );
-	return stateIndices;
+	return std::make_pair( viterbiScore,stateIndices);
 }
 
 
@@ -497,14 +497,14 @@ std::pair< double, std::vector< std::string > > eventViterbi( std::vector <doubl
 	//Initial transitions within modules (internal transitions)
 	double internalM12I = 0.001;
 	double internalI2I = 0.001;
-	double internalM12M1 = 1. - (1./scalings.eventsPerBase);//0.4;
+	double internalM12M1 = 1. - (1./scalings.eventsPerBase);
 
 	//Initial transitions between modules (external transitions)
 	double externalD2D = 0.3;
 	double externalD2M1 = 0.7;
 	double externalI2M1 = 0.999;
 	double externalM12D = 0.0025;
-	double externalM12M1 = 1.0 - externalM12D - internalM12I - internalM12M1;//0.5965;
+	double externalM12M1 = 1.0 - externalM12D - internalM12I - internalM12M1;
 
 	HiddenMarkovModel hmm = HiddenMarkovModel();
 
@@ -678,32 +678,66 @@ std::string eventalign( read &r,
 		if ( r.isReverse ) globalPosOnRef = r.refEnd - posOnRef - 6;
 		else globalPosOnRef = r.refStart + posOnRef;
 
+		//START TESTING
+		//#####################################################################################################################################
 		std::pair< double, std::vector< std::string > > localAlignment = eventViterbi( eventSnippet, readSnippet, r.scalings);
+		std::pair< double, std::vector<std::string> > builtinAlignment = sequenceViterbi( eventSnippet, readSnippet, r.scalings);
 
-		std::vector<std::string> builtinAlignment = sequenceViterbi( eventSnippet, readSnippet, r.scalings);
+		size_t evIdx = 0;
+		bool printLog = false;
+		std::string strLog;
+		for (size_t path = 0; path < std::min(localAlignment.second.size(), builtinAlignment.second.size()); path++){
+			//std::cout << localAlignment.second[path] << " " << builtinAlignment[path] <<  std::endl;
 
-		//TESTING -check builtin against Penthus
-		std::cout << localAlignment.second.size() << " " << builtinAlignment.size() << std::endl;
-		std::cout << "Penthus Viterbi score: " << localAlignment.first << std::endl;
 
-		for (size_t path = 0; path < std::min(localAlignment.second.size(), builtinAlignment.size()); path++){
-			std::cout << localAlignment.second[path] << " " << builtinAlignment[path] <<  std::endl;
+			//PRINT OUT SIXMER
+			if (builtinAlignment.second[path] == "END" or builtinAlignment.second[path] == "START") continue;
+
+			std::string label = builtinAlignment.second[path].substr(builtinAlignment.second[path].find('_')+1);
+
+	        if (label == "D") continue; //silent states don't emit an event
+
+	        int pos = std::stoi(builtinAlignment.second[path].substr(0,builtinAlignment.second[path].find('_')));
+			std::string sixMerStrand = (r.referenceSeqMappedTo).substr(posOnRef + pos, 6);
+
+			double scaledEvent = (eventSnippet[evIdx] - r.scalings.shift) / r.scalings.scale;
+			double eventLength = eventLengthsSnippet[evIdx];
+
+			assert(scaledEvent > 0.0);
+
+			unsigned int evPos;
+			std::string sixMerRef;
+			if (r.isReverse){
+				evPos = globalPosOnRef - pos;
+				sixMerRef = reverseComplement(sixMerStrand);
+			}
+			else{
+				evPos = globalPosOnRef + pos;
+				sixMerRef = sixMerStrand;
+			}
+	        evIdx ++;
+	        strLog +=  localAlignment.second[path] + " " + builtinAlignment.second[path] + " " + sixMerStrand + "\n";
+			//END PRINT OUT SIXMER
+
+			if (localAlignment.second[path] != builtinAlignment.second[path]) printLog = true;
+		}
+		if (printLog){
+			std::cout << "###############################################################################################################" << std::endl;
+			std::cout << strLog;
+			std::cout << localAlignment.second.size() << " " << builtinAlignment.second.size() << std::endl;
+			std::cout << "Penthus Viterbi score: " << localAlignment.first << std::endl;
+			std::cout << "Buildin Viterbi score: " << builtinAlignment.first << std::endl;
 		}
 
-		for (size_t path = 0; path < std::min(localAlignment.second.size(), builtinAlignment.size()); path++){
-			std::cout << localAlignment.second[path] << " " << builtinAlignment[path] <<  std::endl;
-			assert(localAlignment.second[path] == builtinAlignment[path]);
-		}
-		std::cout << "###############################################################################################################" << std::endl;
-
-		assert(localAlignment.second.size() == builtinAlignment.size());
+		assert(localAlignment.second.size() == builtinAlignment.second.size());
 		//END TESTING
+		//#####################################################################################################################################
 
 		std::vector< std::string > stateLabels = localAlignment.second;
 		size_t lastM_ev = 0;
 		size_t lastM_ref = 0;
 
-		size_t evIdx = 0;
+		evIdx = 0;
 
 		//grab the index of the last match so we don't print insertions where we shouldn't
 		for (size_t i = 1; i < stateLabels.size(); i++){
