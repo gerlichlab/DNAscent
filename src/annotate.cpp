@@ -19,6 +19,7 @@
 #include "../htslib/htslib/hts.h"
 #include "../htslib/htslib/sam.h"
 #include "../fast5/include/fast5.hpp"
+#include "htsInterface.h"
 
 
 static const char *help=

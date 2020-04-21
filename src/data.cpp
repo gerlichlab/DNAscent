@@ -23,6 +23,7 @@
 #include "poreModels.h"
 #include "detect.h"
 #include "alignment.h"
+#include "htsInterface.h"
 
 static const char *help=
 "trainingData: DNAscent executable that generates training data for DNAscent LSTM analogue detection.\n"

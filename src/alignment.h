@@ -20,6 +20,9 @@
 #include "poreModels.h"
 #include "common.h"
 #include <memory>
+#include <utility>
+
+#define NFEATURES 12
 
 
 class AlignedPosition{
@@ -47,15 +50,14 @@ class AlignedPosition{
 		std::vector<double> makeFeature(void){
 
 			assert(events.size() > 0 && events.size() == lengths.size());
-			assert(sixMer.substr(0,1) == "A" || sixMer.substr(0,1) == "T" || sixMer.substr(0,1) == "G" || sixMer.substr(0,1) == "C" || sixMer.substr(0,1) == "N");
+			assert(sixMer.substr(0,1) == "A" || sixMer.substr(0,1) == "T" || sixMer.substr(0,1) == "G" || sixMer.substr(0,1) == "C");
 
 			//one-hot encode bases
-			std::vector<double> feature = {0., 0., 0., 0., 0.};
+			std::vector<double> feature = {0., 0., 0., 0.};
 			if (sixMer.substr(0,1) == "A") feature[0] = 1.;
 			else if (sixMer.substr(0,1) == "T") feature[1] = 1.;
 			else if (sixMer.substr(0,1) == "G") feature[2] = 1.;
 			else if (sixMer.substr(0,1) == "C") feature[3] = 1.;
-			else if (sixMer.substr(0,1) == "N") feature[4] = 1.;
 
 			//events
 			double eventMean = vectorMean(events);
@@ -76,8 +78,6 @@ class AlignedPosition{
 
 			return feature;
 		}
-
-
 };
 
 
@@ -120,10 +120,17 @@ class AlignedRead{
 		std::string getStrand(void){
 			return strand;
 		}
-		std::vector<std::vector<double>> makeTensor(void){
+		unsigned int getMappingLower(void){
+			return mappingLower;
+		}
+		unsigned int getMappingUpper(void){
+			return mappingUpper;
+		}
+		std::vector<double> makeTensor(void){
 
 			assert(strand == "fwd" || strand == "rev");
-			std::vector<std::vector<double>> tensor;
+			std::vector<double> tensor;
+			tensor.reserve(NFEATURES * positions.size());
 
 			if (strand == "fwd"){
 
@@ -135,7 +142,7 @@ class AlignedRead{
 
 					std::vector<double> feature = (p -> second) -> makeFeature();
 					feature.push_back(gap);
-					tensor.push_back(feature);
+					tensor.insert(tensor.end(), feature.begin(), feature.end());
 				}
 			}
 			else{
@@ -148,17 +155,39 @@ class AlignedRead{
 
 					std::vector<double> feature = (p -> second) -> makeFeature();
 					feature.push_back(gap);
-					tensor.push_back(feature);
+					tensor.insert(tensor.end(), feature.begin(), feature.end());
 				}
 			}
 			return tensor;
 		}
-};
+		std::vector<unsigned int> getPositions(void){
 
+			std::vector<unsigned int> out;
+			out.reserve(positions.size());
+			if (strand == "fwd"){
+
+				for (auto p = positions.begin(); p != positions.end(); p++){
+					out.push_back(p -> first);
+				}
+			}
+			else{
+
+				for (auto p = positions.rbegin(); p != positions.rend(); p++){
+					out.push_back(p -> first);
+				}
+			}
+			return out;
+		}
+		std::pair<size_t, size_t> getShape(void){
+
+			return std::make_pair(positions.size(), NFEATURES);
+		}
+};
 
 
 /*function prototypes */
 int align_main( int argc, char** argv );
 std::string eventalign_train( read &, unsigned int , std::map<unsigned int, double> &);
+AlignedRead eventalign_detect( read &, unsigned int );
 
 #endif
