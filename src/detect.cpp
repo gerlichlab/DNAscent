@@ -12,6 +12,7 @@
 //#define TEST_METHYL 1
 
 #include <fstream>
+#include <algorithm>
 #include <math.h>
 #include <stdlib.h>
 #include <limits>
@@ -958,7 +959,7 @@ std::string runCNN(AlignedRead &r, std::string modelPath){
 	unsigned int outputFields = 2;
 
 	//write the header
-	str_output += r.getReadID() + " " + r.getChromosome() + " " + std::to_string(r.getMappingLower()) + " " + std::to_string(r.getMappingUpper()) + " " + r.getStrand() + "\n"; //header
+	str_output += ">" + r.getReadID() + " " + r.getChromosome() + " " + std::to_string(r.getMappingLower()) + " " + std::to_string(r.getMappingUpper()) + " " + r.getStrand() + "\n"; //header
 
 	//get positions on the read reference to write the output
 	std::vector<unsigned int> positions = r.getPositions();
@@ -970,17 +971,27 @@ std::string runCNN(AlignedRead &r, std::string modelPath){
 
 	//write the output
 	unsigned int pos = 0;
-	str_output += std::to_string(positions[0]);
+	std::vector<std::string> lines;
+	lines.reserve(positions.size());
+	std::string str_line = std::to_string(positions[0]);
 	for(size_t i = 0; i < output_size; i++){
-		str_output += "\t" + std::to_string(output_array[i]);
+		str_line += "\t" + std::to_string(output_array[i]);
 		if((i+1)%outputFields==0){
-			str_output += "\t" + sixMers[pos];
-			str_output += "\n";
+			if (r.getStrand() == "rev") str_line += "\t" + reverseComplement(sixMers[pos]);
+			else str_line += "\t" + sixMers[pos];
+			lines.push_back(str_line);
+			str_line = "";
 			pos++;
-			if (i != output_size-1) str_output += std::to_string(positions[pos]);
-
+			if (i != output_size-1) str_line += std::to_string(positions[pos]);
 		}
 	}
+
+	if (r.getStrand() == "rev") std::reverse(lines.begin(),lines.end());
+
+	for (auto s = lines.begin(); s < lines.end(); s++){
+		str_output += *s + "\n";
+	}
+
 	return str_output;
 }
 
