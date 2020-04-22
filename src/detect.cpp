@@ -142,6 +142,11 @@ Arguments parseDetectArguments( int argc, char** argv ){
 	}
 	if (args.outputFilename == args.indexFilename or args.outputFilename == args.referenceFilename or args.outputFilename == args.bamFilename) throw OverwriteFailure();
 
+	if (args.methylAware and not args.useHMM){
+		std::cout << "Neural network is currently not yet methyl-aware, use --HMM." << std::endl;
+		exit(EXIT_SUCCESS);
+	}
+
 	return args;
 }
 
