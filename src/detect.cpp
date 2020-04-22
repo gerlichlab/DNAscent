@@ -962,6 +962,7 @@ std::string runCNN(AlignedRead &r, std::string modelPath){
 
 	//get positions on the read reference to write the output
 	std::vector<unsigned int> positions = r.getPositions();
+	std::vector<std::string> sixMers = r.getSixMers();
 
 	size_t output_size = TF_TensorByteSize(&output) / sizeof(float);
 	assert(output_size == protoShape.first * outputFields);
@@ -973,6 +974,7 @@ std::string runCNN(AlignedRead &r, std::string modelPath){
 	for(size_t i = 0; i < output_size; i++){
 		str_output += "\t" + std::to_string(output_array[i]);
 		if((i+1)%outputFields==0){
+			str_output += "\t" + sixMers[pos];
 			str_output += "\n";
 			pos++;
 			if (i != output_size-1) str_output += std::to_string(positions[pos]);

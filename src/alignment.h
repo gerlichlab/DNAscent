@@ -47,6 +47,10 @@ class AlignedPosition{
 			events.push_back(ev);
 			lengths.push_back(len);
 		}
+		std::string getSixMer(void){
+
+			return sixMer;
+		}
 		std::vector<double> makeFeature(void){
 
 			assert(events.size() > 0 && events.size() == lengths.size());
@@ -174,6 +178,24 @@ class AlignedRead{
 
 				for (auto p = positions.rbegin(); p != positions.rend(); p++){
 					out.push_back(p -> first);
+				}
+			}
+			return out;
+		}
+		std::vector<std::string> getSixMers(void){
+
+			std::vector<std::string> out;
+			out.reserve(positions.size());
+			if (strand == "fwd"){
+
+				for (auto p = positions.begin(); p != positions.end(); p++){
+					out.push_back((p -> second) -> getSixMer());
+				}
+			}
+			else{
+
+				for (auto p = positions.rbegin(); p != positions.rend(); p++){
+					out.push_back((p -> second) -> getSixMer());
 				}
 			}
 			return out;
