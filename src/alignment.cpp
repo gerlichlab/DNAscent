@@ -245,8 +245,8 @@ std::pair< double, std::vector< std::string > > builtinViterbi( std::vector <dou
 		level_sigma = scalings.var * thymidineModel.at(sixMer).second;
 
 		matchProb = eln( normalPDF( level_mu, level_sigma, observations[t] ) );
-		insProb = eln( uniformPDF( 0, 250, observations[t] ) );
-		//insProb = 0.0; //log(1) = 0
+		//insProb = eln( uniformPDF( 0, 250, observations[t] ) );
+		insProb = 0.0; //log(1) = 0
 
 		//to the base 1 insertion
 		I_curr[0] = lnVecMax({lnProd( lnProd( I_prev[0], eln( internalI2I ) ), insProb ),
@@ -307,8 +307,8 @@ std::pair< double, std::vector< std::string > > builtinViterbi( std::vector <dou
 
 			//get model parameters
 			sixMer = sequence.substr(i, 6);
-			insProb = eln( uniformPDF( 0, 250, observations[t] ) );
-			//insProb = 0.0; //log(1) = 0
+			//insProb = eln( uniformPDF( 0, 250, observations[t] ) );
+			insProb = 0.0; //log(1) = 0
 
 			level_mu = scalings.shift + scalings.scale * thymidineModel.at(sixMer).first;
 			level_sigma = scalings.var * thymidineModel.at(sixMer).second;
