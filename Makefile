@@ -57,6 +57,10 @@ CPP_SRC := $(foreach dir, $(SUBDIRS), $(wildcard $(dir)/*.cpp))
 C_SRC := $(foreach dir, $(SUBDIRS), $(wildcard $(dir)/*.c))
 EXE_SRC = src/DNAscent.cpp
 
+#log the commit 
+src/gitcommit.h: .git/HEAD .git/index
+	echo "const char *gitcommit = \"$(shell git rev-parse HEAD)\";" > $@
+
 #generate object names
 CPP_OBJ = $(CPP_SRC:.cpp=.o)
 C_OBJ = $(C_SRC:.c=.o)
@@ -68,15 +72,12 @@ depend: .depend
 	$(CXX) $(CXXFLAGS) -MM $(CPP_SRC) $(C_SRC) > ./.depend;
 
 #compile each object
-.cpp.o:
+.cpp.o: src/gitcommit.h
 	$(CXX) -o $@ -c $(CXXFLAGS) -fPIC $<
 
 .c.o:
 	$(CC) -o $@ -c $(CFLAGS) $(H5_INCLUDE) -fPIC $<
 	
-#log the commit 
-src/gitcommit.h: .git/HEAD .git/index
-	echo "const char *gitcommit = \"$(shell git rev-parse HEAD)\";" > $@
 
 #compile the main executable
 $(MAIN_EXECUTABLE): src/DNAscent.o $(CPP_OBJ) $(C_OBJ) $(HTS_LIB) $(H5_LIB) $(TENS_LIB) src/gitcommit.h
