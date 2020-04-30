@@ -31,4 +31,36 @@ class AnalogueScore{
 		}
 };
 
+class Line{
+
+	private:
+		AnalogueScore BrdU;
+		AnalogueScore Methyl;
+		AnalogueScore BrdUvMethyl;
+		unsigned int position;
+
+	public:
+		Line(unsigned int position){
+			this -> position = position;
+		}
+		void setBrdUScore(double s){
+			BrdU.set(s);
+		}
+		void setBrdUvMethylScore(double s){
+			BrdUvMethyl.set(s);
+		}
+		void setMethylScore(double s){
+			Methyl.set(s);
+		}
+		double getBrdUScore(void){
+			return BrdU.get();
+		}
+		double getBrdUvMethylScore(void){
+			return BrdUvMethyl.get();
+		}
+		double getMethylScore(void){
+			return Methyl.get();
+		}
+};
+
 #endif

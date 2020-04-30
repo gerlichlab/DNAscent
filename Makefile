@@ -73,10 +73,14 @@ depend: .depend
 
 .c.o:
 	$(CC) -o $@ -c $(CFLAGS) $(H5_INCLUDE) -fPIC $<
+	
+#log the commit 
+src/gitcommit.h: .git/HEAD .git/index
+	echo "const char *gitcommit = \"$(shell git rev-parse HEAD)\";" > $@
 
 #compile the main executable
-$(MAIN_EXECUTABLE): src/DNAscent.o $(CPP_OBJ) $(C_OBJ) $(HTS_LIB) $(H5_LIB) $(TENS_LIB)
+$(MAIN_EXECUTABLE): src/DNAscent.o $(CPP_OBJ) $(C_OBJ) $(HTS_LIB) $(H5_LIB) $(TENS_LIB) src/gitcommit.h
 	$(CXX) -o $@ $(CXXFLAGS) -fPIC $(CPP_OBJ) $(C_OBJ) $(LIBFLAGS)
 
 clean:
-	rm -f $(MAIN_EXECUTABLE) $(CPP_OBJ) $(C_OBJ) src/DNAscent.o
+	rm -f $(MAIN_EXECUTABLE) $(CPP_OBJ) $(C_OBJ) src/DNAscent.o gitcommit.h

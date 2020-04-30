@@ -30,7 +30,7 @@ static const char *help=
 "  -o,--output               path to output directory for bedgraph files.\n"
 "Optional arguments are:\n"
 "     --replication          detect fork direction and call origin firing (default: off),\n"
-"  -l,--likelihood           log-likelihood threshold for a positive analogue call (default: 1.25),\n"
+"     --threshold            threshold for a positive analogue call (default: 0.7),\n"
 "  -c,--cooldown             minimum gap between positive analogue calls (default: 4),\n"
 "  -r,--resolution           minimum length of regions (default is 2kb),\n"
 "  -p,--probability          override probability that a thymidine 6mer contains a BrdU (default: automatically calculated),\n"
@@ -72,7 +72,7 @@ Arguments parseRegionsArguments( int argc, char** argv ){
 	args.callReplication = false;
 	args.overrideProb = false;
 	args.overrideZ = false;
-	args.likelihood = 1.25;
+	args.likelihood = 0.7;
 	args.cooldown = 4;
 
  	/*parse the command line arguments */
@@ -112,7 +112,7 @@ Arguments parseRegionsArguments( int argc, char** argv ){
 			args.cooldown = std::stoi( strArg.c_str() );
 			i+=2;
 		}
-		else if ( flag == "-l" or flag == "--likelihood" ){
+		else if ( flag == "--threshold" ){
  			std::string strArg( argv[ i + 1 ] );
 			args.likelihood = std::stof( strArg.c_str() );
 			i+=2;
@@ -312,6 +312,173 @@ void callOrigins( std::vector< region > &regions, double threshold, std::string 
 }
 
 
+bool parseDetectHeader( std::string detectFilename ){
+
+	//if we don't find the header, default to use HMM to make back-compatible with old versions
+	std::string line;
+	std::ifstream inFile( detectFilename );
+	if ( not inFile.is_open() ) throw IOerror( detectFilename );
+	unsigned int lineCtr = 0;
+	while( std::getline( inFile, line ) ){
+
+		if ( line == "#Mode CNN" ){
+			std::cout << "CNN" << std::endl;
+			inFile.close();
+			return false;
+		}
+		lineCtr++;
+		if (lineCtr > 20){
+			inFile.close();
+			return true;
+		}
+	}
+	inFile.close();
+	return true;
+}
+
+
+int parseDetectLine_HMM(std::string line,
+		                 double callThreshold,
+						 unsigned int cooldownThreshold,
+						 unsigned int &attemptCooldown,
+						 unsigned int &callCooldown,
+						 unsigned int &calls,
+						 unsigned int &attempts){
+
+	std::string column;
+	std::stringstream ssLine(line);
+	int position = -1, cIndex = 0;
+	AnalogueScore B, BM, M;
+	int countCol = std::count(line.begin(), line.end(), '\t');
+	while ( std::getline( ssLine, column, '\t' ) ){
+
+		if ( cIndex == 0 ){
+
+			position = std::stoi(column);
+		}
+		else if ( cIndex == 1 ){
+
+			B.set(std::stof(column));
+		}
+		else if ( cIndex == 2 and countCol > 3 ){ //methyl-aware detect file
+
+			BM.set(std::stof(column));
+		}
+		else if ( cIndex == 3 and countCol > 3 ){ //methyl-aware detect file
+
+			M.set(std::stof(column));
+		}
+		cIndex++;
+	}
+	assert(position != -1);
+
+	if ( countCol > 3){
+
+		if ( B.get() > callThreshold and BM.get() > 0.0 and position - callCooldown >= cooldownThreshold ){
+		//looks like BrdU against thymidine, and looks more like BrdU than methylation, count as positive call
+			attemptCooldown = position;
+			callCooldown = position;
+			calls++;
+			attempts++;
+		}
+		else if ( M.get() < 0 and B.get() < callThreshold and position - attemptCooldown >= cooldownThreshold ){
+		//not strong enough to count as either BrdU or methylation counts as an attempt
+			attempts++;
+			attemptCooldown = position;
+		}
+		//don't count methyl calls as either positive calls or attempts
+	}
+	else{
+			//testing
+			//std::cout << B.get() << " " << position << " " << callCooldown << std::endl;
+			if ( B.get() > callThreshold and position - callCooldown >= cooldownThreshold ){
+				attemptCooldown = position;
+				callCooldown = position;
+				calls++;
+				attempts++;
+			}
+			else if (position - attemptCooldown >= cooldownThreshold){
+				attempts++;
+				attemptCooldown = position;
+			}
+	}
+	return position;
+}
+
+
+int parseDetectLine_CNN(std::string line,
+		                 double callThreshold,
+						 unsigned int cooldownThreshold,
+						 unsigned int &attemptCooldown,
+						 unsigned int &callCooldown,
+						 unsigned int &calls,
+						 unsigned int &attempts,
+						 std::string strand){
+
+	std::string column, sixMer;
+	std::stringstream ssLine(line);
+	int position = -1, cIndex = 0;
+	AnalogueScore B, BM, M;
+	while ( std::getline( ssLine, column, '\t' ) ){
+
+		if ( cIndex == 0 ){
+
+			position = std::stoi(column);
+		}
+		else if ( cIndex == 2 ){
+
+			B.set(std::stof(column));
+		}
+		else if ( cIndex == 3 ){
+
+			sixMer = column;
+		}
+		cIndex++;
+	}
+	assert(position != -1);
+
+	//no-op on non-T positions
+	if ((strand == "fwd" and sixMer.substr(0,1) != "T") or (strand == "rev" and sixMer.substr(sixMer.length()-1) != "A")){
+		return -1;
+	}
+
+	if ( B.get() > callThreshold and position - callCooldown >= cooldownThreshold ){
+		attemptCooldown = position;
+		callCooldown = position;
+		calls++;
+		attempts++;
+	}
+	else if (position - attemptCooldown >= cooldownThreshold){
+		attempts++;
+		attemptCooldown = position;
+	}
+
+	return position;
+}
+
+
+std::string getStrand(std::string line){
+
+	std::stringstream ssLine(line);
+	int cIndex = 0;
+	std::string strand = "";
+	std::string column;
+	int countCol = std::count(line.begin(), line.end(), ' ');
+	assert(countCol == 4);
+	while ( std::getline( ssLine, column, ' ' ) ){
+
+		if ( cIndex == 4 ){
+
+			strand = column;
+		}
+		cIndex++;
+	}
+	assert(strand != "");
+
+	return strand;
+}
+
+
 int regions_main( int argc, char** argv ){
 
 	Arguments args = parseRegionsArguments( argc, argv );
@@ -328,14 +495,18 @@ int regions_main( int argc, char** argv ){
 	progressBar pb(readCount,false);
 	inFile.close();
 
+	//figure out if we're running in CNN or HMM detect mode
+	bool useHMM = parseDetectHeader( args.detectFilename );
+
 	//estimate the fraction of BrdU incorporation
 	double p;
 	std::string header;
 	unsigned int calls = 0, attempts = 0, gap = 0;
 	int startingPos = -1;
 	int progress = 0;
-	int callCooldown = 0;
-	int attemptCooldown = 0;
+	unsigned int callCooldown = 0;
+	unsigned int attemptCooldown = 0;
+	std::string strand;
 
 	if ( not args.overrideProb ){
 
@@ -347,8 +518,10 @@ int regions_main( int argc, char** argv ){
 		std::vector< double > callFractions;
 		while( std::getline( inFile, line ) ){
 
+			if (line.substr(0,1) == "#") continue; //ignore header
 			if ( line.substr(0,1) == ">" ){
 
+				strand = getStrand(line);
 				progress++;
 				pb.displayProgress( progress, 0, 0 );
 				callCooldown = 0;
@@ -356,62 +529,10 @@ int regions_main( int argc, char** argv ){
 				continue;
 			}
 
-			std::string column;
-			std::stringstream ssLine(line);
-			int position = -1, cIndex = 0;
-			AnalogueScore B, BM, M;
-			int countCol = std::count(line.begin(), line.end(), '\t');
-			while ( std::getline( ssLine, column, '\t' ) ){
-
-				if ( cIndex == 0 ){
-
-					position = std::stoi(column);
-				}
-				else if ( cIndex == 1 ){
-
-					B.set(std::stof(column));
-				}
-				else if ( cIndex == 2 and countCol > 3 ){ //methyl-aware detect file
-
-					BM.set(std::stof(column));
-				}
-				else if ( cIndex == 3 and countCol > 3 ){ //methyl-aware detect file
-
-					M.set(std::stof(column));
-				}
-				cIndex++;
-			}
-			assert(position != -1);
-			if ( countCol > 3){
-
-					if ( B.get() > args.likelihood and BM.get() > 0.0 and position - callCooldown >= args.cooldown ){
-					//looks like BrdU against thymidine, and looks more like BrdU than methylation, count as positive call
-						attemptCooldown = position;
-						callCooldown = position;
-						calls++;
-						attempts++;
-					}
-					else if ( M.get() < 0 and B.get() < args.likelihood and position - attemptCooldown >= args.cooldown ){
-					//not strong enough to count as either BrdU or methylation counts as an attempt
-						attempts++;
-						attemptCooldown = position;
-					}
-					//don't count methyl calls as either positive calls or attempts
-			}
-			else{
-					//testing
-					//std::cout << B.get() << " " << position << " " << callCooldown << std::endl;
-					if ( B.get() > args.likelihood and position - callCooldown >= args.cooldown ){
-						attemptCooldown = position;
-						callCooldown = position;
-						calls++;
-						attempts++;
-					}
-					else if (position - attemptCooldown >= args.cooldown){
-						attempts++;
-						attemptCooldown = position;
-					}
-			}
+			int position;
+			if (useHMM) position = parseDetectLine_HMM(line, args.likelihood, args.cooldown, attemptCooldown, callCooldown, calls, attempts);
+			else position = parseDetectLine_CNN(line, args.likelihood, args.cooldown, attemptCooldown, callCooldown, calls, attempts, strand);
+			if (position == -1) continue;
 
 			if ( startingPos == -1 ) startingPos = position;
 			gap = position - startingPos;
@@ -448,8 +569,10 @@ int regions_main( int argc, char** argv ){
 		std::vector<double> allZScores;
 		while( std::getline( inFile, line ) ){
 
+			if (line.substr(0,1) == "#") continue; //ignore header
 			if ( line.substr(0,1) == ">" ){
 
+				strand = getStrand(line);
 				progress++;
 				pb_z.displayProgress( progress, 0, 0 );
 				calls = 0, attempts = 0, gap = 0, startingPos = -1;
@@ -458,63 +581,11 @@ int regions_main( int argc, char** argv ){
 			}
 			else{
 
-				std::string column;
-				std::stringstream ssLine(line);
-				int position = -1, cIndex = 0;
-				AnalogueScore B, BM, M;
-				int countCol = std::count(line.begin(), line.end(), '\t');
-				while ( std::getline( ssLine, column, '\t' ) ){
+				int position;
+				if (useHMM) position = parseDetectLine_HMM(line, args.likelihood, args.cooldown, attemptCooldown, callCooldown, calls, attempts);
+				else position = parseDetectLine_CNN(line, args.likelihood, args.cooldown, attemptCooldown, callCooldown, calls, attempts, strand);
 
-					if ( cIndex == 0 ){
-
-						position = std::stoi(column);
-					}
-					else if ( cIndex == 1 ){
-
-						B.set(std::stof(column));
-					}
-					else if ( cIndex == 2 and countCol > 3 ){ //methyl-aware detect file
-
-						BM.set(std::stof(column));
-					}
-					else if ( cIndex == 3 and countCol > 3 ){ //methyl-aware detect file
-
-						M.set(std::stof(column));
-					}
-					cIndex++;
-				}
-				assert(position != -1);
-
-				if ( countCol > 3){
-
-					if ( B.get() > args.likelihood and BM.get() > 0.0 and position - callCooldown >= args.cooldown ){
-					//looks like BrdU against thymidine, and looks more like BrdU than methylation, count as positive call
-						attemptCooldown = position;
-						callCooldown = position;
-						calls++;
-						attempts++;
-					}
-					else if ( M.get() < 0 and B.get() < args.likelihood and position - attemptCooldown >= args.cooldown ){
-					//not strong enough to count as either BrdU or methylation counts as an attempt
-						attempts++;
-						attemptCooldown = position;
-					}
-					//don't count methyl calls as either positive calls or attempts
-				}
-				else{
-
-					if ( B.get() > args.likelihood and position - callCooldown >= args.cooldown){
-						callCooldown = position;
-						attemptCooldown = position;
-						calls++;
-						attempts++;
-					}
-					else if (position - attemptCooldown >= args.cooldown){
-						attempts++;
-						attemptCooldown = position;
-					}
-				}
-
+				if (position == -1) continue;
 				if ( startingPos == -1 ) startingPos = position;
 				gap = position - startingPos;
 
@@ -577,6 +648,9 @@ int regions_main( int argc, char** argv ){
  	std::ofstream outFile( args.outputFilename );
 	if ( not outFile.is_open() ) throw IOerror( args.outputFilename );
 
+	//write the regions header
+	outFile <<  writeRegionsHeader(args.detectFilename, args.likelihood, useHMM, args.cooldown, args.resolution, p, args.threshold);
+
 	std::ofstream repFile;
 	if ( args.callReplication ){
 
@@ -588,14 +662,17 @@ int regions_main( int argc, char** argv ){
 	startingPos = -1;
 	progress = 0;
 	callCooldown = 0; attemptCooldown = 0;
+	bool first = true;
 	while( std::getline( inFile, line ) ){
 
+		if (line.substr(0,1) == "#") continue; //ignore header
 		if ( line.substr(0,1) == ">" ){
 
+			strand = getStrand(line);
 			progress++;
 			pb.displayProgress( progress, 0, 0 );
 
-			if ( buffer.size() > 5 and args.callReplication ){
+			if ( buffer.size() > 5 and args.callReplication and not first ){
 
 				outFile << header << std::endl;
 			
@@ -606,7 +683,7 @@ int regions_main( int argc, char** argv ){
 					outFile << r -> start << "\t" << r -> end << "\t" << r -> score << "\t" << r -> call << "\t" << r -> forkDir <<  std::endl;
 				}
 			}
-			else if (not args.callReplication){
+			else if (not args.callReplication and not first){
 
 				outFile << header << std::endl;
 				
@@ -620,86 +697,19 @@ int regions_main( int argc, char** argv ){
 			calls = 0, attempts = 0, gap = 0, startingPos = -1;
 			callCooldown = 0;
 			attemptCooldown = 0;
+			first = false;
 			
 		}
 		else{
 
-			std::string column;
-			std::stringstream ssLine(line);
-			int position = -1, cIndex = 0;
-			AnalogueScore B, BM, M;
-			int countCol = std::count(line.begin(), line.end(), '\t');
-			while ( std::getline( ssLine, column, '\t' ) ){
+			int position;
+			if (useHMM) position = parseDetectLine_HMM(line, args.likelihood, args.cooldown, attemptCooldown, callCooldown, calls, attempts);
+			else position = parseDetectLine_CNN(line, args.likelihood, args.cooldown, attemptCooldown, callCooldown, calls, attempts, strand);
 
-				if ( cIndex == 0 ){
-
-					position = std::stoi(column);
-				}
-				else if ( cIndex == 1 ){
-
-					B.set(std::stof(column));
-				}
-				else if ( cIndex == 2 and countCol > 3 ){ //methyl-aware detect file
-
-					BM.set(std::stof(column));
-				}
-				else if ( cIndex == 3 and countCol > 3 ){ //methyl-aware detect file
-
-					M.set(std::stof(column));
-				}
-				cIndex++;
-			}
-			assert(position != -1);
+			if (position == -1) continue;
 
 			if ( startingPos == -1 ) startingPos = position;
 			gap = position - startingPos;
-
-			if ( countCol > 3){
-
-				if ( B.get() > args.likelihood and BM.get() > 0.0 and position - callCooldown >= args.cooldown ){
-				//looks like BrdU against thymidine, and looks more like BrdU than methylation, count as positive call
-					attemptCooldown = position;
-					callCooldown = position;
-					calls++;
-					attempts++;
-				}
-				else if ( M.get() < 0 and B.get() < args.likelihood and position - attemptCooldown >= args.cooldown ){
-				//not strong enough to count as either BrdU or methylation counts as an attempt
-					attempts++;
-					attemptCooldown = position;
-				}
-				//don't count methyl calls as either positive calls or attempts
-			}
-			else{
-
-				if ( B.get() > args.likelihood and position - callCooldown >= args.cooldown){
-#if TEST_COOLDOWN
-std::cout << ">>>>>Call: " << line << std::endl;
-std::cout << "     Call Cooldown: " << callCooldown << std::endl;
-std::cout << "     Attempt Cooldown: " << attemptCooldown << std::endl;
-#endif
-					callCooldown = position;
-					attemptCooldown = position;
-					calls++;
-					attempts++;
-				}
-				else if (position - attemptCooldown >= args.cooldown){
-#if TEST_COOLDOWN
-std::cout << ">>>>>Attempt: " << line << std::endl;
-std::cout << "     Call Cooldown: " << callCooldown << std::endl;
-std::cout << "     Attempt Cooldown: " << attemptCooldown << std::endl;
-#endif
-					attempts++;
-					attemptCooldown = position;
-				}
-#if TEST_COOLDOWN
-			else{
-			std::cout << ">>>>>Ignored: " << line << std::endl;
-			std::cout << "     Call Cooldown: " << callCooldown << std::endl;
-			std::cout << "     Attempt Cooldown: " << attemptCooldown << std::endl;
-			}
-#endif
-			}
 
 			if ( gap > args.resolution and attempts >= args.resolution / 30 ){
 

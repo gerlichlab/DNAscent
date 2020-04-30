@@ -23,6 +23,66 @@
 #include "error_handling.h"
 #include "pfasta/pfasta.h"
 #include "poreModels.h"
+#include "gitcommit.h"
+#include "common.h"
+
+std::string writeDetectHeader(std::string alignmentFilename,
+		                std::string refFilename,
+						std::string indexFn,
+						int threads,
+						bool methylAware,
+						bool useHMM,
+						unsigned int quality,
+						unsigned int length){
+
+	std::string detMode;
+	if (useHMM) detMode = "HMM";
+	else detMode = "CNN";
+
+	std::string methylMode;
+	if (methylAware) methylMode = "true";
+	else methylMode = "false";
+
+	std::string out;
+	out += "#Alignment " + alignmentFilename + "\n";
+	out += "#Genome " + refFilename + "\n";
+	out += "#Index " + indexFn + "\n";
+	out += "#Threads " + std::to_string(threads) + "\n";
+	out += "#MethylAware " + methylMode + "\n";
+	out += "#Mode " + detMode + "\n";
+	out += "#MappingQuality " + std::to_string(quality) + "\n";
+	out += "#MappingLength " + std::to_string(length) + "\n";
+	out += "#Version " + std::string(VERSION) + "\n";
+	out += "#Commit " + std::string(gitcommit) + "\n";
+
+	return out;
+}
+
+std::string writeRegionsHeader(std::string detectFile,
+		                double threshold,
+						bool useHMM,
+						unsigned int cooldown,
+						unsigned int resolution,
+						double probability,
+						double zscore){
+
+	std::string detMode;
+	if (useHMM) detMode = "HMM";
+	else detMode = "CNN";
+
+	std::string out;
+	out += "#DetectFile " + detectFile + "\n";
+	out += "#Mode " + detMode + "\n";
+	out += "#CallThreshold " + std::to_string(threshold) + "\n";
+	out += "#Cooldown " + std::to_string(cooldown) + "\n";
+	out += "#Resolution " + std::to_string(resolution) + "\n";
+	out += "#Probability " + std::to_string(probability) + "\n";
+	out += "#ZScore " + std::to_string(zscore) + "\n";
+	out += "#Version " + std::string(VERSION) + "\n";
+	out += "#Commit " + std::string(gitcommit) + "\n";
+
+	return out;
+}
 
 
 std::map< std::string, std::string > import_reference( std::string fastaFilePath ){

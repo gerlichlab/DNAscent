@@ -1016,6 +1016,17 @@ int detect_main( int argc, char** argv ){
 	std::ofstream outFile( args.outputFilename );
 	if ( not outFile.is_open() ) throw IOerror( args.outputFilename );
 
+
+	bool methylAware = false;
+	bool useHMM = false;
+	int minQ = 20;
+	int minL = 1000;
+	unsigned int threads = 1;
+
+	//write the outfile header
+	std::string outHeader = writeDetectHeader(args.bamFilename, args.referenceFilename, args.indexFilename, args.threads, args.methylAware, args.useHMM, args.minQ, args.minL);
+	outFile << outHeader;
+
 	htsFile* bam_fh;
 	hts_idx_t* bam_idx;
 	bam_hdr_t* bam_hdr;
