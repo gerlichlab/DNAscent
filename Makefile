@@ -67,7 +67,7 @@ C_OBJ = $(C_SRC:.c=.o)
 
 depend: .depend
 
-.depend: $(CPP_SRC) $(C_SRC) $(EXE_SRC) $(H5_LIB) $(TENS_LIB)
+.depend: $(CPP_SRC) $(C_SRC) $(EXE_SRC) $(H5_LIB) $(TENS_LIB) src/gitcommit.h
 	rm -f ./.depend
 	$(CXX) $(CXXFLAGS) -MM $(CPP_SRC) $(C_SRC) > ./.depend;
 
