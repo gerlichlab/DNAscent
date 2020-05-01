@@ -142,7 +142,7 @@ struct region{
 std::pair< double, double > twoMeans( std::vector< double > &observations ){
 
 	double C1_old = 0.01;
-	double C2_old = 0.3;
+	double C2_old = 0.5;
 	double C1_new = C1_old;
 	double C2_new = C2_old;
 	double tol = 0.0001;
@@ -604,7 +604,7 @@ int regions_main( int argc, char** argv ){
 		inFile.close();
 		std::cout << "Done." << std::endl;
 
-		std::vector< double > fitParams = gaussianMixtureEM(-3.0, 3.0, 0, 3.0, allZScores, 0.01, 100 );
+		std::vector< double > fitParams = gaussianMixtureEM(-7.0, 1.0, 0., 1.0, allZScores, 0.01, 100 );
 		double thym_mu, thym_mix, thym_sigma, brdu_mu, brdu_mix, brdu_sigma;
 		if (fitParams[1] < fitParams[2]){
 
@@ -630,20 +630,11 @@ int regions_main( int argc, char** argv ){
 		std::cerr << "Thymidine Z-score mean, stdv: " << thym_mu << " " << thym_sigma << std::endl;
 		std::cerr << "BrdU Z-score mean, stdv: " << brdu_mu << " " << brdu_sigma << std::endl;
 #endif
-		if (2*thym_sigma < (brdu_mu - thym_mu)/2.0){
 
 #if !TEST_CLUSTERING
-			std::cerr << "Set Z-score threshold: " << thym_mu+(brdu_mu - thym_mu)/2.0 << std::endl;
+		std::cerr << "Set Z-score threshold: " << brdu_mu << std::endl;
 #endif
-			args.threshold = thym_mu+(brdu_mu - thym_mu)/2.0;
-		}
-		else{
-
-#if !TEST_CLUSTERING
-			std::cerr << "Set Z-score threshold: " << thym_mu+2*thym_sigma << std::endl;
-#endif
-			args.threshold = thym_mu+2*thym_sigma;
-		}
+		args.threshold = brdu_mu;
 	}
 	
 	//call regions
