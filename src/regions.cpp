@@ -495,6 +495,7 @@ int regions_main( int argc, char** argv ){
 	std::string header;
 	unsigned int calls = 0, attempts = 0, gap = 0;
 	double fuzzyCalls = 0.;
+
 	int startingPos = -1;
 	int progress = 0;
 	unsigned int callCooldown = 0;
@@ -527,6 +528,7 @@ int regions_main( int argc, char** argv ){
 			int position;
 			if (useHMM) position = parseDetectLine_HMM(line, args.likelihood, args.cooldown, attemptCooldown, callCooldown, calls, attempts);
 			else position = parseDetectLine_CNN(line, args.likelihood, args.cooldown, attemptCooldown, callCooldown, fuzzyCalls, attempts, strand);
+
 			if (position == -1) continue;
 
 			if ( startingPos == -1 ) startingPos = position;
@@ -732,6 +734,7 @@ int regions_main( int argc, char** argv ){
 				buffer.push_back(r);
 				calls = 0, attempts = 0, gap = 0, startingPos = -1;
 				fuzzyCalls = 0.;
+
 			}
 		}
 	}
