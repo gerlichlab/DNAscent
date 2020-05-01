@@ -411,7 +411,7 @@ int parseDetectLine_CNN(std::string line,
 						 unsigned int cooldownThreshold,
 						 unsigned int &attemptCooldown,
 						 unsigned int &callCooldown,
-						 unsigned int &calls,
+						 double &cumulScore,
 						 unsigned int &attempts,
 						 std::string strand){
 
@@ -442,16 +442,8 @@ int parseDetectLine_CNN(std::string line,
 		return -1;
 	}
 
-	if ( B.get() > callThreshold and position - callCooldown >= cooldownThreshold ){
-		attemptCooldown = position;
-		callCooldown = position;
-		calls++;
-		attempts++;
-	}
-	else if (position - attemptCooldown >= cooldownThreshold){
-		attempts++;
-		attemptCooldown = position;
-	}
+	cumulScore += B.get();
+	attempts++;
 
 	return position;
 }
@@ -502,6 +494,7 @@ int regions_main( int argc, char** argv ){
 	double p;
 	std::string header;
 	unsigned int calls = 0, attempts = 0, gap = 0;
+	double cumulScore = 0.;
 	int startingPos = -1;
 	int progress = 0;
 	unsigned int callCooldown = 0;
@@ -531,7 +524,7 @@ int regions_main( int argc, char** argv ){
 
 			int position;
 			if (useHMM) position = parseDetectLine_HMM(line, args.likelihood, args.cooldown, attemptCooldown, callCooldown, calls, attempts);
-			else position = parseDetectLine_CNN(line, args.likelihood, args.cooldown, attemptCooldown, callCooldown, calls, attempts, strand);
+			else position = parseDetectLine_CNN(line, args.likelihood, args.cooldown, attemptCooldown, callCooldown, cumulScore, attempts, strand);
 			if (position == -1) continue;
 
 			if ( startingPos == -1 ) startingPos = position;
@@ -563,6 +556,7 @@ int regions_main( int argc, char** argv ){
 		if ( not inFile.is_open() ) throw IOerror( args.detectFilename );
 		progressBar pb_z(readCount,false);
 		calls = 0; attempts = 0; gap = 0;
+		cumulScore = 0.;
 		startingPos = -1;
 		progress = 0;
 		callCooldown = 0; attemptCooldown = 0;
@@ -583,7 +577,7 @@ int regions_main( int argc, char** argv ){
 
 				int position;
 				if (useHMM) position = parseDetectLine_HMM(line, args.likelihood, args.cooldown, attemptCooldown, callCooldown, calls, attempts);
-				else position = parseDetectLine_CNN(line, args.likelihood, args.cooldown, attemptCooldown, callCooldown, calls, attempts, strand);
+				else position = parseDetectLine_CNN(line, args.likelihood, args.cooldown, attemptCooldown, callCooldown, cumulScore, attempts, strand);
 
 				if (position == -1) continue;
 				if ( startingPos == -1 ) startingPos = position;
@@ -661,6 +655,7 @@ int regions_main( int argc, char** argv ){
 	calls = 0; attempts = 0; gap = 0;
 	startingPos = -1;
 	progress = 0;
+	cumulScore = 0.;
 	callCooldown = 0; attemptCooldown = 0;
 	bool first = true;
 	while( std::getline( inFile, line ) ){
@@ -697,6 +692,7 @@ int regions_main( int argc, char** argv ){
 			calls = 0, attempts = 0, gap = 0, startingPos = -1;
 			callCooldown = 0;
 			attemptCooldown = 0;
+			cumulScore = 0.;
 			first = false;
 			
 		}
@@ -704,7 +700,7 @@ int regions_main( int argc, char** argv ){
 
 			int position;
 			if (useHMM) position = parseDetectLine_HMM(line, args.likelihood, args.cooldown, attemptCooldown, callCooldown, calls, attempts);
-			else position = parseDetectLine_CNN(line, args.likelihood, args.cooldown, attemptCooldown, callCooldown, calls, attempts, strand);
+			else position = parseDetectLine_CNN(line, args.likelihood, args.cooldown, attemptCooldown, callCooldown, cumulScore, attempts, strand);
 
 			if (position == -1) continue;
 
@@ -715,7 +711,8 @@ int regions_main( int argc, char** argv ){
 
 				region r;
 
-				r.score = (calls - attempts * p) / sqrt( attempts * p * ( 1 - p) );
+				if (useHMM) r.score = (calls - attempts * p) / sqrt( attempts * p * ( 1 - p) );
+				else r.score = cumulScore / (double) attempts;
 
 				if ( r.score > args.threshold ) r.call = "BrdU";
 				else r.call = "Thym";
@@ -727,6 +724,7 @@ int regions_main( int argc, char** argv ){
 				
 				buffer.push_back(r);
 				calls = 0, attempts = 0, gap = 0, startingPos = -1;
+				cumulScore = 0.;
 			}
 		}
 	}
