@@ -626,12 +626,13 @@ void adaptive_banded_simple_event_align( std::vector< double > &raw, read &r, Po
 	}
 	std::reverse(r.eventAlignment.begin(), r.eventAlignment.end());
 	std::reverse(useBrdUDistribution.begin(), useBrdUDistribution.end());
-    
+
+	//TODO: FOR TESTING
+	r.roughAlignedBrdU = useBrdUDistribution;
 
 	//benchmarking
     //std::chrono::steady_clock::time_point tp4 = std::chrono::steady_clock::now();
     //std::cout << "backtrace: " << std::chrono::duration_cast<std::chrono::microseconds>(tp4 - tp3).count() << std::endl;
-
 
 
 	// QC results
