@@ -522,7 +522,6 @@ std::string eventalign( read &r,
 		}
 		std::vector< double > eventSnippet;
 		std::vector< double > eventLengthsSnippet;
-		std::vector<bool> alignedBrdU;
 
 		/*get the events that correspond to the read snippet */
 		//out += "readHead at start: " + std::to_string(readHead) + "\n";
@@ -541,7 +540,6 @@ std::string eventalign( read &r,
 				if (ev > r.scalings.shift + 1.0 and ev < 250.0){
 					eventSnippet.push_back( ev );
 					eventLengthsSnippet.push_back( (r.eventLengths)[(r.eventAlignment)[j].first] );
-					alignedBrdU.push_back(r.roughAlignedBrdU[(r.eventAlignment)[j].first]);
 				}
 			}
 
@@ -597,7 +595,6 @@ std::string eventalign( read &r,
 
 			double scaledEvent = (eventSnippet[evIdx] - r.scalings.shift) / r.scalings.scale;
 			double eventLength = eventLengthsSnippet[evIdx];
-			bool roughAlignedToBrdU = alignedBrdU[evIdx];
 
 			assert(scaledEvent > 0.0);
 
@@ -613,10 +610,10 @@ std::string eventalign( read &r,
 			}
 
 			if (label == "M"){
-				out += std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(eventLength) + "\t" + sixMerStrand + "\t" + std::to_string(thymidineModel.at(sixMerStrand).first) + "\t" + std::to_string(thymidineModel.at(sixMerStrand).second) + "\t" + std::to_string(roughAlignedToBrdU) + "\n";
+				out += std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(eventLength) + "\t" + sixMerStrand + "\t" + std::to_string(thymidineModel.at(sixMerStrand).first) + "\t" + std::to_string(thymidineModel.at(sixMerStrand).second) + "\n";
 			}
 			else if (label == "I" and evIdx < lastM_ev){ //don't print insertions after the last match because we're going to align these in the next segment
-				out += std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(eventLength) + "\t" + "NNNNNN" + "\t" + "0" + "\t" + "0" + "\t" + std::to_string(roughAlignedToBrdU) + "\n";
+				out += std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(eventLength) + "\t" + "NNNNNN" + "\t" + "0" + "\t" + "0" + "\n";
 			}
 
 	        evIdx ++;

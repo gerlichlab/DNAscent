@@ -53,7 +53,6 @@ struct read{
 	std::vector< double > raw, normalisedEvents, eventLengths;
 	std::map< unsigned int, unsigned int > refToQuery;
 	std::vector< std::pair< unsigned int, unsigned int > > eventAlignment;
-	std::vector<bool> roughAlignedBrdU;
 	std::map<unsigned int, double> posToScore;
 	EventAlignment alignmentQCs;
 	int refStart, refEnd;
