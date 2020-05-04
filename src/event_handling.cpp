@@ -468,6 +468,8 @@ void adaptive_banded_simple_event_align( std::vector< double > &raw, read &r, Po
 
 	int curr_gap = 0;
 	int max_gap = 0;
+	int usedInScale = 0;
+
 	while(curr_kmer_idx >= 0 && curr_event_idx >= 0) {
         
 		// emit alignment
@@ -483,11 +485,16 @@ void adaptive_banded_simple_event_align( std::vector< double > &raw, read &r, Po
 		eventDiffs += thymidineModel.at(sixMer).first - raw[curr_event_idx];
 
 		//update A,b for recomputing shift and scale
-		A[0][0] += 1.0 / pow( thymidineModel.at(sixMer).second, 2.0 );
-		A[0][1] += thymidineModel.at(sixMer).first / pow( thymidineModel.at(sixMer).second, 2.0 );
-		A[1][1] += pow( thymidineModel.at(sixMer).first, 2.0 ) / pow( thymidineModel.at(sixMer).second, 2.0 );
-		b[0] += raw[curr_event_idx] / pow( thymidineModel.at(sixMer).second, 2.0 );
-		b[1] += raw[curr_event_idx] * thymidineModel.at(sixMer).first / pow( thymidineModel.at(sixMer).second, 2.0 );
+		//only do this for sixmers that don't contain a T
+
+		if (sixMer.find("T") == std::string::npos){
+			A[0][0] += 1.0 / pow( thymidineModel.at(sixMer).second, 2.0 );
+			A[0][1] += thymidineModel.at(sixMer).first / pow( thymidineModel.at(sixMer).second, 2.0 );
+			A[1][1] += pow( thymidineModel.at(sixMer).first, 2.0 ) / pow( thymidineModel.at(sixMer).second, 2.0 );
+			b[0] += raw[curr_event_idx] / pow( thymidineModel.at(sixMer).second, 2.0 );
+			b[1] += raw[curr_event_idx] * thymidineModel.at(sixMer).first / pow( thymidineModel.at(sixMer).second, 2.0 );
+			usedInScale++;
+		}
 
 		n_aligned_events += 1;
 
@@ -522,7 +529,7 @@ void adaptive_banded_simple_event_align( std::vector< double > &raw, read &r, Po
     
 	r.alignmentQCs.recordQCs(avg_log_emission, spanned, max_gap);
 
-	if(avg_log_emission < min_average_log_emission || !spanned || max_gap > max_gap_threshold) {
+	if(avg_log_emission < min_average_log_emission || !spanned || max_gap > max_gap_threshold || usedInScale < 100) {
 		
 		//bool failed = true;
 		r.eventAlignment.clear();
@@ -538,18 +545,21 @@ void adaptive_banded_simple_event_align( std::vector< double > &raw, read &r, Po
 
 		//compute var
 		rescale.var = 0.0;
+		int nNormalised = 0;
 		for (unsigned int i = 0; i < r.eventAlignment.size(); i++){
 
-			double event = raw[r.eventAlignment[i].first];
 			std::string sixMer = sequence.substr(r.eventAlignment[i].second, k);
+			if (sixMer.find("T") != std::string::npos) continue;
+			double event = raw[r.eventAlignment[i].first];
 			double mu,stdv;
 			mu = thymidineModel.at(sixMer).first;
 			stdv = thymidineModel.at(sixMer).second;
 
 			double yi = (event - rescale.shift - rescale.scale*mu);
 			rescale.var += yi * yi / (stdv * stdv);
+			nNormalised++;
 		}
-		rescale.var /= raw.size();
+		rescale.var /= (double) nNormalised;
 		rescale.var = sqrt(rescale.var);
 		//fprintf(stderr,"%f\n",rescale.var);
 	}
