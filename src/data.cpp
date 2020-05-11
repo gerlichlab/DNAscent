@@ -175,10 +175,6 @@ int data_main( int argc, char** argv ){
 	std::ofstream outFile( args.outputFilename );
 	if ( not outFile.is_open() ) throw IOerror( args.outputFilename );
 
-	//write the outfile header
-	std::string outHeader = writeDetectHeader(args.bamFilename, args.referenceFilename, args.indexFilename, args.threads, args.methylAware, true, args.minQ, args.minL);
-	outFile << outHeader;
-
 	htsFile* bam_fh;
 	hts_idx_t* bam_idx;
 	bam_hdr_t* bam_hdr;
