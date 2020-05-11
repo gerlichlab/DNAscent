@@ -406,14 +406,7 @@ int parseDetectLine_HMM(std::string line,
 }
 
 
-int parseDetectLine_CNN(std::string line,
-		                 double callThreshold,
-						 unsigned int cooldownThreshold,
-						 unsigned int &attemptCooldown,
-						 unsigned int &callCooldown,
-						 double &fuzzyCalls,
-						 unsigned int &attempts,
-						 std::string strand){
+std::pair<int,double> parseDetectLine_CNN(std::string line, std::string strand){
 
 	std::string column, sixMer;
 	std::stringstream ssLine(line);
@@ -439,13 +432,10 @@ int parseDetectLine_CNN(std::string line,
 
 	//no-op on non-T positions
 	if ((strand == "fwd" and sixMer.substr(0,1) != "T") or (strand == "rev" and sixMer.substr(sixMer.length()-1) != "A")){
-		return -1;
+		return std::make_pair(-1,-1);
 	}
 
-	fuzzyCalls += B.get();
-	attempts++;
-
-	return position;
+	return std::make_pair(position, B.get());
 }
 
 
@@ -471,9 +461,7 @@ std::string getStrand(std::string line){
 }
 
 
-int regions_main( int argc, char** argv ){
-
-	Arguments args = parseRegionsArguments( argc, argv );
+void regionsHMM(Arguments args){
 
 	//get a read count
 	int readCount = 0;
@@ -486,9 +474,6 @@ int regions_main( int argc, char** argv ){
 	}	
 	progressBar pb(readCount,false);
 	inFile.close();
-
-	//figure out if we're running in CNN or HMM detect mode
-	bool useHMM = parseDetectHeader( args.detectFilename );
 
 	//estimate the fraction of BrdU incorporation
 	double p;
@@ -525,9 +510,7 @@ int regions_main( int argc, char** argv ){
 				continue;
 			}
 
-			int position;
-			if (useHMM) position = parseDetectLine_HMM(line, args.likelihood, args.cooldown, attemptCooldown, callCooldown, calls, attempts);
-			else position = parseDetectLine_CNN(line, args.likelihood, args.cooldown, attemptCooldown, callCooldown, fuzzyCalls, attempts, strand);
+			int position = parseDetectLine_HMM(line, args.likelihood, args.cooldown, attemptCooldown, callCooldown, calls, attempts);
 
 			if (position == -1) continue;
 
@@ -536,9 +519,7 @@ int regions_main( int argc, char** argv ){
 
 			if ( gap > args.resolution and attempts >= args.resolution / 30 ){
 
-				double frac;
-				if (useHMM) frac = (double) calls / (double) attempts;
-				else frac = fuzzyCalls / (double) attempts;
+				double frac = (double) calls / (double) attempts;
 				callFractions.push_back( frac );
 				calls = 0, attempts = 0, gap = 0, startingPos = -1;
 				fuzzyCalls = 0.;
@@ -582,9 +563,7 @@ int regions_main( int argc, char** argv ){
 			}
 			else{
 
-				int position;
-				if (useHMM) position = parseDetectLine_HMM(line, args.likelihood, args.cooldown, attemptCooldown, callCooldown, calls, attempts);
-				else position = parseDetectLine_CNN(line, args.likelihood, args.cooldown, attemptCooldown, callCooldown, fuzzyCalls, attempts, strand);
+				int position = parseDetectLine_HMM(line, args.likelihood, args.cooldown, attemptCooldown, callCooldown, calls, attempts);
 
 				if (position == -1) continue;
 				if ( startingPos == -1 ) startingPos = position;
@@ -592,9 +571,7 @@ int regions_main( int argc, char** argv ){
 
 				if ( gap > args.resolution and attempts >= args.resolution / 30 ){
 
-					double score;
-					if (useHMM) score = (calls - attempts * p) / sqrt( attempts * p * ( 1 - p) );
-					else score = (fuzzyCalls - attempts * p) / sqrt( attempts * p * ( 1 - p) );
+					double score = (calls - attempts * p) / sqrt( attempts * p * ( 1 - p) );
 					allZScores.push_back(score);
 					calls = 0, attempts = 0, gap = 0, startingPos = -1;
 					fuzzyCalls = 0.;
@@ -644,7 +621,7 @@ int regions_main( int argc, char** argv ){
 	if ( not outFile.is_open() ) throw IOerror( args.outputFilename );
 
 	//write the regions header
-	outFile <<  writeRegionsHeader(args.detectFilename, args.likelihood, useHMM, args.cooldown, args.resolution, p, args.threshold);
+	outFile <<  writeRegionsHeader(args.detectFilename, args.likelihood, true, args.cooldown, args.resolution, p, args.threshold);
 
 	std::ofstream repFile;
 	if ( args.callReplication ){
@@ -698,9 +675,7 @@ int regions_main( int argc, char** argv ){
 		}
 		else{
 
-			int position;
-			if (useHMM) position = parseDetectLine_HMM(line, args.likelihood, args.cooldown, attemptCooldown, callCooldown, calls, attempts);
-			else position = parseDetectLine_CNN(line, args.likelihood, args.cooldown, attemptCooldown, callCooldown, fuzzyCalls, attempts, strand);
+			int position = parseDetectLine_HMM(line, args.likelihood, args.cooldown, attemptCooldown, callCooldown, calls, attempts);
 
 			if (position == -1) continue;
 
@@ -711,8 +686,7 @@ int regions_main( int argc, char** argv ){
 
 				region r;
 
-				if (useHMM) r.score = (calls - attempts * p) / sqrt( attempts * p * ( 1 - p) );
-				else r.score = (fuzzyCalls - attempts * p) / sqrt( attempts * p * ( 1 - p) );
+				r.score = (calls - attempts * p) / sqrt( attempts * p * ( 1 - p) );
 
 				if ( r.score > args.threshold ) r.call = "BrdU";
 				else r.call = "Thym";
@@ -747,6 +721,147 @@ int regions_main( int argc, char** argv ){
 	inFile.close();
 	outFile.close();
 	std::cout << std::endl << "Done." << std::endl;
+}
+
+
+std::pair<double,double> pmf(std::vector<double> &buffer){
+
+	int N = buffer.size();
+	assert(N<=20);
+	std::vector<double> distribution(N+1,0.0);
+
+	for (size_t k = 0; k <= N; k++){
+
+		std::string bitmask(k, 1); // K leading 1's
+		bitmask.resize(N, 0); // N-K trailing 0's
+
+		// print integers and permute bitmask
+	    do {
+	    	double permProb = 1.0;
+	    	for (int i = 0; i < N; i++) {// [0..N-1] integers
+	    		if (bitmask[i]){//is BrdU
+	            	permProb *= buffer[i];
+	            }
+	    		else{//is not BrdU
+	    			permProb *= 1. - buffer[i];
+	    		}
+	        }
+	       distribution[k] += permProb;
+	    } while (std::prev_permutation(bitmask.begin(), bitmask.end()));
+	}
+
+	/* testing
+	double distSum = 0.;
+	for (int i = 0; i <= N; i++ ) distSum += distribution[i];
+	std::cout << distSum << std::endl;
+	*/
+
+	//calculate the pmf mean
+	double mean = 0.;
+	for (int i = 0; i <= N; i++){
+		mean += (double)i * distribution[i];
+	}
+
+	//calculate the pmf std
+	double std = 0.;
+	for (int i = 0; i <= N; i++){
+		std += pow((double)i - mean, 2.0) * distribution[i];
+	}
+	return std::make_pair(mean / N,std / N);
+}
+
+
+void regionsCNN(Arguments args){
+
+	//get a read count
+		int readCount = 0;
+		std::string line;
+		std::ifstream inFile( args.detectFilename );
+		if ( not inFile.is_open() ) throw IOerror( args.detectFilename );
+		while( std::getline( inFile, line ) ){
+
+			if ( line.substr(0,1) == ">" ) readCount++;
+		}
+		progressBar pb(readCount,false);
+		inFile.close();
+
+	//call regions
+ 	inFile.open( args.detectFilename );
+	if ( not inFile.is_open() ) throw IOerror( args.detectFilename );
+ 	std::ofstream outFile( args.outputFilename );
+	if ( not outFile.is_open() ) throw IOerror( args.outputFilename );
+
+	//write the regions header
+	outFile <<  writeRegionsHeader(args.detectFilename, args.likelihood, false, args.cooldown, args.resolution, 0.0, args.threshold);
+
+	size_t thymVoters = 20;
+	std::vector<double> buffer;
+
+	std::cout << "Calling regions..." << std::endl;
+	int startingPos = -1;
+	int progress = 0;
+	int callCooldown = 0;
+	int attemptCooldown = 0;
+	bool first = true;
+	std::string strand, header;
+	while( std::getline( inFile, line ) ){
+
+		if (line.substr(0,1) == "#") continue; //ignore header
+		if ( line.substr(0,1) == ">" ){
+
+			strand = getStrand(line);
+			progress++;
+			pb.displayProgress( progress, 0, 0 );
+
+			if (not first){
+
+				outFile << header << std::endl;
+			}
+			header = line;
+			buffer.clear();
+			startingPos = -1;
+			callCooldown = 0;
+			attemptCooldown = 0;
+			first = false;
+
+		}
+		else{
+
+			std::pair<int,double > cnnLine = parseDetectLine_CNN(line, strand);
+
+			if (cnnLine.first == -1) continue;
+
+			if ( startingPos == -1 ) startingPos = cnnLine.first;
+
+			if (buffer.size() < thymVoters){
+
+				buffer.push_back(cnnLine.second);
+			}
+			else{
+
+				std::pair<double,double> stats = pmf(buffer);
+
+				outFile << startingPos << "\t" << cnnLine.first << "\t" << stats.first << "\t" << stats.second << std::endl;
+				buffer.clear();
+				startingPos = -1;
+			}
+		}
+	}
+
+	inFile.close();
+	outFile.close();
+	std::cout << std::endl << "Done." << std::endl;
+}
+
+
+int regions_main( int argc, char** argv ){
+
+	Arguments args = parseRegionsArguments( argc, argv );
+
+	//figure out if we're running in CNN or HMM detect mode
+	bool useHMM = parseDetectHeader( args.detectFilename );
+	if (useHMM) regionsHMM(args);
+	else regionsCNN(args);
 
 	return 0;
 }

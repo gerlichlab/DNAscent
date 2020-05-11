@@ -926,7 +926,7 @@ TF_Tensor *read2tensor(AlignedRead &r, const TensorShape &shape){
 
 std::string runCNN(AlignedRead &r, std::string modelPath){
 
-	auto session = std::unique_ptr<ModelSession>(model_load(modelPath.c_str(), "conv1d_input", "time_distributed_2/Reshape_1"));
+	auto session = std::unique_ptr<ModelSession>(model_load(modelPath.c_str(), "input_1", "time_distributed/Reshape_1"));
 	std::pair<size_t, size_t> protoShape = r.getShape();
 	TensorShape input_shape={{1, protoShape.first, protoShape.second}, 3};
 	auto input_values = tf_obj_unique_ptr(read2tensor(r, input_shape));
@@ -1015,13 +1015,6 @@ int detect_main( int argc, char** argv ){
 
 	std::ofstream outFile( args.outputFilename );
 	if ( not outFile.is_open() ) throw IOerror( args.outputFilename );
-
-
-	bool methylAware = false;
-	bool useHMM = false;
-	int minQ = 20;
-	int minL = 1000;
-	unsigned int threads = 1;
 
 	//write the outfile header
 	std::string outHeader = writeDetectHeader(args.bamFilename, args.referenceFilename, args.indexFilename, args.threads, args.methylAware, args.useHMM, args.minQ, args.minL);
