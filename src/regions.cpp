@@ -28,7 +28,7 @@ static const char *help=
 "Required arguments are:\n"
 "  -d,--detect               path to output file from DNAscent detect,\n"
 "  -o,--output               path to output directory for bedgraph files.\n"
-"Optional arguments are:\n"
+"Optional arguments (only valid for detection with HMM) are:\n"
 "     --replication          detect fork direction and call origin firing (default: off),\n"
 "     --threshold            threshold for a positive analogue call (default: 0.7),\n"
 "  -c,--cooldown             minimum gap between positive analogue calls (default: 4),\n"
@@ -322,17 +322,20 @@ bool parseDetectHeader( std::string detectFilename ){
 	while( std::getline( inFile, line ) ){
 
 		if ( line == "#Mode CNN" ){
-			std::cout << "CNN" << std::endl;
+			std::cout << "Using detect mode: CNN" << std::endl;
+			std::cout << "Any optional arguments passed to DNAscent regions will be ignored." << std::endl;
 			inFile.close();
 			return false;
 		}
 		lineCtr++;
 		if (lineCtr > 20){
 			inFile.close();
+			std::cout << "Using detect mode: HMM" << std::endl;
 			return true;
 		}
 	}
 	inFile.close();
+	std::cout << "Using detect mode: HMM" << std::endl;
 	return true;
 }
 
@@ -794,16 +797,14 @@ void regionsCNN(Arguments args){
 	//write the regions header
 	outFile <<  writeRegionsHeader(args.detectFilename, args.likelihood, false, args.cooldown, args.resolution, 0.0, args.threshold);
 
-	size_t thymVoters = 20;
+	size_t thymVoters = 10;
 	std::vector<double> buffer;
 
 	std::cout << "Calling regions..." << std::endl;
 	int startingPos = -1;
 	int progress = 0;
-	int callCooldown = 0;
-	int attemptCooldown = 0;
 	bool first = true;
-	std::string strand, header;
+	std::string strand;
 	while( std::getline( inFile, line ) ){
 
 		if (line.substr(0,1) == "#") continue; //ignore header
@@ -813,17 +814,11 @@ void regionsCNN(Arguments args){
 			progress++;
 			pb.displayProgress( progress, 0, 0 );
 
-			if (not first){
+			//write the header
+			outFile << line << std::endl;
 
-				outFile << header << std::endl;
-			}
-			header = line;
 			buffer.clear();
 			startingPos = -1;
-			callCooldown = 0;
-			attemptCooldown = 0;
-			first = false;
-
 		}
 		else{
 
@@ -843,7 +838,8 @@ void regionsCNN(Arguments args){
 
 				outFile << startingPos << "\t" << cnnLine.first << "\t" << stats.first << "\t" << stats.second << std::endl;
 				buffer.clear();
-				startingPos = -1;
+				buffer.push_back(cnnLine.second);
+				startingPos = cnnLine.first;
 			}
 		}
 	}
