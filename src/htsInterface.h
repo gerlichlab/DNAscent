@@ -19,5 +19,6 @@ void countRecords( htsFile *, hts_idx_t *, bam_hdr_t *, int &, int , int  );
 void parseCigar(bam1_t *, std::map< unsigned int, unsigned int > &, int &, int & );
 std::string getQuerySequence( bam1_t * );
 void getRefEnd(bam1_t *, int &, int & );
+bool indelFastFail(bam1_t *, int, int );
 
 #endif /* SRC_HTSINTERFACE_H_ */

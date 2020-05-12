@@ -32,6 +32,38 @@ void countRecords( htsFile *bam_fh, hts_idx_t *bam_idx, bam_hdr_t *bam_hdr, int 
 	std::cout << "ok." << std::endl;
 }
 
+
+bool indelFastFail(bam1_t *record, int maxI, int maxD ){
+	//Covered in: tests/detect/htslib
+
+	//initialise reference and query coordinates for the first match
+	int queryPosition = 0;
+	int refPosition = 0;
+
+	const uint32_t *cigar = bam_get_cigar(record);
+
+	for ( unsigned int i = 0; i < record -> core.n_cigar; ++i){
+
+		const int op = bam_cigar_op(cigar[i]); //cigar operation
+		const int ol = bam_cigar_oplen(cigar[i]); //number of consecutive operations
+
+		//deletions
+		if (op == BAM_CDEL or op == BAM_CREF_SKIP){
+			if (ol >= maxD){
+				return true;
+			}
+		}
+		//for insertions or soft clipping, advance only the query position
+		else if (op == BAM_CINS){
+			if (ol >= maxI){
+				return true;
+			}
+		}
+	}
+	return false;
+}
+
+
 void parseCigar(bam1_t *record, std::map< unsigned int, unsigned int > &ref2query, int &refStart, int &refEnd ){
 	//Covered in: tests/detect/htslib
 

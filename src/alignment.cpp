@@ -786,7 +786,7 @@ std::string eventalign_train( read &r,
 }
 
 
-AlignedRead eventalign_detect( read &r,
+std::pair<bool,AlignedRead> eventalign_detect( read &r,
             unsigned int windowLength ){
 
 	std::string out;
@@ -856,8 +856,14 @@ AlignedRead eventalign_detect( read &r,
 			if ( (r.eventAlignment)[j].second >= (r.refToQuery)[posOnRef + windowLength - 5] ) break;
 		}
 
-		//pass on this window if we have a deletion
-		//TODO: make sure this does actually catch deletion cases properly
+		//catch spans with high insertions
+		int spanOnRef = windowLength-5;
+		int spanOnQuery = (r.refToQuery)[posOnRef + windowLength-5] - (r.refToQuery)[posOnRef];
+		if ( (double)spanOnQuery / spanOnRef > 1.2){
+			return std::make_pair(false,ar);
+		}
+
+		//we can more gracefully deal with deletions, so pass on this window and restart
 		if ( eventSnippet.size() < 2 ){
 
 			posOnRef += windowLength;
@@ -919,7 +925,7 @@ AlignedRead eventalign_detect( read &r,
 			}
 
 	        if (label == "M"){
-				ar.addEvent(sixMerStrand, evPos, scaledEvent, eventLength);
+			ar.addEvent(sixMerStrand, evPos, scaledEvent, eventLength);
 	        	lastM_ev = evIdx;
 	        	lastM_ref = pos;
 	        }
@@ -934,7 +940,7 @@ AlignedRead eventalign_detect( read &r,
 		readHead += lastM_ev + 1;
 		posOnRef += lastM_ref;
 	}
-	return ar;
+	return std::make_pair(true,ar);
 }
 
 

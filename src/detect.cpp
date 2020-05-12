@@ -1090,6 +1090,15 @@ int detect_main( int argc, char** argv ){
 				std::string s_queryName(queryName);
 				r.readID = s_queryName;
 
+				//fast fail if we're just going to fail by indels anyway
+				bool failOnIndel = indelFastFail(buffer[i], 25, 1000);
+				if (failOnIndel){
+
+					failed++;
+					prog++;
+					continue;
+				}
+
 				//iterate on the cigar string to fill up the reference-to-query coordinate map
 				parseCigar(buffer[i], r.refToQuery, r.refStart, r.refEnd);
 
@@ -1130,8 +1139,14 @@ int detect_main( int argc, char** argv ){
 				}
 				else{ //use neural network detection
 
-					AlignedRead ar = eventalign_detect( r, windowLength_align );
-					readOut = runCNN(ar, modelPath);
+					std::pair<bool,AlignedRead> ar = eventalign_detect( r, windowLength_align );
+					if (not ar.first){
+
+						failed++;
+						prog++;
+						continue;
+					}
+					readOut = runCNN(ar.second, modelPath);
 				}
 
 				#pragma omp critical
@@ -1142,6 +1157,7 @@ int detect_main( int argc, char** argv ){
 
 #if TEST_ALIGNMENT
 					std::cerr << ">" << r.readID << std::endl;
+					std::cout << r.readID << std::endl;
 					for ( auto p_align = r.eventAlignment.begin(); p_align < r.eventAlignment.end(); p_align++ ){
 
 						std::cerr<< p_align -> first << " " << p_align -> second << std::endl;

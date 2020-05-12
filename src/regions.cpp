@@ -729,6 +729,12 @@ void regionsHMM(Arguments args){
 
 std::pair<double,double> pmf(std::vector<double> &buffer){
 
+	
+	for (size_t i = 0; i < buffer.size(); i++){
+
+		buffer[i] = 1. / (1. + exp(-10. * (buffer[i] - 0.5)));
+	}
+	
 	int N = buffer.size();
 	assert(N<=20);
 	std::vector<double> distribution(N+1,0.0);
