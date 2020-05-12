@@ -1,7 +1,7 @@
 import sys
 
-threshold = 1.25#1.25
-cooldownThreshold = 4#4
+threshold = 1.25
+cooldownThreshold = 4
 
 f = open(sys.argv[1],'r')
 numCalls = 0
@@ -11,6 +11,9 @@ callsCooldown = 0
 attemptsCooldown = 0
 
 for line in f:
+
+	if line[0] == '#':
+		continue
 
 	if line[0] == '>':
 

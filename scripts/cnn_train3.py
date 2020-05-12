@@ -25,16 +25,17 @@ import pickle
 from scipy.stats import halfnorm
 
 threads = 64
-folderPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/data'
-logPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/trainingLog.csv'
-checkpointPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/checkpoints'
+folderPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/data2'
+logPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/trainingLog2.csv'
+checkpointPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/checkpoints2'
 validationSplit = 0.2
 bc08path = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/barcode08/commit8e178cd_l_1000_q_20.barcode08.singleThread.trainingData'
 bc10path = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/barcode10/commit8e178cd_l_1000_q_20.barcode10.singleThread.trainingData'
 bc11path = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/barcode11/commit8e178cd_l_1000_q_20.barcode11.singleThread.trainingData'
 bc12path = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/barcode12/commit8e178cd_l_1000_q_20.barcode12.singleThread.trainingData'
 inputFiles = [(0., bc08path),(0.26, bc10path),(0.5, bc11path),(0.8, bc12path)]
-maxLen = 1000
+#inputFiles = [(0., bc08path),(0.8, bc12path)]
+maxLen = 3000
 
 
 #static params
@@ -65,15 +66,9 @@ class trainingRead:
 
 
 #-------------------------------------------------
-#one-hot for 6mers
-bases = ['A','T','G','C']
-k = 6
-all6mers = [''.join(i) for i in itertools.product(bases,repeat=k)]
-sixMerToInt = {}
-IntTosixMer = {}
-for i,s in enumerate(all6mers):
-	sixMerToInt[s] = i
-	IntTosixMer[i] = s
+#one-hot for bases
+baseToInt = {'A':0, 'T':1, 'G':2, 'C':3}
+intToBase = {0:'A', 1:'T', 2:'G', 3:'C'}
 
 
 #-------------------------------------------------
@@ -83,12 +78,12 @@ def trainingReadToTensor(t):
 	global maxEvent, minEvent, minEventLength, maxEventLength
 	oneSet = []
 	for i, s in enumerate(t.sixMers):
-		oneHot = [0]*4**6
-		index = sixMerToInt[s]
+		oneHot = [0]*4
+		index = baseToInt[s[0]]
 		oneHot[index] = 1
 		oneHot.append((t.eventMags[i] - minEvent)/(maxEvent - minEvent) )
 		oneHot.append((t.eventLengths[i] - minEventLength)/(maxEventLength - minEventLength))
-		oneHot.append((t.modelMeans[i] - minEvent)/(maxEvent - minEvent))# - (t.eventMags[i] - minEvent)/(maxEvent - minEvent) )
+		oneHot.append((t.modelMeans[i] - minEvent)/(maxEvent - minEvent))
 		oneSet.append(oneHot)
 
 	return np.array(oneSet)
@@ -263,8 +258,8 @@ partition = {'training':readIDs[divideIndex+1:], 'validation':readIDs[0:divideIn
 labels = {}
 
 # Parameters
-params = {'dim': (maxLen,4**6+3),
-          'batch_size': 16,
+params = {'dim': (maxLen,4+3),
+          'batch_size': 32,
           'n_classes': 1,
           'n_channels': 1,
           'shuffle': True}
@@ -273,33 +268,27 @@ params = {'dim': (maxLen,4**6+3),
 training_generator = DataGenerator(partition['training'], labels, **params)
 validation_generator = DataGenerator(partition['validation'], labels, **params)
 
-
 #-------------------------------------------------
 #CNN architecture
 model = Sequential()
-
-'''
-model.add(Bidirectional(LSTM(16,return_sequences=True),input_shape=(None,4**6+3)))
-model.add(TimeDistributed(Dense(100,activation='tanh')))
-model.add(Dropout(0.5))
-model.add(TimeDistributed(Dense(2,activation='softmax')))
-'''
-model.add(Conv1D(16,(16),padding='same',activation='tanh',input_shape=(None,4**6+3)))
-#model.add(BatchNormalization())
+model.add(Conv1D(16,(16),padding='same',activation='tanh',input_shape=(None,4+3)))
+model.add(BatchNormalization())
 model.add(Conv1D(16,(16),padding='same',activation='tanh'))
-#model.add(BatchNormalization())
+model.add(BatchNormalization())
 model.add(Conv1D(16,(16),padding='same',activation='tanh'))
-#model.add(BatchNormalization())
+model.add(BatchNormalization())
 model.add(Conv1D(16,(16),padding='same',activation='tanh'))
-#model.add(BatchNormalization())
+model.add(BatchNormalization())
+model.add(Conv1D(16,(16),padding='same',activation='tanh'))
+model.add(BatchNormalization())
+model.add(Conv1D(16,(16),padding='same',activation='tanh'))
+model.add(BatchNormalization())
 model.add(Dropout(0.5))
 model.add(TimeDistributed(Dense(100,activation='tanh')))
 model.add(Dropout(0.5))
 model.add(TimeDistributed(Dense(100,activation='tanh')))
 model.add(Dropout(0.5))
 model.add(TimeDistributed(Dense(2,activation='softmax')))
-
-
 model.compile(optimizer='adam', loss='categorical_crossentropy')
 print(model.summary())
 
@@ -309,7 +298,7 @@ chk = ModelCheckpoint(checkpointPath + '/weights.{epoch:02d}-{val_loss:.2f}.h5',
 csv = CSVLogger(logPath, separator=',', append=False)
 
 #generator fit
-model.fit_generator(generator=training_generator, validation_data=validation_generator, epochs=100, verbose=1, callbacks=[es,chk,csv], workers=threads, use_multiprocessing=True)
+model.fit_generator(generator=training_generator, validation_data=validation_generator, epochs=1000, verbose=1, callbacks=[es,chk,csv], workers=threads, use_multiprocessing=True)
 
 # serialize model to JSON
 model_json = model.to_json()
