@@ -1091,6 +1091,7 @@ int detect_main( int argc, char** argv ){
 				r.readID = s_queryName;
 
 				//fast fail if we're just going to fail by indels anyway
+				/*
 				bool failOnIndel = indelFastFail(buffer[i], 25, 1000);
 				if (failOnIndel){
 
@@ -1098,6 +1099,8 @@ int detect_main( int argc, char** argv ){
 					prog++;
 					continue;
 				}
+				*/
+				
 
 				//iterate on the cigar string to fill up the reference-to-query coordinate map
 				parseCigar(buffer[i], r.refToQuery, r.refStart, r.refEnd);

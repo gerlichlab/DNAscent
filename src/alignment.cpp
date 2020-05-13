@@ -250,12 +250,12 @@ std::pair< double, std::vector< std::string > > builtinViterbi( std::vector <dou
 
 		//to the base 1 insertion
 		I_curr[0] = lnVecMax({lnProd( lnProd( I_prev[0], eln( internalI2I ) ), insProb ),
-			                  lnProd( lnProd( M_prev[0], eln( internalM12I ) ), insProb ),
-							  lnProd( lnProd( start_prev, eln( internalM12I ) ), insProb )
+			                  lnProd( lnProd( M_prev[0], eln( internalM12I ) ), insProb )
+							  //lnProd( lnProd( start_prev, eln( internalM12I ) ), insProb )
 		                     });
 		maxindex = lnArgMax({lnProd( lnProd( I_prev[0], eln( internalI2I ) ), insProb ),
-					         lnProd( lnProd( M_prev[0], eln( internalM12I ) ), insProb ),
-							 lnProd( lnProd( start_prev, eln( internalM12I ) ), insProb )
+					         lnProd( lnProd( M_prev[0], eln( internalM12I ) ), insProb )
+							 //lnProd( lnProd( start_prev, eln( internalM12I ) ), insProb*0.001 )
 						     });
 		switch(maxindex){
 			case 0:
@@ -266,10 +266,10 @@ std::pair< double, std::vector< std::string > > builtinViterbi( std::vector <dou
 				backtraceS[0 + I_offset][t+1] = 0 + M_offset;
 				backtraceT[0 + I_offset][t+1] = t;
 				break;
-			case 2:
-				backtraceS[0 + I_offset][t+1] = -1;
-				backtraceT[0 + I_offset][t+1] = t;
-				break;
+			//case 2:
+				//backtraceS[0 + I_offset][t+1] = -1;
+				//backtraceT[0 + I_offset][t+1] = t;
+				//break;
 			default:
 				std::cout << "problem" << std::endl;
 				exit(EXIT_FAILURE);
@@ -277,10 +277,10 @@ std::pair< double, std::vector< std::string > > builtinViterbi( std::vector <dou
 
 		//to the base 1 match
 		M_curr[0] = lnVecMax({lnProd( lnProd( M_prev[0], eln( internalM12M1 ) ), matchProb ),
-							  lnProd( lnProd( start_prev, eln( externalM12M1 + internalM12M1 ) ), matchProb )
+							  lnProd( lnProd( start_prev, eln( externalM12M1 + internalM12M1 + internalM12I + externalM12D ) ), matchProb )
 							 });
 		maxindex = lnArgMax({lnProd( lnProd( M_prev[0], eln( internalM12M1 ) ), matchProb ),
-							 lnProd( lnProd( start_prev, eln( externalM12M1 + internalM12M1 ) ), matchProb )
+							 lnProd( lnProd( start_prev, eln( externalM12M1 + internalM12M1 + internalM12I + externalM12D ) ), matchProb )
 							});
 		switch(maxindex){
 			case 0:
@@ -297,7 +297,7 @@ std::pair< double, std::vector< std::string > > builtinViterbi( std::vector <dou
 		}
 
 		//to the base 1 deletion
-		D_curr[0] = lnProd( NAN, eln( externalM12D ) );  //start to D
+		D_curr[0] = lnProd( NAN, eln( 0. ) );  //start to D
 		backtraceS[0 + D_offset][t+1] = -1;
 		backtraceT[0 + D_offset][t+1] = t + 1;
 
@@ -307,6 +307,7 @@ std::pair< double, std::vector< std::string > > builtinViterbi( std::vector <dou
 
 			//get model parameters
 			sixMer = sequence.substr(i, 6);
+
 			//insProb = eln( uniformPDF( 0, 250, observations[t] ) );
 			insProb = 0.0; //log(1) = 0
 
@@ -478,7 +479,7 @@ std::pair< double, std::vector< std::string > > builtinViterbi( std::vector <dou
 
 
 std::string eventalign( read &r,
-            unsigned int windowLength ){
+            unsigned int totalWindowLength ){
 
 	std::string out;
 	//get the positions on the reference subsequence where we could attempt to make a call
@@ -494,7 +495,21 @@ std::string eventalign( read &r,
 
 		//adjust so we can get the last bit of the read if it doesn't line up with the windows nicely
 		unsigned int basesToEnd = r.referenceSeqMappedTo.size() - 5 - posOnRef;
-		windowLength = std::min(basesToEnd, windowLength);
+		unsigned int windowLength = std::min(basesToEnd, totalWindowLength);
+
+		if (basesToEnd > 1.5*totalWindowLength){
+			std::string breakSnippet = (r.referenceSeqMappedTo).substr(posOnRef, 1.5*windowLength);
+			for (unsigned int i = windowLength; i < 1.5*windowLength - 7; i++){
+
+				double gap1 = std::abs(thymidineModel.at(breakSnippet.substr(i,6)).first - thymidineModel.at(breakSnippet.substr(i+1,6)).first);
+				double gap2 = std::abs(thymidineModel.at(breakSnippet.substr(i,6)).first - thymidineModel.at(breakSnippet.substr(i-1,6)).first);
+
+				if (gap1 > 20. and gap2 > 20.){
+					windowLength = i+6;
+					break;
+				}
+			}
+		}
 
 		std::string readSnippet = (r.referenceSeqMappedTo).substr(posOnRef, windowLength);
 
@@ -620,18 +635,18 @@ std::string eventalign( read &r,
 		}
 
 		//TESTING - make sure nothing sketchy happens at the breakpoint
-		//out += "BREAKPOINT\n";
+		out += "BREAKPOINT\n";
 
 		//go again starting at posOnRef + lastM_ref using events starting at readHead + lastM_ev
 		readHead += lastM_ev + 1;
-		posOnRef += lastM_ref;
+		posOnRef += lastM_ref + 1;
 	}
 	return out;
 }
 
 
 std::string eventalign_train( read &r,
-            unsigned int windowLength,
+            unsigned int totalWindowLength,
 			std::map<unsigned int, double> &BrdULikelihood){
 
 	std::string out;
@@ -648,7 +663,21 @@ std::string eventalign_train( read &r,
 
 		//adjust so we can get the last bit of the read if it doesn't line up with the windows nicely
 		unsigned int basesToEnd = r.referenceSeqMappedTo.size() - 5 - posOnRef;
-		windowLength = std::min(basesToEnd, windowLength);
+		unsigned int windowLength = std::min(basesToEnd, totalWindowLength);
+
+		if (basesToEnd > 1.5*totalWindowLength){
+			std::string breakSnippet = (r.referenceSeqMappedTo).substr(posOnRef, 1.5*windowLength);
+			for (unsigned int i = windowLength; i < 1.5*windowLength - 7; i++){
+
+				double gap1 = std::abs(thymidineModel.at(breakSnippet.substr(i,6)).first - thymidineModel.at(breakSnippet.substr(i+1,6)).first);
+				double gap2 = std::abs(thymidineModel.at(breakSnippet.substr(i,6)).first - thymidineModel.at(breakSnippet.substr(i-1,6)).first);
+
+				if (gap1 > 20. and gap2 > 20.){
+					windowLength = i+6;
+					break;
+				}
+			}
+		}
 
 		std::string readSnippet = (r.referenceSeqMappedTo).substr(posOnRef, windowLength);
 
@@ -780,14 +809,14 @@ std::string eventalign_train( read &r,
 
 		//go again starting at posOnRef + lastM_ref using events starting at readHead + lastM_ev
 		readHead += lastM_ev + 1;
-		posOnRef += lastM_ref;
+		posOnRef += lastM_ref + 1;
 	}
 	return out;
 }
 
 
 std::pair<bool,AlignedRead> eventalign_detect( read &r,
-            unsigned int windowLength ){
+            unsigned int totalWindowLength ){
 
 	std::string out;
 	//get the positions on the reference subsequence where we could attempt to make a call
@@ -803,7 +832,23 @@ std::pair<bool,AlignedRead> eventalign_detect( read &r,
 
 		//adjust so we can get the last bit of the read if it doesn't line up with the windows nicely
 		unsigned int basesToEnd = r.referenceSeqMappedTo.size() - 5 - posOnRef;
-		windowLength = std::min(basesToEnd, windowLength);
+		unsigned int windowLength = std::min(basesToEnd, totalWindowLength);
+
+		if (basesToEnd > 1.5*totalWindowLength){
+			std::string breakSnippet = (r.referenceSeqMappedTo).substr(posOnRef, 1.5*windowLength);
+			for (unsigned int i = windowLength; i < 1.5*windowLength - 7; i++){
+
+				double gap1 = std::abs(thymidineModel.at(breakSnippet.substr(i,6)).first - thymidineModel.at(breakSnippet.substr(i+1,6)).first);
+				double gap2 = std::abs(thymidineModel.at(breakSnippet.substr(i,6)).first - thymidineModel.at(breakSnippet.substr(i-1,6)).first);
+
+				if (gap1 > 20. and gap2 > 20.){
+
+					windowLength = i+6;
+					break;
+				}
+			}
+		}
+
 
 		std::string readSnippet = (r.referenceSeqMappedTo).substr(posOnRef, windowLength);
 
@@ -857,11 +902,13 @@ std::pair<bool,AlignedRead> eventalign_detect( read &r,
 		}
 
 		//catch spans with high insertions
+		/*
 		int spanOnRef = windowLength-5;
 		int spanOnQuery = (r.refToQuery)[posOnRef + windowLength-5] - (r.refToQuery)[posOnRef];
 		if ( (double)spanOnQuery / spanOnRef > 1.2){
 			return std::make_pair(false,ar);
 		}
+		*/
 
 		//we can more gracefully deal with deletions, so pass on this window and restart
 		if ( eventSnippet.size() < 2 ){
@@ -938,7 +985,7 @@ std::pair<bool,AlignedRead> eventalign_detect( read &r,
 
 		//go again starting at posOnRef + lastM_ref using events starting at readHead + lastM_ev
 		readHead += lastM_ev + 1;
-		posOnRef += lastM_ref;
+		posOnRef += lastM_ref + 1;
 	}
 	return std::make_pair(true,ar);
 }
