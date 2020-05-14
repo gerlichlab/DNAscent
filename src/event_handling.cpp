@@ -487,14 +487,14 @@ void adaptive_banded_simple_event_align( std::vector< double > &raw, read &r, Po
 		//update A,b for recomputing shift and scale
 		//only do this for sixmers that don't contain a T
 
-		if (sixMer.find("T") == std::string::npos){
+		//if (sixMer.find("T") == std::string::npos){
 			A[0][0] += 1.0 / pow( thymidineModel.at(sixMer).second, 2.0 );
 			A[0][1] += thymidineModel.at(sixMer).first / pow( thymidineModel.at(sixMer).second, 2.0 );
 			A[1][1] += pow( thymidineModel.at(sixMer).first, 2.0 ) / pow( thymidineModel.at(sixMer).second, 2.0 );
 			b[0] += raw[curr_event_idx] / pow( thymidineModel.at(sixMer).second, 2.0 );
 			b[1] += raw[curr_event_idx] * thymidineModel.at(sixMer).first / pow( thymidineModel.at(sixMer).second, 2.0 );
-			usedInScale++;
-		}
+		//	usedInScale++;
+		//}
 
 		n_aligned_events += 1;
 
@@ -529,7 +529,7 @@ void adaptive_banded_simple_event_align( std::vector< double > &raw, read &r, Po
     
 	r.alignmentQCs.recordQCs(avg_log_emission, spanned, max_gap);
 
-	if(avg_log_emission < min_average_log_emission || !spanned || max_gap > max_gap_threshold || usedInScale < 100) {
+	if(avg_log_emission < min_average_log_emission || !spanned || max_gap > max_gap_threshold ){//|| usedInScale < 100) {
 		
 		//bool failed = true;
 		r.eventAlignment.clear();
@@ -545,11 +545,11 @@ void adaptive_banded_simple_event_align( std::vector< double > &raw, read &r, Po
 
 		//compute var
 		rescale.var = 0.0;
-		int nNormalised = 0;
+		//int nNormalised = 0;
 		for (unsigned int i = 0; i < r.eventAlignment.size(); i++){
 
 			std::string sixMer = sequence.substr(r.eventAlignment[i].second, k);
-			if (sixMer.find("T") != std::string::npos) continue;
+			//if (sixMer.find("T") != std::string::npos) continue;
 			double event = raw[r.eventAlignment[i].first];
 			double mu,stdv;
 			mu = thymidineModel.at(sixMer).first;
@@ -557,9 +557,9 @@ void adaptive_banded_simple_event_align( std::vector< double > &raw, read &r, Po
 
 			double yi = (event - rescale.shift - rescale.scale*mu);
 			rescale.var += yi * yi / (stdv * stdv);
-			nNormalised++;
+			//nNormalised++;
 		}
-		rescale.var /= (double) nNormalised;
+		rescale.var /= raw.size();//(double) nNormalised;
 		rescale.var = sqrt(rescale.var);
 		//fprintf(stderr,"%f\n",rescale.var);
 	}

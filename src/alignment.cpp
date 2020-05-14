@@ -869,6 +869,7 @@ std::string eventalign_train( read &r,
 		//find good breakpoints
 		bool found = false;
 		std::string break1, break2;
+
 		if (basesToEnd > 1.5*totalWindowLength){
 			std::string breakSnippet = (r.referenceSeqMappedTo).substr(posOnRef, 1.5*windowLength);
 			for (unsigned int i = windowLength; i < 1.5*windowLength - 7; i++){
