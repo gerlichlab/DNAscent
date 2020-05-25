@@ -58,6 +58,7 @@ struct Arguments {
 	int minQ = 20;
 	int minL = 1000;
 	unsigned int threads = 1;
+	double dilation = 1.0;
 };
 
 Arguments parseDetectArguments( int argc, char** argv ){
@@ -133,6 +134,12 @@ Arguments parseDetectArguments( int argc, char** argv ){
 
 			args.useHMM = true;
 			i+=1;
+		}
+		else if ( flag == "--dilation" ){
+
+			std::string strArg( argv[ i + 1 ] );
+			args.dilation = std::stof( strArg.c_str() );
+			i+=2;
 		}
 		else if ( flag == "--methyl-aware" ){
 
@@ -1008,7 +1015,7 @@ int detect_main( int argc, char** argv ){
 
 	//get the neural network model path
 	std::string pathExe = getExePath();
-	std::string modelPath = pathExe + "/dnn_models/" + "prototypeDetect.pb";
+	std::string modelPath = pathExe + "/dnn_models/" + "BrdU_detect.pb";
 
 	//import fasta reference
 	std::map< std::string, std::string > reference = import_reference_pfasta( args.referenceFilename );
@@ -1017,7 +1024,7 @@ int detect_main( int argc, char** argv ){
 	if ( not outFile.is_open() ) throw IOerror( args.outputFilename );
 
 	//write the outfile header
-	std::string outHeader = writeDetectHeader(args.bamFilename, args.referenceFilename, args.indexFilename, args.threads, args.methylAware, args.useHMM, args.minQ, args.minL);
+	std::string outHeader = writeDetectHeader(args.bamFilename, args.referenceFilename, args.indexFilename, args.threads, args.methylAware, args.useHMM, args.minQ, args.minL, args.dilation);
 	outFile << outHeader;
 
 	htsFile* bam_fh;
@@ -1130,7 +1137,7 @@ int detect_main( int argc, char** argv ){
 				}
 				else{ //use neural network detection
 
-					std::pair<bool,AlignedRead> ar = eventalign_detect( r, windowLength_align );
+					std::pair<bool,AlignedRead> ar = eventalign_detect( r, windowLength_align, args.dilation );
 					if (not ar.first){
 
 						failed++;

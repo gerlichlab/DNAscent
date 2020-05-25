@@ -50,6 +50,7 @@ struct Arguments {
 	int minQ, maxReads;
 	int minL;
 	unsigned int threads;
+	double dilation;
 };
 
 Arguments parseAlignArguments( int argc, char** argv ){
@@ -81,6 +82,7 @@ Arguments parseAlignArguments( int argc, char** argv ){
 	args.divergence = 0;
 	args.capReads = false;
 	args.maxReads = 0;
+	args.dilation = 1.0;
 
 	/*parse the command line arguments */
 
@@ -143,6 +145,12 @@ Arguments parseAlignArguments( int argc, char** argv ){
 			args.divergence = std::stof(strArg.c_str());
 			i+=2;
 		}
+		else if ( flag == "--dilation" ){
+
+			std::string strArg( argv[ i + 1 ] );
+			args.dilation = std::stof( strArg.c_str() );
+			i+=2;
+		}
 		else if ( flag == "--methyl-aware" ){
 
 			args.methylAware = true;
@@ -186,7 +194,8 @@ int lnArgMax(std::vector<double> v){
 std::pair< double, std::vector< std::string > > builtinViterbi( std::vector <double> &observations,
 				std::string &sequence,
 				PoreParameters scalings,
-				bool flip){
+				bool flip,
+				double signalDilation){
 
 	//Initial transitions within modules (internal transitions)
 	double internalM12I = 0.001;
@@ -246,7 +255,7 @@ std::pair< double, std::vector< std::string > > builtinViterbi( std::vector <dou
 		level_mu = (scalings.shift + scalings.scale * thymidineModel.at(sixMer).first);
 		level_sigma = scalings.var * thymidineModel.at(sixMer).second;
 
-		matchProb = eln( normalPDF( level_mu, level_sigma, observations[t] ) );
+		matchProb = eln( normalPDF( level_mu*signalDilation, level_sigma, observations[t]*signalDilation ) );
 		//insProb = eln( uniformPDF( 0, 250, observations[t] ) );
 		insProb = 0.0; //log(1) = 0
 
@@ -321,7 +330,7 @@ std::pair< double, std::vector< std::string > > builtinViterbi( std::vector <dou
 			//level_mu = thymidineModel.at(sixMer).first;
 			//level_sigma = scalings.var / scalings.scale * thymidineModel.at(sixMer).second;
 
-			matchProb = eln( normalPDF( level_mu, level_sigma, observations[t] ) );
+			matchProb = eln( normalPDF( level_mu*signalDilation, level_sigma, observations[t]*signalDilation ) );
 
 			//to the insertion
 			I_curr[i] = lnVecMax({lnProd( lnProd( I_prev[i], eln( internalI2I ) ), insProb ),
@@ -483,7 +492,8 @@ std::pair< double, std::vector< std::string > > builtinViterbi( std::vector <dou
 
 
 std::string eventalign( read &r,
-            unsigned int totalWindowLength ){
+            unsigned int totalWindowLength,
+			double signalDilation){
 
 	std::string out;
 	//get the positions on the reference subsequence where we could attempt to make a call
@@ -591,7 +601,7 @@ std::string eventalign( read &r,
 		if ( r.isReverse ) globalPosOnRef = r.refEnd - posOnRef - 6;
 		else globalPosOnRef = r.refStart + posOnRef;
 
-		std::pair< double, std::vector<std::string> > builtinAlignment = builtinViterbi( eventSnippet, readSnippet, r.scalings, false);
+		std::pair< double, std::vector<std::string> > builtinAlignment = builtinViterbi( eventSnippet, readSnippet, r.scalings, false, signalDilation);
 
 		std::vector< std::string > stateLabels = builtinAlignment.second;
 		size_t lastM_ev = 0;
@@ -761,7 +771,7 @@ std::string eventalign( read &r,
 		if ( r.isReverse ) globalPosOnRef = r.refEnd - posOnRef;
 		else globalPosOnRef = r.refStart + posOnRef - 6;
 
-		std::pair< double, std::vector<std::string> > builtinAlignment = builtinViterbi( eventSnippet, readSnippet, r.scalings, true);
+		std::pair< double, std::vector<std::string> > builtinAlignment = builtinViterbi( eventSnippet, readSnippet, r.scalings, true, signalDilation);
 
 		std::vector< std::string > stateLabels = builtinAlignment.second;
 		size_t lastM_ev = 0;
@@ -842,7 +852,8 @@ std::string eventalign( read &r,
 
 std::string eventalign_train( read &r,
             unsigned int totalWindowLength,
-			std::map<unsigned int, double> &BrdULikelihood){
+			std::map<unsigned int, double> &BrdULikelihood,
+			double signalDilation){
 
 	std::string out;
 	//get the positions on the reference subsequence where we could attempt to make a call
@@ -951,7 +962,7 @@ std::string eventalign_train( read &r,
 		if ( r.isReverse ) globalPosOnRef = r.refEnd - posOnRef - 6;
 		else globalPosOnRef = r.refStart + posOnRef;
 
-		std::pair< double, std::vector<std::string> > builtinAlignment = builtinViterbi( eventSnippet, readSnippet, r.scalings, false);
+		std::pair< double, std::vector<std::string> > builtinAlignment = builtinViterbi( eventSnippet, readSnippet, r.scalings, false, signalDilation);
 
 		std::vector< std::string > stateLabels = builtinAlignment.second;
 		size_t lastM_ev = 0;
@@ -1117,7 +1128,7 @@ std::string eventalign_train( read &r,
 		if ( r.isReverse ) globalPosOnRef = r.refEnd - posOnRef;
 		else globalPosOnRef = r.refStart + posOnRef - 6;
 
-		std::pair< double, std::vector<std::string> > builtinAlignment = builtinViterbi( eventSnippet, readSnippet, r.scalings, true);
+		std::pair< double, std::vector<std::string> > builtinAlignment = builtinViterbi( eventSnippet, readSnippet, r.scalings, true, signalDilation);
 
 		std::vector< std::string > stateLabels = builtinAlignment.second;
 		size_t lastM_ev = 0;
@@ -1196,7 +1207,8 @@ std::string eventalign_train( read &r,
 
 
 std::pair<bool,AlignedRead> eventalign_detect( read &r,
-            unsigned int totalWindowLength ){
+            unsigned int totalWindowLength,
+			double signalDilation ){
 
 	//get the positions on the reference subsequence where we could attempt to make a call
 	std::string strand;
@@ -1303,7 +1315,7 @@ std::pair<bool,AlignedRead> eventalign_detect( read &r,
 		if ( r.isReverse ) globalPosOnRef = r.refEnd - posOnRef - 6;
 		else globalPosOnRef = r.refStart + posOnRef;
 
-		std::pair< double, std::vector<std::string> > builtinAlignment = builtinViterbi( eventSnippet, readSnippet, r.scalings, false);
+		std::pair< double, std::vector<std::string> > builtinAlignment = builtinViterbi( eventSnippet, readSnippet, r.scalings, false, signalDilation);
 
 		std::vector< std::string > stateLabels = builtinAlignment.second;
 		size_t lastM_ev = 0;
@@ -1463,7 +1475,7 @@ std::pair<bool,AlignedRead> eventalign_detect( read &r,
 		if ( r.isReverse ) globalPosOnRef = r.refEnd - posOnRef;
 		else globalPosOnRef = r.refStart + posOnRef - 6;
 
-		std::pair< double, std::vector<std::string> > builtinAlignment = builtinViterbi( eventSnippet, readSnippet, r.scalings, true);
+		std::pair< double, std::vector<std::string> > builtinAlignment = builtinViterbi( eventSnippet, readSnippet, r.scalings, true, signalDilation);
 
 		std::vector< std::string > stateLabels = builtinAlignment.second;
 		size_t lastM_ev = 0;
@@ -1651,7 +1663,7 @@ int align_main( int argc, char** argv ){
 					continue;
 				}
 
-				std::string out = eventalign( r, windowLength);
+				std::string out = eventalign( r, windowLength, args.dilation);
 
 				#pragma omp critical
 				{

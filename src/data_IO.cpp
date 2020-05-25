@@ -33,7 +33,8 @@ std::string writeDetectHeader(std::string alignmentFilename,
 						bool methylAware,
 						bool useHMM,
 						unsigned int quality,
-						unsigned int length){
+						unsigned int length,
+						double dilation){
 
 	std::string detMode;
 	if (useHMM) detMode = "HMM";
@@ -54,6 +55,7 @@ std::string writeDetectHeader(std::string alignmentFilename,
 	out += "#MappingLength " + std::to_string(length) + "\n";
 	out += "#Version " + std::string(VERSION) + "\n";
 	out += "#Commit " + std::string(gitcommit) + "\n";
+	out += "#SignalDilation " + std::to_string(dilation) + "\n";
 
 	return out;
 }

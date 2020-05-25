@@ -53,6 +53,7 @@ struct Arguments {
 	int minQ, maxReads;
 	int minL;
 	unsigned int threads;
+	double dilation;
 };
 
 Arguments parseDataArguments( int argc, char** argv ){
@@ -84,6 +85,7 @@ Arguments parseDataArguments( int argc, char** argv ){
 	args.divergence = 0;
 	args.capReads = false;
 	args.maxReads = 0;
+	args.dilation = 1.0;
 
 	/*parse the command line arguments */
 
@@ -138,6 +140,12 @@ Arguments parseDataArguments( int argc, char** argv ){
 			std::string strArg( argv[ i + 1 ] );
 			args.capReads = true;
 			args.maxReads = std::stoi( strArg.c_str() );
+			i+=2;
+		}
+		else if ( flag == "--dilation" ){
+
+			std::string strArg( argv[ i + 1 ] );
+			args.dilation = std::stof( strArg.c_str() );
 			i+=2;
 		}
 		else if ( flag == "--divergence" ){
@@ -278,7 +286,7 @@ int data_main( int argc, char** argv ){
 				}
 
 				std::map<unsigned int, double> BrdUCalls = llAcrossRead_forTraining( r, windowLength);
-				std::string readOut = eventalign_train( r, 100, BrdUCalls);
+				std::string readOut = eventalign_train( r, 100, BrdUCalls, args.dilation);
 
 				#pragma omp critical
 				{
