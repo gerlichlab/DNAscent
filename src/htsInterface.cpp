@@ -64,6 +64,102 @@ bool indelFastFail(bam1_t *record, int maxI, int maxD ){
 }
 
 
+std::vector<int> ref2indels(bam1_t *record, int &refStart, int &refEnd ){
+	//Covered in: tests/detect/htslib
+
+	//initialise reference and query coordinates for the first match
+	//refStart = record -> core.pos;
+	int queryPosition = 0;
+	int refPosition = 0;
+
+	std::vector<int> indels(refEnd - refStart + 1, 0);
+
+	const uint32_t *cigar = bam_get_cigar(record);
+
+	if ( bam_is_rev(record) ){
+
+		for ( int i = record -> core.n_cigar - 1; i >= 0; i--){
+
+			const int op = bam_cigar_op(cigar[i]); //cigar operation
+			const int ol = bam_cigar_oplen(cigar[i]); //number of consecutive operations
+
+			//for a match, advance both reference and query together
+			if (op == BAM_CMATCH or op == BAM_CEQUAL or op == BAM_CDIFF){
+
+				for ( int j = refPosition; j < refPosition + ol; j++ ){
+
+					queryPosition++;
+				}
+				refPosition += ol;
+			}
+			//for a deletion, advance only the reference position
+			else if (op == BAM_CDEL or op == BAM_CREF_SKIP){
+
+				for ( int j = refPosition; j < refPosition + ol; j++ ){
+
+					//std::cout << j << " " << indels.size() << std::endl;
+					indels[j] = ol;
+				}
+				refPosition += ol;
+			}
+			//for insertions or soft clipping, advance only the query position
+			else if (op == BAM_CINS){
+
+				for ( int j = refPosition; j < refPosition + ol; j++ ){
+
+					//std::cout << j << " " << indels.size() << std::endl;
+					queryPosition++;
+					indels[j] = ol;
+				}
+			}
+			//N.B. hard clipping advances neither reference nor query, so ignore it
+		}
+	}
+	else {
+
+		for ( unsigned int i = 0; i < record -> core.n_cigar; ++i){
+
+			const int op = bam_cigar_op(cigar[i]); //cigar operation
+			const int ol = bam_cigar_oplen(cigar[i]); //number of consecutive operations
+
+			//for a match, advance both reference and query together
+			if (op == BAM_CMATCH or op == BAM_CEQUAL or op == BAM_CDIFF){
+
+				for ( int j = refPosition; j < refPosition + ol; j++ ){
+
+					queryPosition++;
+				}
+				refPosition += ol;
+			}
+			//for a deletion, advance only the reference position
+			else if (op == BAM_CDEL or op == BAM_CREF_SKIP){
+
+				for ( int j = refPosition; j < refPosition + ol; j++ ){
+
+					//std::cout << j << " " << indels.size() << std::endl;
+					indels[j] = ol;
+				}
+				refPosition += ol;
+			}
+			//for insertions or soft clipping, advance only the query position
+			else if (op == BAM_CINS){
+
+				for ( int j = refPosition; j < refPosition + ol; j++ ){
+
+					//std::cout << j << " " << indels.size() << std::endl;
+					indels[j] = ol;
+					queryPosition++;
+				}
+			}
+			//N.B. hard clipping advances neither refernce nor query, so ignore it
+		}
+	}
+	//std::cout << refPosition << " " << indels.size() << std::endl;
+	//for (int i = 0; i < indels.size(); i++) std::cout << indels[i] << std::endl;
+	return indels;
+}
+
+
 void parseCigar(bam1_t *record, std::map< unsigned int, unsigned int > &ref2query, int &refStart, int &refEnd ){
 	//Covered in: tests/detect/htslib
 

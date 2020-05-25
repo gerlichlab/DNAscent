@@ -11,6 +11,7 @@
 
 #include <string>
 #include <utility>
+#include <vector>
 #include <map>
 #include "../htslib/htslib/hts.h"
 #include "../htslib/htslib/sam.h"
@@ -20,5 +21,6 @@ void parseCigar(bam1_t *, std::map< unsigned int, unsigned int > &, int &, int &
 std::string getQuerySequence( bam1_t * );
 void getRefEnd(bam1_t *, int &, int & );
 bool indelFastFail(bam1_t *, int, int );
+std::vector<int>  ref2indels(bam1_t *, int &, int & );
 
 #endif /* SRC_HTSINTERFACE_H_ */

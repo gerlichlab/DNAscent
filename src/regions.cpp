@@ -32,7 +32,7 @@ static const char *help=
 "     --replication          detect fork direction and call origin firing (default: off),\n"
 "     --threshold            threshold for a positive analogue call (default: 0.7),\n"
 "  -c,--cooldown             minimum gap between positive analogue calls (default: 4),\n"
-"  -r,--resolution           minimum length of regions (default is 2kb),\n"
+"  -r,--resolution           number of thymidines in a region (default is 10),\n"
 "  -p,--probability          override probability that a thymidine 6mer contains a BrdU (default: automatically calculated),\n"
 "  -z,--zScore               override zScore threshold for BrdU call (default: automatically calculated).\n"
 "Written by Michael Boemo, Department of Pathology, University of Cambridge.\n"
@@ -67,7 +67,7 @@ Arguments parseRegionsArguments( int argc, char** argv ){
  	Arguments args;
 
  	//defaults - we'll override these if the option was specified by the user
-	args.resolution = 2000;
+	args.resolution = 10;
 	args.threshold = 0;
 	args.callReplication = false;
 	args.overrideProb = false;
@@ -729,54 +729,19 @@ void regionsHMM(Arguments args){
 
 std::pair<double,double> pmf(std::vector<double> &buffer){
 
-	
-	for (size_t i = 0; i < buffer.size(); i++){
+	double sum = 0.;
+	for (size_t k = 0; k < buffer.size(); k++) sum += buffer[k];
+	double avg = sum / buffer.size();
+	return std::make_pair(avg, 0.);
 
-		buffer[i] = 1. / (1. + exp(-10. * (buffer[i] - 0.5)));
+	/* calls / attempts method
+	double sum = 0.;
+	for (size_t k = 0; k < buffer.size(); k++){
+		if (buffer[k] > 0.6) sum++;
 	}
-	
-	int N = buffer.size();
-	assert(N<=20);
-	std::vector<double> distribution(N+1,0.0);
-
-	for (size_t k = 0; k <= N; k++){
-
-		std::string bitmask(k, 1); // K leading 1's
-		bitmask.resize(N, 0); // N-K trailing 0's
-
-		// print integers and permute bitmask
-	    do {
-	    	double permProb = 1.0;
-	    	for (int i = 0; i < N; i++) {// [0..N-1] integers
-	    		if (bitmask[i]){//is BrdU
-	            	permProb *= buffer[i];
-	            }
-	    		else{//is not BrdU
-	    			permProb *= 1. - buffer[i];
-	    		}
-	        }
-	       distribution[k] += permProb;
-	    } while (std::prev_permutation(bitmask.begin(), bitmask.end()));
-	}
-
-	/* testing
-	double distSum = 0.;
-	for (int i = 0; i <= N; i++ ) distSum += distribution[i];
-	std::cout << distSum << std::endl;
+	double avg = sum / buffer.size();
+	return std::make_pair(avg, 0.);	
 	*/
-
-	//calculate the pmf mean
-	double mean = 0.;
-	for (int i = 0; i <= N; i++){
-		mean += (double)i * distribution[i];
-	}
-
-	//calculate the pmf std
-	double std = 0.;
-	for (int i = 0; i <= N; i++){
-		std += pow((double)i - mean, 2.0) * distribution[i];
-	}
-	return std::make_pair(mean / N,std / N);
 }
 
 
@@ -803,7 +768,7 @@ void regionsCNN(Arguments args){
 	//write the regions header
 	outFile <<  writeRegionsHeader(args.detectFilename, args.likelihood, false, args.cooldown, args.resolution, 0.0, args.threshold);
 
-	size_t thymVoters = 10;
+	size_t thymVoters = args.resolution;
 	std::vector<double> buffer;
 
 	std::cout << "Calling regions..." << std::endl;

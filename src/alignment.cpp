@@ -243,7 +243,7 @@ std::pair< double, std::vector< std::string > > builtinViterbi( std::vector <dou
 		std::string sixMer = sequence.substr(0, 6);
 		if (flip) std::reverse(sixMer.begin(),sixMer.end());
 
-		level_mu = scalings.shift + scalings.scale * thymidineModel.at(sixMer).first;
+		level_mu = (scalings.shift + scalings.scale * thymidineModel.at(sixMer).first);
 		level_sigma = scalings.var * thymidineModel.at(sixMer).second;
 
 		matchProb = eln( normalPDF( level_mu, level_sigma, observations[t] ) );
@@ -252,12 +252,12 @@ std::pair< double, std::vector< std::string > > builtinViterbi( std::vector <dou
 
 		//to the base 1 insertion
 		I_curr[0] = lnVecMax({lnProd( lnProd( I_prev[0], eln( internalI2I ) ), insProb ),
-			                  lnProd( lnProd( M_prev[0], eln( internalM12I ) ), insProb )
-							  //lnProd( lnProd( start_prev, eln( internalM12I ) ), insProb )
+			                  lnProd( lnProd( M_prev[0], eln( internalM12I ) ), insProb ),
+							  lnProd( lnProd( start_prev, eln( internalM12I ) ), insProb )
 		                     });
 		maxindex = lnArgMax({lnProd( lnProd( I_prev[0], eln( internalI2I ) ), insProb ),
-					         lnProd( lnProd( M_prev[0], eln( internalM12I ) ), insProb )
-							 //lnProd( lnProd( start_prev, eln( internalM12I ) ), insProb*0.001 )
+					         lnProd( lnProd( M_prev[0], eln( internalM12I ) ), insProb ),
+							 lnProd( lnProd( start_prev, eln( internalM12I ) ), insProb*0.001 )
 						     });
 		switch(maxindex){
 			case 0:
@@ -268,10 +268,10 @@ std::pair< double, std::vector< std::string > > builtinViterbi( std::vector <dou
 				backtraceS[0 + I_offset][t+1] = 0 + M_offset;
 				backtraceT[0 + I_offset][t+1] = t;
 				break;
-			//case 2:
-				//backtraceS[0 + I_offset][t+1] = -1;
-				//backtraceT[0 + I_offset][t+1] = t;
-				//break;
+			case 2:
+				backtraceS[0 + I_offset][t+1] = -1;
+				backtraceT[0 + I_offset][t+1] = t;
+				break;
 			default:
 				std::cout << "problem" << std::endl;
 				exit(EXIT_FAILURE);
@@ -279,10 +279,10 @@ std::pair< double, std::vector< std::string > > builtinViterbi( std::vector <dou
 
 		//to the base 1 match
 		M_curr[0] = lnVecMax({lnProd( lnProd( M_prev[0], eln( internalM12M1 ) ), matchProb ),
-							  lnProd( lnProd( start_prev, eln( externalM12M1 + internalM12M1 + internalM12I + externalM12D ) ), matchProb )
+							  lnProd( lnProd( start_prev, eln( externalM12M1 + internalM12M1 ) ), matchProb )
 							 });
 		maxindex = lnArgMax({lnProd( lnProd( M_prev[0], eln( internalM12M1 ) ), matchProb ),
-							 lnProd( lnProd( start_prev, eln( externalM12M1 + internalM12M1 + internalM12I + externalM12D ) ), matchProb )
+							 lnProd( lnProd( start_prev, eln( externalM12M1 + internalM12M1 ) ), matchProb )
 							});
 		switch(maxindex){
 			case 0:
@@ -299,7 +299,7 @@ std::pair< double, std::vector< std::string > > builtinViterbi( std::vector <dou
 		}
 
 		//to the base 1 deletion
-		D_curr[0] = lnProd( NAN, eln( 0. ) );  //start to D
+		D_curr[0] = lnProd( NAN, eln( externalM12D  ) );  //start to D
 		backtraceS[0 + D_offset][t+1] = -1;
 		backtraceT[0 + D_offset][t+1] = t + 1;
 
@@ -314,7 +314,7 @@ std::pair< double, std::vector< std::string > > builtinViterbi( std::vector <dou
 			//insProb = eln( uniformPDF( 0, 250, observations[t] ) );
 			insProb = 0.0; //log(1) = 0
 
-			level_mu = scalings.shift + scalings.scale * thymidineModel.at(sixMer).first;
+			level_mu = (scalings.shift + scalings.scale * thymidineModel.at(sixMer).first);
 			level_sigma = scalings.var * thymidineModel.at(sixMer).second;
 
 			//uncomment if you scale events
@@ -1490,9 +1490,9 @@ std::pair<bool,AlignedRead> eventalign_detect( read &r,
 		for (size_t i = 0; i < stateLabels.size(); i++){
 
 			std::string label = stateLabels[i].substr(stateLabels[i].find('_')+1);
-	        int pos = std::stoi(stateLabels[i].substr(0,stateLabels[i].find('_')));
+			int pos = std::stoi(stateLabels[i].substr(0,stateLabels[i].find('_')));
 
-	        if (label == "D") continue; //silent states don't emit an event
+			if (label == "D") continue; //silent states don't emit an event
 
 			std::string sixMerStrand = (r.referenceSeqMappedTo).substr(posOnRef - pos - 6, 6);
 
@@ -1516,7 +1516,7 @@ std::pair<bool,AlignedRead> eventalign_detect( read &r,
 				ar.addEvent(sixMerStrand, evPos, scaledEvent, eventLength);
 			}
 
-	        evIdx ++;
+			evIdx ++;
 		}
 
 		//go again starting at posOnRef + lastM_ref using events starting at readHead + lastM_ev

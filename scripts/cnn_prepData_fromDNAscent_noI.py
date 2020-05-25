@@ -11,16 +11,16 @@ from scipy.stats import halfnorm
 
 barcode = int(sys.argv[1])
 
-folderPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/data_DNAscentTrainingData_highIns_noBrdUScaling_wellMixed'
+folderPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/commit620d798_trainingData'
 
-bc08dnascent = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/barcode08/commite338d93_l_3000_q_20.barcode08.trainingData'
-bc10dnascent = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/barcode10/commite338d93_l_3000_q_20.barcode10.trainingData'
-bc11dnascent = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/barcode11/commite338d93_l_3000_q_20.barcode11.trainingData'
-bc12dnascent = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/barcode12/commite338d93_l_3000_q_20.barcode12.trainingData'
+bc08dnascent = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/barcode08/commit620d798_l_4000_q_20.barcode08.trainingData'
+bc10dnascent = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/barcode10/commit620d798_l_4000_q_20.trainingData'
+bc11dnascent = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/barcode11/commit620d798_l_4000_q_20.barcode11.trainingData'
+bc12dnascent = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/barcode12/commit620d798_l_4000_q_20.trainingData'
 
 inputFiles = [(0., bc08dnascent),(0.26, bc10dnascent),(0.5, bc11dnascent),(0.8, bc12dnascent)]
-maxLen = 3000
-maxReads = 26000
+maxLen = 4000
+maxReads = int(sys.argv[2])
 
 llThreshold = 1.25
 
@@ -156,11 +156,12 @@ def importFromFile(analogueConc, fname):
 
 			splitLine = line.rstrip().split()
 			readID = splitLine[0][1:]
+			chromosome = splitLine[1]
 			mappingStart = int(splitLine[2])
 			mappingEnd = int(splitLine[3])
 			prevPos = -1
 
-			if readsLoaded in readsToUse:
+			if readsLoaded in readsToUse and chromosome != 'chrM':
 				switch = True
 			else:
 				switch = False

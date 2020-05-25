@@ -6,42 +6,46 @@ import numpy as np
 np.set_printoptions(threshold=sys.maxsize)
 import sys
 
-maxReads = 1000
+maxReads = 5000
 cooldownThreshold = 0
+
 
 Tprefix = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/barcode08/'
 Bprefix = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/barcode11/'
 
-fn_Thym = [Tprefix+'commit2d622cc1_DNAscentCNN_softLabel_highIns_rightTestData_8Cores.detect',
- Tprefix+'commite338d93_DNAscentCNN_softLabel_highIns_build29.detect',
+fn_Thym = [Tprefix+'commite338d93_DNAscentCNN_softLabel_highIns_build29.detect',
  Tprefix+'commite338d93_DNAscentCNN_build38.detect',
- Tprefix+'commite338d93_DNAscentCNN_build45.detect',
  Tprefix+'commite338d93_DNAscentCNN_build46.detect',
- Tprefix+'commite338d93_DNAscentCNN_build47.detect',
- Tprefix+'commite338d93_DNAscentCNN_build48.detect',
- Tprefix+'commite338d93_DNAscentCNN_build49.detect',
- Tprefix+'commite338d93_DNAscentCNN_build50.detect']
+ Tprefix+'commite338d93_DNAscentCNN_build52.detect',
+ Tprefix+'commit620d798_DNAscentCNN_build55.detect',
+ Tprefix+'commit620d798_DNAscentCNN_build56.detect',
+ Tprefix+'commit620d798_DNAscentCNN_build57.detect',
+ Tprefix+'commit620d798_DNAscentCNN_build58.detect',
+ Tprefix+'commit620d798_DNAscentCNN_build59.detect',
+ Tprefix+'commit620d798_DNAscentCNN_build60.detect']
 
-fn_BrdU = [Bprefix+'commit2d622cc1_DNAscentCNN_softLabel_highIns_rightTestData_8Cores.detect',
- Bprefix+'commite338d93_DNAscentCNN_softLabel_highIns_build29.HMM.detect',
+fn_BrdU = [Bprefix+'commite338d93_DNAscentCNN_softLabel_highIns_build29.HMM.detect',
  Bprefix+'commite338d93_DNAscentCNN_build38.detect',
- Bprefix+'commite338d93_DNAscentCNN_build45.detect',
  Bprefix+'commite338d93_DNAscentCNN_build46.detect',
- Bprefix+'commite338d93_DNAscentCNN_build47.detect',
- Bprefix+'commite338d93_DNAscentCNN_build48.detect',
- Bprefix+'commite338d93_DNAscentCNN_build49.detect',
- Bprefix+'commite338d93_DNAscentCNN_build50.detect']
+ Bprefix+'commite338d93_DNAscentCNN_build52.detect',
+ Bprefix+'commit620d798_DNAscentCNN_build55.detect',
+ Bprefix+'commit620d798_DNAscentCNN_build56.detect',
+ Bprefix+'commit620d798_DNAscentCNN_build57.detect',
+ Bprefix+'commit620d798_DNAscentCNN_build58.detect',
+ Bprefix+'commit620d798_DNAscentCNN_build59.detect',
+ Bprefix+'commit620d798_DNAscentCNN_build60.detect']
 
-labels = ['build21',
- 'build29',
+
+labels = ['build29',
  'build38',
- 'build45',
  'build46',
- 'build47',
- 'build48',
- 'build49',
- 'build50']
-
+ 'build52',
+ 'build55',
+ 'build56',
+ 'build57',
+ 'build58',
+ 'build59',
+ 'build60']
 
 probTests = np.array(range(1,10))/10.
 
@@ -156,7 +160,7 @@ for i in range(0,len(fn_BrdU)):
 		ax.annotate(str(txt),(x[p],y[p]),fontsize=6)
 
 #CNN END
-
+'''
 
 #DO FOR HMM
 fn_BrdU = [Bprefix+'commit2d622cc1_HMM.detect', Bprefix+'v0.1.barcode08.detect']
@@ -253,8 +257,8 @@ for i in range(0,len(fn_BrdU)):
 	plt.plot(x[::-1], y[::-1], label=labels[i])
 	for p,txt in enumerate(probTests):
 		ax.annotate(str(txt),(x[p],y[p]),fontsize=6)
-
-plt.legend()
+'''
+plt.legend(framealpha=0.5)
 plt.xlim(0,1.0)
 plt.xlabel('False Positive Rate')
 plt.ylabel('Calls/Attempts')
