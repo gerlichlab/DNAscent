@@ -66,6 +66,11 @@ std::map< std::string, std::pair< double, double > > methyl5mCModel;
 /*main DNAscent executable that will link to other executables */
 int main( int argc, char** argv ){
 
+	int env = setenv("TF_CPP_MIN_LOG_LEVEL", "2", 1);
+	if (env == -1){
+		std::cerr << "Suppression of Tensorflow logs and warnings failed." << std::endl;
+	}
+
 	//load pore models
 	analogueModel = import_poreModel("BrdU.model");
 	thymidineModel = import_poreModel("template_median68pA.6mer.model");

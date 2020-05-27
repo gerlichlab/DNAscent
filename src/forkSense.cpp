@@ -18,6 +18,7 @@
 #include <math.h>
 #include <algorithm>
 #include <limits>
+#include <stdlib.h>
 
 static const char *help=
 "forkSense: DNAscent AI executable that calls replication origins, fork movement, and fork stalling.\n"
