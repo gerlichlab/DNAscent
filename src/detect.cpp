@@ -978,16 +978,26 @@ std::string runCNN(AlignedRead &r, std::unique_ptr<ModelSession> &session){
 	unsigned int pos = 0;
 	std::vector<std::string> lines;
 	lines.reserve(positions.size());
-	std::string str_line = std::to_string(positions[0]);
+	std::string thisPosition = std::to_string(positions[0]);
+	std::string str_line;
 	for(size_t i = 0; i < output_size; i++){
-		str_line += "\t" + std::to_string(output_array[i]);
 		if((i+1)%outputFields==0){
+
+			//only output T positions
+			if (sixMers[pos].substr(0,1) != "T"){
+				pos++;
+				continue;
+			}
+
+			str_line += thisPosition + "\t" + std::to_string(output_array[i]);
 			if (r.getStrand() == "rev") str_line += "\t" + reverseComplement(sixMers[pos]);
 			else str_line += "\t" + sixMers[pos];
 			lines.push_back(str_line);
 			str_line = "";
 			pos++;
-			if (i != output_size-1) str_line += std::to_string(positions[pos]);
+		}
+		else{
+			if (i != output_size-1) thisPosition = std::to_string(positions[pos]);
 		}
 	}
 
