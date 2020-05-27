@@ -14,7 +14,7 @@
 #include "common.h"
 #include "data_IO.h"
 #include "error_handling.h"
-#include "train.h"
+#include "trainGMM.h"
 #include <cmath>
 #include <math.h>
 #include <algorithm>
@@ -482,7 +482,6 @@ void regionsHMM(Arguments args){
 	double p;
 	std::string header;
 	unsigned int calls = 0, attempts = 0, gap = 0;
-	double fuzzyCalls = 0.;
 
 	int startingPos = -1;
 	int progress = 0;
@@ -509,7 +508,6 @@ void regionsHMM(Arguments args){
 				callCooldown = 0;
 				attemptCooldown = 0;
 				calls = 0, attempts = 0, gap = 0, startingPos = -1;
-				fuzzyCalls = 0.;
 				continue;
 			}
 
@@ -525,7 +523,6 @@ void regionsHMM(Arguments args){
 				double frac = (double) calls / (double) attempts;
 				callFractions.push_back( frac );
 				calls = 0, attempts = 0, gap = 0, startingPos = -1;
-				fuzzyCalls = 0.;
 			}
 		}
 		std::cout << std::endl << "Done." << std::endl;
@@ -560,7 +557,6 @@ void regionsHMM(Arguments args){
 				progress++;
 				pb_z.displayProgress( progress, 0, 0 );
 				calls = 0, attempts = 0, gap = 0, startingPos = -1;
-				fuzzyCalls = 0.;
 				callCooldown = 0;
 				attemptCooldown = 0;
 			}
@@ -577,7 +573,6 @@ void regionsHMM(Arguments args){
 					double score = (calls - attempts * p) / sqrt( attempts * p * ( 1 - p) );
 					allZScores.push_back(score);
 					calls = 0, attempts = 0, gap = 0, startingPos = -1;
-					fuzzyCalls = 0.;
 				}
 			}
 		}
@@ -670,7 +665,6 @@ void regionsHMM(Arguments args){
 			header = line;
 			buffer.clear();
 			calls = 0, attempts = 0, gap = 0, startingPos = -1;
-			fuzzyCalls = 0.;
 			callCooldown = 0;
 			attemptCooldown = 0;
 			first = false;
@@ -701,8 +695,6 @@ void regionsHMM(Arguments args){
 				
 				buffer.push_back(r);
 				calls = 0, attempts = 0, gap = 0, startingPos = -1;
-				fuzzyCalls = 0.;
-
 			}
 		}
 	}
@@ -733,15 +725,6 @@ std::pair<double,double> pmf(std::vector<double> &buffer){
 	for (size_t k = 0; k < buffer.size(); k++) sum += buffer[k];
 	double avg = sum / buffer.size();
 	return std::make_pair(avg, 0.);
-
-	/* calls / attempts method
-	double sum = 0.;
-	for (size_t k = 0; k < buffer.size(); k++){
-		if (buffer[k] > 0.6) sum++;
-	}
-	double avg = sum / buffer.size();
-	return std::make_pair(avg, 0.);	
-	*/
 }
 
 
@@ -768,13 +751,11 @@ void regionsCNN(Arguments args){
 	//write the regions header
 	outFile <<  writeRegionsHeader(args.detectFilename, args.likelihood, false, args.cooldown, args.resolution, 0.0, args.threshold);
 
-	size_t thymVoters = args.resolution;
 	std::vector<double> buffer;
 
 	std::cout << "Calling regions..." << std::endl;
 	int startingPos = -1;
 	int progress = 0;
-	bool first = true;
 	std::string strand;
 	while( std::getline( inFile, line ) ){
 
@@ -799,7 +780,7 @@ void regionsCNN(Arguments args){
 
 			if ( startingPos == -1 ) startingPos = cnnLine.first;
 
-			if (buffer.size() < thymVoters){
+			if (buffer.size() < args.resolution){
 
 				buffer.push_back(cnnLine.second);
 			}

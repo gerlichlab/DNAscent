@@ -25,7 +25,7 @@
 static const char *help=
 "align: DNAscent executable that generates a BrdU-aware event alignment.\n"
 "To run DNAscent align, do:\n"
-		"  ./DNAscent align -b /path/to/alignment.bam -r /path/to/reference.fasta -i /path/to/index.dnascent -o /path/to/output.detect\n"
+"  ./DNAscent align -b /path/to/alignment.bam -r /path/to/reference.fasta -i /path/to/index.dnascent -o /path/to/output.detect\n"
 "Required arguments are:\n"
 "  -b,--bam                  path to alignment BAM file,\n"
 "  -r,--reference            path to genome reference in fasta format,\n"
@@ -33,7 +33,6 @@ static const char *help=
 "  -o,--output               path to output file that will be generated.\n"
 "Optional arguments are:\n"
 "  -t,--threads              number of threads (default is 1 thread),\n"
-"  --methyl-aware            account for CpG, Dcm, and Dam methylation in BrdU calling,\n"
 "  -m,--maxReads             maximum number of reads to consider,\n"
 "  -q,--quality              minimum mapping quality (default is 20),\n"
 "  -l,--length               minimum read length in bp (default is 100).\n"
@@ -216,9 +215,9 @@ std::pair< double, std::vector< std::string > > builtinViterbi( std::vector <dou
 	std::vector< std::vector< size_t > > backtraceT( 3*n_states, std::vector< size_t >( observations.size() + 1 ) ); /*stores observation indices for the Viterbi backtrace */
 
 	//reserve 0 for start
-	size_t D_offset = 0;
-	size_t M_offset = n_states;
-	size_t I_offset = 2*n_states;
+	ssize_t D_offset = 0;
+	ssize_t M_offset = n_states;
+	ssize_t I_offset = 2*n_states;
 
 	std::vector< double > I_curr(n_states, NAN), D_curr(n_states, NAN), M_curr(n_states, NAN), I_prev(n_states, NAN), D_prev(n_states, NAN), M_prev(n_states, NAN);
 	double start_curr = NAN, start_prev = 0.0;
@@ -442,9 +441,9 @@ std::pair< double, std::vector< std::string > > builtinViterbi( std::vector <dou
 					   lnProd( I_curr.back(), eln( externalI2M1 ) )
 	                   });
 
-	size_t traceback_new;
-	size_t traceback_old;
-	size_t traceback_t = observations.size();
+	ssize_t  traceback_new;
+	ssize_t  traceback_old;
+	ssize_t  traceback_t = observations.size();
 	switch(maxindex){
 		case 0:
 			traceback_old = D_offset + n_states - 1;
@@ -534,8 +533,6 @@ std::string eventalign( read &r,
 	//midpoint for bidirectional alignment
 	size_t midpoint = (r.referenceSeqMappedTo.size()) / 2;
 
-	int fwdEndOnRef, revEndOnRef;
-
 	unsigned int posOnRef = 0;
 	while ( posOnRef < midpoint ){
 
@@ -545,7 +542,7 @@ std::string eventalign( read &r,
 		unsigned int windowLength = std::min(basesToEnd, totalWindowLength);
 
 		//find good breakpoints
-		bool found = false;
+		//bool found = false;
 		std::string break1, break2;
 		if (basesToEnd > 1.5*totalWindowLength){
 
@@ -563,7 +560,7 @@ std::string eventalign( read &r,
 				double gap2 = std::abs(thymidineModel.at(breakSnippet.substr(i,6)).first - thymidineModel.at(breakSnippet.substr(i-1,6)).first);
 
 				if (gap1 > 20. and gap2 > 20.){
-					found = true;
+					//found = true;
 					break1 = breakSnippet.substr(i-1,6);
 					break2 = breakSnippet.substr(i+1,6);
 					windowLength = i+6;
@@ -680,17 +677,16 @@ std::string eventalign( read &r,
 		}
 
 		//TESTING - make sure nothing sketchy happens at the breakpoint
-		if (not found) out += "BREAKPOINT\n";
-		else out += "BREAKPOINT PRIME " + break1 + " " + break2 + "\n";
+		//if (not found) out += "BREAKPOINT\n";
+		//else out += "BREAKPOINT PRIME " + break1 + " " + break2 + "\n";
 
 		//go again starting at posOnRef + lastM_ref using events starting at readHead + lastM_ev
 		readHead += lastM_ev + 1;
 		posOnRef += lastM_ref + 1;
 	}
-	fwdEndOnRef = posOnRef;
 
 	//TESTING - make sure nothing sketchy happens at the boundary
-	out += "STARTREVERSE\n";
+	//out += "STARTREVERSE\n";
 
 
 	//REVERSE
@@ -704,7 +700,7 @@ std::string eventalign( read &r,
 		unsigned int windowLength = std::min(basesToEnd, totalWindowLength);
 
 		//find good breakpoints
-		bool found = false;
+		//bool found = false;
 		std::string break1, break2;
 		if (basesToEnd > 1.5*totalWindowLength){
 
@@ -722,7 +718,7 @@ std::string eventalign( read &r,
 				double gap2 = std::abs(thymidineModel.at((r.referenceSeqMappedTo).substr(posOnRef-i,6)).first - thymidineModel.at((r.referenceSeqMappedTo).substr(posOnRef-i-1,6)).first);
 
 				if (gap1 > 20. and gap2 > 20.){
-					found = true;
+					//found = true;
 					break1 = (r.referenceSeqMappedTo).substr(posOnRef-i-1,6);
 					break2 = (r.referenceSeqMappedTo).substr(posOnRef-i+1,6);
 					windowLength = i;
@@ -843,15 +839,13 @@ std::string eventalign( read &r,
 		}
 
 		//TESTING - make sure nothing sketchy happens at the breakpoint
-		if (not found) lines.push_back("BREAKPOINT\n");
-		else lines.push_back("BREAKPOINT PRIME " + break1 + " " + break2 + "\n");
+		//if (not found) lines.push_back("BREAKPOINT\n");
+		//else lines.push_back("BREAKPOINT PRIME " + break1 + " " + break2 + "\n");
 
 		//go again starting at posOnRef + lastM_ref using events starting at readHead + lastM_ev
 		rev_readHead -= lastM_ev + 1;
 		posOnRef -= lastM_ref + 1;
 	}
-	revEndOnRef = posOnRef;
-
 
 	std::reverse(lines.begin(), lines.end());
 	for (size_t i = 0; i < lines.size(); i++){
@@ -879,8 +873,6 @@ std::string eventalign_train( read &r,
 	//midpoint for bidirectional alignment
 	size_t midpoint = (r.referenceSeqMappedTo.size()) / 2;
 
-	int fwdEndOnRef, revEndOnRef;
-
 	unsigned int posOnRef = 0;
 	while ( posOnRef < midpoint ){
 
@@ -890,7 +882,7 @@ std::string eventalign_train( read &r,
 		unsigned int windowLength = std::min(basesToEnd, totalWindowLength);
 
 		//find good breakpoints
-		bool found = false;
+		//bool found = false;
 		std::string break1, break2;
 
 		if (basesToEnd > 1.5*totalWindowLength){
@@ -909,7 +901,7 @@ std::string eventalign_train( read &r,
 				double gap2 = std::abs(thymidineModel.at(breakSnippet.substr(i,6)).first - thymidineModel.at(breakSnippet.substr(i-1,6)).first);
 
 				if (gap1 > 20. and gap2 > 20.){
-					found = true;
+					//found = true;
 					break1 = breakSnippet.substr(i-1,6);
 					break2 = breakSnippet.substr(i+1,6);
 					windowLength = i+6;
@@ -1032,7 +1024,6 @@ std::string eventalign_train( read &r,
 		readHead += lastM_ev + 1;
 		posOnRef += lastM_ref + 1;
 	}
-	fwdEndOnRef = posOnRef;
 
 
 	//REVERSE
@@ -1046,7 +1037,7 @@ std::string eventalign_train( read &r,
 		unsigned int windowLength = std::min(basesToEnd, totalWindowLength);
 
 		//find good breakpoints
-		bool found = false;
+		//bool found = false;
 		std::string break1, break2;
 		if (basesToEnd > 1.5*totalWindowLength){
 
@@ -1064,7 +1055,7 @@ std::string eventalign_train( read &r,
 				double gap2 = std::abs(thymidineModel.at((r.referenceSeqMappedTo).substr(posOnRef-i,6)).first - thymidineModel.at((r.referenceSeqMappedTo).substr(posOnRef-i-1,6)).first);
 
 				if (gap1 > 20. and gap2 > 20.){
-					found = true;
+					//found = true;
 					break1 = (r.referenceSeqMappedTo).substr(posOnRef-i-1,6);
 					break2 = (r.referenceSeqMappedTo).substr(posOnRef-i+1,6);
 					windowLength = i;
@@ -1191,8 +1182,6 @@ std::string eventalign_train( read &r,
 		rev_readHead -= lastM_ev + 1;
 		posOnRef -= lastM_ref + 1;
 	}
-	revEndOnRef = posOnRef;
-
 
 	std::reverse(lines.begin(), lines.end());
 	for (size_t i = 0; i < lines.size(); i++){
@@ -1218,8 +1207,6 @@ std::pair<bool,AlignedRead> eventalign_detect( read &r,
 	//midpoint for bidirectional alignment
 	size_t midpoint = (r.referenceSeqMappedTo.size()) / 2;
 
-	int fwdEndOnRef, revEndOnRef;
-
 	unsigned int posOnRef = 0;
 	while ( posOnRef < midpoint ){
 
@@ -1229,7 +1216,7 @@ std::pair<bool,AlignedRead> eventalign_detect( read &r,
 		unsigned int windowLength = std::min(basesToEnd, totalWindowLength);
 
 		//find good breakpoints
-		bool found = false;
+		//bool found = false;
 		std::string break1, break2;
 		if (basesToEnd > 1.5*totalWindowLength){
 
@@ -1247,7 +1234,7 @@ std::pair<bool,AlignedRead> eventalign_detect( read &r,
 				double gap2 = std::abs(thymidineModel.at(breakSnippet.substr(i,6)).first - thymidineModel.at(breakSnippet.substr(i-1,6)).first);
 
 				if (gap1 > 20. and gap2 > 20.){
-					found = true;
+					//found = true;
 					break1 = breakSnippet.substr(i-1,6);
 					break2 = breakSnippet.substr(i+1,6);
 					windowLength = i+6;
@@ -1365,8 +1352,6 @@ std::pair<bool,AlignedRead> eventalign_detect( read &r,
 		readHead += lastM_ev + 1;
 		posOnRef += lastM_ref + 1;
 	}
-	fwdEndOnRef = posOnRef;
-
 
 	//REVERSE
 	posOnRef = r.referenceSeqMappedTo.size() - 1;
@@ -1378,7 +1363,7 @@ std::pair<bool,AlignedRead> eventalign_detect( read &r,
 		unsigned int windowLength = std::min(basesToEnd, totalWindowLength);
 
 		//find good breakpoints
-		bool found = false;
+		//bool found = false;
 		std::string break1, break2;
 		if (basesToEnd > 1.5*totalWindowLength){
 
@@ -1396,7 +1381,7 @@ std::pair<bool,AlignedRead> eventalign_detect( read &r,
 				double gap2 = std::abs(thymidineModel.at((r.referenceSeqMappedTo).substr(posOnRef-i,6)).first - thymidineModel.at((r.referenceSeqMappedTo).substr(posOnRef-i-1,6)).first);
 
 				if (gap1 > 20. and gap2 > 20.){
-					found = true;
+					//found = true;
 					break1 = (r.referenceSeqMappedTo).substr(posOnRef-i-1,6);
 					break2 = (r.referenceSeqMappedTo).substr(posOnRef-i+1,6);
 					windowLength = i;
@@ -1517,7 +1502,6 @@ std::pair<bool,AlignedRead> eventalign_detect( read &r,
 		rev_readHead -= lastM_ev + 1;
 		posOnRef -= lastM_ref + 1;
 	}
-	revEndOnRef = posOnRef;
 
 	//the two alignments should meet in the middle - fail the read if they don't
 	if (abs(readHead - rev_readHead) > 6){

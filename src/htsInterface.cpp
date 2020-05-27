@@ -36,10 +36,6 @@ void countRecords( htsFile *bam_fh, hts_idx_t *bam_idx, bam_hdr_t *bam_hdr, int 
 bool indelFastFail(bam1_t *record, int maxI, int maxD ){
 	//Covered in: tests/detect/htslib
 
-	//initialise reference and query coordinates for the first match
-	int queryPosition = 0;
-	int refPosition = 0;
-
 	const uint32_t *cigar = bam_get_cigar(record);
 
 	for ( unsigned int i = 0; i < record -> core.n_cigar; ++i){

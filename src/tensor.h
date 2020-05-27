@@ -126,7 +126,6 @@ struct TensorShape{
 
 
 //prototypes
-static TF_Buffer* read_tf_buffer_from_file(const char* file);
 ModelSession *model_load(const char *filename, const char *input_name, const char *output_name);
 
 

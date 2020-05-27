@@ -10,8 +10,8 @@
 #include <fstream>
 #include "regions.h"
 #include "data_IO.h"
-#include "train.h"
-#include "sense.h"
+#include "trainGMM.h"
+#include "forkSense.h"
 #include "tensor.h"
 #include <cmath>
 #include <memory>
@@ -327,7 +327,7 @@ std::string callOrigins(DetectedRead &r, bool stallsMarked){
 std::string runCNN(DetectedRead &r, std::string modelPath){
 
 	auto session = std::unique_ptr<ModelSession>(model_load(modelPath.c_str(), "conv1d_input", "time_distributed_2/Reshape_1"));
-	TensorShape input_shape={{1, r.brduCalls.size(), 4}, 3};
+	TensorShape input_shape={{1, (int64_t)r.brduCalls.size(), 4}, 3};
 	auto input_values = tf_obj_unique_ptr(read2tensor(r, input_shape));
 	if(!input_values){
 		std::cerr << "Tensor creation failure." << std::endl;

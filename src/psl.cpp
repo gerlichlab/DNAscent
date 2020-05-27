@@ -212,7 +212,7 @@
 
 			std::string column;
 			std::stringstream ssLine(line);
-			int position, cIndex = 0;
+			int position = 0, cIndex = 0;
 			double B;
 
 			while( std::getline( ssLine, column, '\t' ) ){

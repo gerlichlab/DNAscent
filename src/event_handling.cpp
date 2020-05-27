@@ -468,7 +468,7 @@ void adaptive_banded_simple_event_align( std::vector< double > &raw, read &r, Po
 
 	int curr_gap = 0;
 	int max_gap = 0;
-	int usedInScale = 0;
+	//int usedInScale = 0;
 
 	while(curr_kmer_idx >= 0 && curr_event_idx >= 0) {
         

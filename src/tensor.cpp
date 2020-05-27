@@ -10,8 +10,25 @@
 #include <fstream>
 
 
+static TF_Buffer* read_tf_buffer_from_file(const char* file) {
+	std::ifstream t(file, std::ifstream::binary);
+	t.exceptions(std::ifstream::failbit | std::ifstream::badbit);
+	t.seekg(0, std::ios::end);
+	size_t size = t.tellg();
+	auto data = std::make_unique<char[]>(size);
+	t.seekg(0);
+	t.read(data.get(), size);
+
+	TF_Buffer *buf = TF_NewBuffer();
+	buf->data = data.release();
+	buf->length = size;
+	buf->data_deallocator = free_cpp_array<char>;
+	return buf;
+}
+
+
 ModelSession *model_load(const char *filename, const char *input_name, const char *output_name){
-	//printf("Loading model %s\n", filename);
+
 	CStatus status;
 
 	auto graph=tf_obj_unique_ptr(TF_NewGraph());
@@ -52,22 +69,3 @@ ModelSession *model_load(const char *filename, const char *input_name, const cha
 
 	return session.release();
 }
-
-
-static TF_Buffer* read_tf_buffer_from_file(const char* file) {
-	std::ifstream t(file, std::ifstream::binary);
-	t.exceptions(std::ifstream::failbit | std::ifstream::badbit);
-	t.seekg(0, std::ios::end);
-	size_t size = t.tellg();
-	auto data = std::make_unique<char[]>(size);
-	t.seekg(0);
-	t.read(data.get(), size);
-
-	TF_Buffer *buf = TF_NewBuffer();
-	buf->data = data.release();
-	buf->length = size;
-	buf->data_deallocator = free_cpp_array<char>;
-	return buf;
-}
-
-

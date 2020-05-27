@@ -33,7 +33,7 @@
 static const char *help=
 "detect: DNAscent executable that detects BrdU in Oxford Nanopore reads.\n"
 "To run DNAscent detect, do:\n"
-		"  ./DNAscent detect -b /path/to/alignment.bam -r /path/to/reference.fasta -i /path/to/index.dnascent -o /path/to/output.detect\n"
+"  ./DNAscent detect -b /path/to/alignment.bam -r /path/to/reference.fasta -i /path/to/index.dnascent -o /path/to/output.detect\n"
 "Required arguments are:\n"
 "  -b,--bam                  path to alignment BAM file,\n"
 "  -r,--reference            path to genome reference in fasta format,\n"
@@ -41,7 +41,6 @@ static const char *help=
 "  -o,--output               path to output file that will be generated.\n"
 "Optional arguments are:\n"
 "  -t,--threads              number of threads (default is 1 thread),\n"
-"  --methyl-aware            account for CpG, Dcm, and Dam methylation in BrdU calling,\n"
 "  --HMM                     revert to old style HMM-based detection,\n"
 "  -q,--quality              minimum mapping quality (default is 20),\n"
 "  -l,--length               minimum read length in bp (default is 1000).\n"
@@ -935,7 +934,7 @@ std::string runCNN(AlignedRead &r, std::string modelPath){
 
 	auto session = std::unique_ptr<ModelSession>(model_load(modelPath.c_str(), "input_1", "time_distributed/Reshape_1"));
 	std::pair<size_t, size_t> protoShape = r.getShape();
-	TensorShape input_shape={{1, protoShape.first, protoShape.second}, 3};
+	TensorShape input_shape={{1, (int64_t) protoShape.first, (int64_t) protoShape.second}, 3};
 	auto input_values = tf_obj_unique_ptr(read2tensor(r, input_shape));
 	if(!input_values){
 		std::cerr << "Tensor creation failure." << std::endl;
@@ -1089,13 +1088,6 @@ int detect_main( int argc, char** argv ){
 			#pragma omp parallel for schedule(dynamic) shared(buffer,windowLength_HMMdetect,windowLength_align,modelPath,analogueModel,thymidineModel,methyl5mCModel,args,prog,failed) num_threads(args.threads)
 			for (unsigned int i = 0; i < buffer.size(); i++){
 
-				//DEBUG
-				//if (prog <  3060){
-				//	prog++;
-				//	continue;
-				//}
-				////////////////////
-
 				read r; 
 
 				//get the read name (which will be the ONT readID from Albacore basecall)
@@ -1103,10 +1095,6 @@ int detect_main( int argc, char** argv ){
 				if (queryName == NULL) continue;
 				std::string s_queryName(queryName);
 				r.readID = s_queryName;
-
-				//DEBUG
-				std::cout << r.readID << std::endl;
-				////////////////////
 
 				//iterate on the cigar string to fill up the reference-to-query coordinate map
 				parseCigar(buffer[i], r.refToQuery, r.refStart, r.refEnd);

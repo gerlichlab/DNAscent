@@ -26,9 +26,10 @@
 #include "htsInterface.h"
 
 static const char *help=
-"trainingData: DNAscent executable that generates training data for DNAscent LSTM analogue detection.\n"
-"To run DNAscent trainingData, do:\n"
-		"  ./DNAscent detect -b /path/to/alignment.bam -r /path/to/reference.fasta -i /path/to/index.dnascent -o /path/to/output.detect\n"
+"trainCNN: DNAscent executable that generates HMM bootstrapped to build training data for DNAscent ResNet training.\n"
+"Note: This executable is geared towards developers and advanced users.\n"
+"To run DNAscent trainCNN, do:\n"
+"  ./DNAscent trainCNN -b /path/to/alignment.bam -r /path/to/reference.fasta -i /path/to/index.dnascent -o /path/to/output.detect\n"
 "Required arguments are:\n"
 "  -b,--bam                  path to alignment BAM file,\n"
 "  -r,--reference            path to genome reference in fasta format,\n"
@@ -36,7 +37,6 @@ static const char *help=
 "  -o,--output               path to output file that will be generated.\n"
 "Optional arguments are:\n"
 "  -t,--threads              number of threads (default is 1 thread),\n"
-"  --methyl-aware            account for CpG, Dcm, and Dam methylation in BrdU calling,\n"
 "  -m,--maxReads             maximum number of reads to consider,\n"
 "  -q,--quality              minimum mapping quality (default is 20),\n"
 "  -l,--length               minimum read length in bp (default is 100).\n"

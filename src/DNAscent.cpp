@@ -13,29 +13,27 @@
 #include "detect.h"
 #include "regions.h"
 #include "psl.h"
-#include "sense.h"
-#include "annotate.h"
+#include "forkSense.h"
 #include "index.h"
-#include "train.h"
 #include "common.h"
 #include "poreModels.h"
-#include "data.h"
+#include "trainCNN.h"
 #include "alignment.h"
+#include "trainGMM.h"
 
 /*prototype */
 int show_options( int, char** );
 
 /*map from name of the DNAscent function passed as argument on the command line to the function that it should call */
 static std::map< std::string, std::function< int( int, char** ) > > executables = {
+	{"index", 	index_main},
 	{"detect", 	detect_main},
-	{"trainingData", 	data_main},
+	{"forkSense", 	sense_main},
 	{"psl", 	psl_main},
 	{"regions", 	regions_main},
-	{"index", 	index_main},
-	{"annotate", 	annotate_main},
-	{"train", 	train_main},
-	{"forkSense", 	sense_main},
 	{"align", 	align_main},
+	{"trainCNN", 	data_main},
+	{"trainGMM", 	train_main},
 	{"--help",	show_options},
 	{"-h",		show_options},
 	{"-v",		show_version},
