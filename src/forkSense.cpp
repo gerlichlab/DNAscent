@@ -325,9 +325,8 @@ std::string callOrigins(DetectedRead &r, bool stallsMarked){
 }
 
 
-std::string runCNN(DetectedRead &r, std::string modelPath){
+std::string runCNN(DetectedRead &r, std::unique_ptr<ModelSession> &session){
 
-	auto session = std::unique_ptr<ModelSession>(model_load(modelPath.c_str(), "conv1d_input", "time_distributed_2/Reshape_1"));
 	TensorShape input_shape={{1, (int64_t)r.brduCalls.size(), 4}, 3};
 	auto input_values = tf_obj_unique_ptr(read2tensor(r, input_shape));
 	if(!input_values){
@@ -379,13 +378,13 @@ std::string runCNN(DetectedRead &r, std::string modelPath){
 }
 
 
-void emptyBuffer(std::vector< DetectedRead > &buffer, Arguments args, std::string modelPath, std::ofstream &outFile, std::ofstream &originFile, std::ofstream &stallFile, int trimFactor){
+void emptyBuffer(std::vector< DetectedRead > &buffer, Arguments args, std::unique_ptr<ModelSession> &session, std::ofstream &outFile, std::ofstream &originFile, std::ofstream &stallFile, int trimFactor){
 
-	#pragma omp parallel for schedule(dynamic) shared(args,outFile) num_threads(args.threads)
+	#pragma omp parallel for schedule(dynamic) shared(args, outFile, session) num_threads(args.threads)
 	for ( auto b = buffer.begin(); b < buffer.end(); b++) {
 
 		b -> trim(trimFactor);
-		std::string readOutput = runCNN(*b, modelPath);
+		std::string readOutput = runCNN(*b, session);
 
 		std::string stallOutput, originOutput;
 		if (args.markStalls){
@@ -428,6 +427,7 @@ int sense_main( int argc, char** argv ){
 	//get the model
 	std::string pathExe = getExePath();
 	std::string modelPath = pathExe + "/dnn_models/" + "forks.pb";
+	std::unique_ptr<ModelSession> session = std::unique_ptr<ModelSession>(model_load(modelPath.c_str(), "conv1d_input", "time_distributed_2/Reshape_1"));
 
 	//get a read count
 	int readCount = 0;
@@ -478,7 +478,7 @@ int sense_main( int argc, char** argv ){
 			}
 
 			//empty the buffer if it's full
-			if (readBuffer.size() >= maxBufferSize) emptyBuffer(readBuffer, args, modelPath, outFile, originFile, stallFile, trimFactor);
+			if (readBuffer.size() >= maxBufferSize) emptyBuffer(readBuffer, args, session, outFile, originFile, stallFile, trimFactor);
 
 			progress++;
 			pb.displayProgress( progress, 0, 0 );
@@ -544,7 +544,7 @@ int sense_main( int argc, char** argv ){
 	}
 
 	//empty the buffer at the end
-	emptyBuffer(readBuffer, args, modelPath, outFile, originFile, stallFile, trimFactor);
+	emptyBuffer(readBuffer, args, session, outFile, originFile, stallFile, trimFactor);
 
 	inFile.close();
 	outFile.close();

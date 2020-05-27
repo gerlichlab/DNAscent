@@ -930,9 +930,8 @@ TF_Tensor *read2tensor(AlignedRead &r, const TensorShape &shape){
 }
 
 
-std::string runCNN(AlignedRead &r, std::string modelPath){
+std::string runCNN(AlignedRead &r, std::unique_ptr<ModelSession> &session){
 
-	auto session = std::unique_ptr<ModelSession>(model_load(modelPath.c_str(), "input_1", "time_distributed/Reshape_1"));
 	std::pair<size_t, size_t> protoShape = r.getShape();
 	TensorShape input_shape={{1, (int64_t) protoShape.first, (int64_t) protoShape.second}, 3};
 	auto input_values = tf_obj_unique_ptr(read2tensor(r, input_shape));
@@ -1015,6 +1014,7 @@ int detect_main( int argc, char** argv ){
 	//get the neural network model path
 	std::string pathExe = getExePath();
 	std::string modelPath = pathExe + "/dnn_models/" + "BrdU_detect.pb";
+	std::unique_ptr<ModelSession> session = std::unique_ptr<ModelSession>(model_load(modelPath.c_str(), "input_1", "time_distributed/Reshape_1"));
 
 	//import fasta reference
 	std::map< std::string, std::string > reference = import_reference_pfasta( args.referenceFilename );
@@ -1085,7 +1085,7 @@ int detect_main( int argc, char** argv ){
 		/*if we've filled up the buffer with short reads, compute them in parallel */
 		if (buffer.size() >= maxBufferSize or (buffer.size() > 0 and result == -1 ) ){
 
-			#pragma omp parallel for schedule(dynamic) shared(buffer,windowLength_HMMdetect,windowLength_align,modelPath,analogueModel,thymidineModel,methyl5mCModel,args,prog,failed) num_threads(args.threads)
+			#pragma omp parallel for schedule(dynamic) shared(session,buffer,windowLength_HMMdetect,windowLength_align,modelPath,analogueModel,thymidineModel,methyl5mCModel,args,prog,failed) num_threads(args.threads)
 			for (unsigned int i = 0; i < buffer.size(); i++){
 
 				read r; 
@@ -1143,7 +1143,7 @@ int detect_main( int argc, char** argv ){
 						prog++;
 						continue;
 					}
-					readOut = runCNN(ar.second, modelPath);
+					readOut = runCNN(ar.second, session);
 				}
 
 				#pragma omp critical
