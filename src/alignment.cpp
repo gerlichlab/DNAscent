@@ -490,6 +490,33 @@ std::pair< double, std::vector< std::string > > builtinViterbi( std::vector <dou
 }
 
 
+bool referenceDefined(std::string &readSnippet){
+
+	//make sure the read snippet is fully defined as A/T/G/C in reference
+	unsigned int As = 0, Ts = 0, Cs = 0, Gs = 0;
+	for ( std::string::iterator i = readSnippet.begin(); i < readSnippet.end(); i++ ){
+
+		switch( *i ){
+			case 'A' :
+				As++;
+				break;
+			case 'T' :
+				Ts++;
+				break;
+			case 'G' :
+				Gs++;
+				break;
+			case 'C' :
+				Cs++;
+				break;
+		}
+	}
+	if ( readSnippet.length() != (As + Ts + Gs + Cs) ){
+		return false;
+	}
+	else return true;
+}
+
 
 std::string eventalign( read &r,
             unsigned int totalWindowLength,
@@ -521,7 +548,15 @@ std::string eventalign( read &r,
 		bool found = false;
 		std::string break1, break2;
 		if (basesToEnd > 1.5*totalWindowLength){
+
 			std::string breakSnippet = (r.referenceSeqMappedTo).substr(posOnRef, 1.5*windowLength);
+
+			bool isDefined = referenceDefined(breakSnippet);
+			if (not isDefined){
+				posOnRef += windowLength;
+				continue;
+			}
+
 			for (unsigned int i = windowLength; i < 1.5*windowLength - 7; i++){
 
 				double gap1 = std::abs(thymidineModel.at(breakSnippet.substr(i,6)).first - thymidineModel.at(breakSnippet.substr(i+1,6)).first);
@@ -539,28 +574,12 @@ std::string eventalign( read &r,
 
 		std::string readSnippet = (r.referenceSeqMappedTo).substr(posOnRef, windowLength);
 
-		//make sure the read snippet is fully defined as A/T/G/C in reference
-		unsigned int As = 0, Ts = 0, Cs = 0, Gs = 0;
-		for ( std::string::iterator i = readSnippet.begin(); i < readSnippet.end(); i++ ){
-
-			switch( *i ){
-				case 'A' :
-					As++;
-					break;
-				case 'T' :
-					Ts++;
-					break;
-				case 'G' :
-					Gs++;
-					break;
-				case 'C' :
-					Cs++;
-					break;
-			}
-		}
-		if ( readSnippet.length() != (As + Ts + Gs + Cs) ){
+		bool isDefined = referenceDefined(readSnippet);
+		if (not isDefined){
+			posOnRef += windowLength;
 			continue;
 		}
+
 		std::vector< double > eventSnippet;
 		std::vector< double > eventLengthsSnippet;
 
@@ -688,6 +707,15 @@ std::string eventalign( read &r,
 		bool found = false;
 		std::string break1, break2;
 		if (basesToEnd > 1.5*totalWindowLength){
+
+			std::string breakSnippet = (r.referenceSeqMappedTo).substr(posOnRef - 1.5*windowLength, 1.5*windowLength);
+
+			bool isDefined = referenceDefined(breakSnippet);
+			if (not isDefined){
+				posOnRef += windowLength;
+				continue;
+			}
+
 			for (unsigned int i = 1.5*windowLength; i > windowLength; i--){
 
 				double gap1 = std::abs(thymidineModel.at((r.referenceSeqMappedTo).substr(posOnRef-i,6)).first - thymidineModel.at((r.referenceSeqMappedTo).substr(posOnRef-i+1,6)).first);
@@ -707,28 +735,12 @@ std::string eventalign( read &r,
 
 		std::reverse(readSnippet.begin(), readSnippet.end());
 
-		//make sure the read snippet is fully defined as A/T/G/C in reference
-		unsigned int As = 0, Ts = 0, Cs = 0, Gs = 0;
-		for ( std::string::iterator i = readSnippet.begin(); i < readSnippet.end(); i++ ){
-
-			switch( *i ){
-				case 'A' :
-					As++;
-					break;
-				case 'T' :
-					Ts++;
-					break;
-				case 'G' :
-					Gs++;
-					break;
-				case 'C' :
-					Cs++;
-					break;
-			}
-		}
-		if ( readSnippet.length() != (As + Ts + Gs + Cs) ){
+		bool isDefined = referenceDefined(readSnippet);
+		if (not isDefined){
+			posOnRef += windowLength;
 			continue;
 		}
+
 		std::vector< double > eventSnippet;
 		std::vector< double > eventLengthsSnippet;
 
@@ -882,7 +894,15 @@ std::string eventalign_train( read &r,
 		std::string break1, break2;
 
 		if (basesToEnd > 1.5*totalWindowLength){
+
 			std::string breakSnippet = (r.referenceSeqMappedTo).substr(posOnRef, 1.5*windowLength);
+
+			bool isDefined = referenceDefined(breakSnippet);
+			if (not isDefined){
+				posOnRef += windowLength;
+				continue;
+			}
+
 			for (unsigned int i = windowLength; i < 1.5*windowLength - 7; i++){
 
 				double gap1 = std::abs(thymidineModel.at(breakSnippet.substr(i,6)).first - thymidineModel.at(breakSnippet.substr(i+1,6)).first);
@@ -900,28 +920,12 @@ std::string eventalign_train( read &r,
 
 		std::string readSnippet = (r.referenceSeqMappedTo).substr(posOnRef, windowLength);
 
-		//make sure the read snippet is fully defined as A/T/G/C in reference
-		unsigned int As = 0, Ts = 0, Cs = 0, Gs = 0;
-		for ( std::string::iterator i = readSnippet.begin(); i < readSnippet.end(); i++ ){
-
-			switch( *i ){
-				case 'A' :
-					As++;
-					break;
-				case 'T' :
-					Ts++;
-					break;
-				case 'G' :
-					Gs++;
-					break;
-				case 'C' :
-					Cs++;
-					break;
-			}
-		}
-		if ( readSnippet.length() != (As + Ts + Gs + Cs) ){
+		bool isDefined = referenceDefined(readSnippet);
+		if (not isDefined){
+			posOnRef += windowLength;
 			continue;
 		}
+
 		std::vector< double > eventSnippet;
 		std::vector< double > eventLengthsSnippet;
 
@@ -1045,6 +1049,15 @@ std::string eventalign_train( read &r,
 		bool found = false;
 		std::string break1, break2;
 		if (basesToEnd > 1.5*totalWindowLength){
+
+			std::string breakSnippet = (r.referenceSeqMappedTo).substr(posOnRef - 1.5*windowLength, 1.5*windowLength);
+
+			bool isDefined = referenceDefined(breakSnippet);
+			if (not isDefined){
+				posOnRef += windowLength;
+				continue;
+			}
+
 			for (unsigned int i = 1.5*windowLength; i > windowLength; i--){
 
 				double gap1 = std::abs(thymidineModel.at((r.referenceSeqMappedTo).substr(posOnRef-i,6)).first - thymidineModel.at((r.referenceSeqMappedTo).substr(posOnRef-i+1,6)).first);
@@ -1064,28 +1077,12 @@ std::string eventalign_train( read &r,
 
 		std::reverse(readSnippet.begin(), readSnippet.end());
 
-		//make sure the read snippet is fully defined as A/T/G/C in reference
-		unsigned int As = 0, Ts = 0, Cs = 0, Gs = 0;
-		for ( std::string::iterator i = readSnippet.begin(); i < readSnippet.end(); i++ ){
-
-			switch( *i ){
-				case 'A' :
-					As++;
-					break;
-				case 'T' :
-					Ts++;
-					break;
-				case 'G' :
-					Gs++;
-					break;
-				case 'C' :
-					Cs++;
-					break;
-			}
-		}
-		if ( readSnippet.length() != (As + Ts + Gs + Cs) ){
+		bool isDefined = referenceDefined(readSnippet);
+		if (not isDefined){
+			posOnRef += windowLength;
 			continue;
 		}
+
 		std::vector< double > eventSnippet;
 		std::vector< double > eventLengthsSnippet;
 
@@ -1235,7 +1232,15 @@ std::pair<bool,AlignedRead> eventalign_detect( read &r,
 		bool found = false;
 		std::string break1, break2;
 		if (basesToEnd > 1.5*totalWindowLength){
+
 			std::string breakSnippet = (r.referenceSeqMappedTo).substr(posOnRef, 1.5*windowLength);
+
+			bool isDefined = referenceDefined(breakSnippet);
+			if (not isDefined){
+				posOnRef += windowLength;
+				continue;
+			}
+
 			for (unsigned int i = windowLength; i < 1.5*windowLength - 7; i++){
 
 				double gap1 = std::abs(thymidineModel.at(breakSnippet.substr(i,6)).first - thymidineModel.at(breakSnippet.substr(i+1,6)).first);
@@ -1253,28 +1258,12 @@ std::pair<bool,AlignedRead> eventalign_detect( read &r,
 
 		std::string readSnippet = (r.referenceSeqMappedTo).substr(posOnRef, windowLength);
 
-		//make sure the read snippet is fully defined as A/T/G/C in reference
-		unsigned int As = 0, Ts = 0, Cs = 0, Gs = 0;
-		for ( std::string::iterator i = readSnippet.begin(); i < readSnippet.end(); i++ ){
-
-			switch( *i ){
-				case 'A' :
-					As++;
-					break;
-				case 'T' :
-					Ts++;
-					break;
-				case 'G' :
-					Gs++;
-					break;
-				case 'C' :
-					Cs++;
-					break;
-			}
-		}
-		if ( readSnippet.length() != (As + Ts + Gs + Cs) ){
+		bool isDefined = referenceDefined(readSnippet);
+		if (not isDefined){
+			posOnRef += windowLength;
 			continue;
 		}
+
 		std::vector< double > eventSnippet;
 		std::vector< double > eventLengthsSnippet;
 
@@ -1392,6 +1381,15 @@ std::pair<bool,AlignedRead> eventalign_detect( read &r,
 		bool found = false;
 		std::string break1, break2;
 		if (basesToEnd > 1.5*totalWindowLength){
+
+			std::string breakSnippet = (r.referenceSeqMappedTo).substr(posOnRef - 1.5*windowLength, 1.5*windowLength);
+
+			bool isDefined = referenceDefined(breakSnippet);
+			if (not isDefined){
+				posOnRef += windowLength;
+				continue;
+			}
+
 			for (unsigned int i = 1.5*windowLength; i > windowLength; i--){
 
 				double gap1 = std::abs(thymidineModel.at((r.referenceSeqMappedTo).substr(posOnRef-i,6)).first - thymidineModel.at((r.referenceSeqMappedTo).substr(posOnRef-i+1,6)).first);
@@ -1411,28 +1409,12 @@ std::pair<bool,AlignedRead> eventalign_detect( read &r,
 
 		std::reverse(readSnippet.begin(), readSnippet.end());
 
-		//make sure the read snippet is fully defined as A/T/G/C in reference
-		unsigned int As = 0, Ts = 0, Cs = 0, Gs = 0;
-		for ( std::string::iterator i = readSnippet.begin(); i < readSnippet.end(); i++ ){
-
-			switch( *i ){
-				case 'A' :
-					As++;
-					break;
-				case 'T' :
-					Ts++;
-					break;
-				case 'G' :
-					Gs++;
-					break;
-				case 'C' :
-					Cs++;
-					break;
-			}
-		}
-		if ( readSnippet.length() != (As + Ts + Gs + Cs) ){
+		bool isDefined = referenceDefined(readSnippet);
+		if (not isDefined){
+			posOnRef += windowLength;
 			continue;
 		}
+
 		std::vector< double > eventSnippet;
 		std::vector< double > eventLengthsSnippet;
 

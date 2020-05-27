@@ -1089,6 +1089,13 @@ int detect_main( int argc, char** argv ){
 			#pragma omp parallel for schedule(dynamic) shared(buffer,windowLength_HMMdetect,windowLength_align,modelPath,analogueModel,thymidineModel,methyl5mCModel,args,prog,failed) num_threads(args.threads)
 			for (unsigned int i = 0; i < buffer.size(); i++){
 
+				//DEBUG
+				//if (prog <  3060){
+				//	prog++;
+				//	continue;
+				//}
+				////////////////////
+
 				read r; 
 
 				//get the read name (which will be the ONT readID from Albacore basecall)
@@ -1096,6 +1103,10 @@ int detect_main( int argc, char** argv ){
 				if (queryName == NULL) continue;
 				std::string s_queryName(queryName);
 				r.readID = s_queryName;
+
+				//DEBUG
+				std::cout << r.readID << std::endl;
+				////////////////////
 
 				//iterate on the cigar string to fill up the reference-to-query coordinate map
 				parseCigar(buffer[i], r.refToQuery, r.refStart, r.refEnd);
