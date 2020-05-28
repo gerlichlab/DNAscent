@@ -2,7 +2,7 @@ CC = gcc
 CXX = g++
 DEBUG = -g
 LIBFLAGS =
-CXXFLAGS = -pg -Wall -O2 -fopenmp -std=c++14
+CXXFLAGS = -Wall -O2 -fopenmp -std=c++14
 CFLAGS = -Wall -std=c99 -O2
 
 #hdf5

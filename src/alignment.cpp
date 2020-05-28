@@ -244,7 +244,7 @@ std::pair< double, std::vector< std::string > > builtinViterbi( std::vector <dou
 	//account for transitions between deletion states before we emit the first observation
 	for ( unsigned int i = 1; i < n_states; i++ ){
 
-		D_prev[i] = lnProd( D_prev[i-1], externalD2D );
+		D_prev[i] = D_prev[i-1] + externalD2D;
 		backtraceS[i + D_offset][0] = i -1 + D_offset;
 		backtraceT[i + D_offset][0] = 0;
 	}
@@ -269,13 +269,13 @@ std::pair< double, std::vector< std::string > > builtinViterbi( std::vector <dou
 		insProb = 0.0; //log(1) = 0
 
 		//to the base 1 insertion
-		I_curr[0] = lnVecMax({lnProd( lnProd( I_prev[0], internalI2I ), insProb ),
-			                  lnProd( lnProd( M_prev[0], internalM12I ), insProb ),
-							  lnProd( lnProd( start_prev, internalM12I ), insProb )
+		I_curr[0] = lnVecMax({I_prev[0] + internalI2I + insProb ,
+			                  M_prev[0] + internalM12I + insProb,
+							  start_prev + internalM12I + insProb
 		                     });
-		maxindex = lnArgMax({lnProd( lnProd( I_prev[0], internalI2I ), insProb ),
-					         lnProd( lnProd( M_prev[0], internalM12I ), insProb ),
-							 lnProd( lnProd( start_prev, internalM12I ), insProb*0.001 )
+		maxindex = lnArgMax({I_prev[0] + internalI2I + insProb,
+					         M_prev[0] + internalM12I + insProb,
+							 start_prev + internalM12I + insProb*0.001
 						     });
 		switch(maxindex){
 			case 0:
@@ -296,11 +296,11 @@ std::pair< double, std::vector< std::string > > builtinViterbi( std::vector <dou
 		}
 
 		//to the base 1 match
-		M_curr[0] = lnVecMax({lnProd( lnProd( M_prev[0], internalM12M1 ), matchProb ),
-							  lnProd( lnProd( start_prev, externalOrInternalM12M1 ), matchProb )
+		M_curr[0] = lnVecMax({M_prev[0] + internalM12M1 + matchProb,
+							  start_prev + externalOrInternalM12M1 + matchProb
 							 });
-		maxindex = lnArgMax({lnProd( lnProd( M_prev[0], internalM12M1 ), matchProb ),
-							 lnProd( lnProd( start_prev, externalOrInternalM12M1 ), matchProb )
+		maxindex = lnArgMax({M_prev[0] + internalM12M1 + matchProb,
+							 start_prev + externalOrInternalM12M1 + matchProb
 							});
 		switch(maxindex){
 			case 0:
@@ -342,11 +342,11 @@ std::pair< double, std::vector< std::string > > builtinViterbi( std::vector <dou
 			matchProb = eln( normalPDF( level_mu*signalDilation, level_sigma, observations[t]*signalDilation ) );
 
 			//to the insertion
-			I_curr[i] = lnVecMax({lnProd( lnProd( I_prev[i], internalI2I ), insProb ),
-								  lnProd( lnProd( M_prev[i], internalM12I ), insProb )
+			I_curr[i] = lnVecMax({I_prev[i] + internalI2I + insProb,
+								  M_prev[i] + internalM12I + insProb
 								 });
-			maxindex = lnArgMax({lnProd( lnProd( I_prev[i], internalI2I ), insProb ),
-							     lnProd( lnProd( M_prev[i], internalM12I ), insProb )
+			maxindex = lnArgMax({I_prev[i] + internalI2I + insProb ,
+							     M_prev[i] + internalM12I + insProb
 								});
 			switch(maxindex){
 				case 0:
@@ -363,16 +363,16 @@ std::pair< double, std::vector< std::string > > builtinViterbi( std::vector <dou
 			}
 
 			//to the match
-			M_curr[i] = lnVecMax({lnProd( lnProd( I_prev[i-1], externalI2M1 ), matchProb ),
-								   lnProd( lnProd( M_prev[i-1], externalM12M1 ), matchProb ),
-								   lnProd( lnProd( M_prev[i], internalM12M1 ), matchProb ),
-								   lnProd( lnProd( D_prev[i-1], externalD2M1 ), matchProb )
+			M_curr[i] = lnVecMax({I_prev[i-1] + externalI2M1 + matchProb,
+								   M_prev[i-1] + externalM12M1 + matchProb ,
+								   M_prev[i] + internalM12M1 + matchProb ,
+								   D_prev[i-1] + externalD2M1 + matchProb
 								   });
-			maxindex = lnArgMax({lnProd( lnProd( I_prev[i-1], externalI2M1 ), matchProb ),
-							   lnProd( lnProd( M_prev[i-1], externalM12M1 ), matchProb ),
-							   lnProd( lnProd( M_prev[i], internalM12M1 ), matchProb ),
-							   lnProd( lnProd( D_prev[i-1], externalD2M1 ), matchProb )
-							   });
+			maxindex = lnArgMax({I_prev[i-1] + externalI2M1 + matchProb,
+							   M_prev[i-1] + externalM12M1 + matchProb,
+							   M_prev[i] + internalM12M1 + matchProb,
+							   D_prev[i-1] + externalD2M1 + matchProb
+			});
 			switch(maxindex){
 				case 0:
 					backtraceS[i + M_offset][t+1] = i - 1 + I_offset;
@@ -399,11 +399,11 @@ std::pair< double, std::vector< std::string > > builtinViterbi( std::vector <dou
 		for ( unsigned int i = 1; i < n_states; i++ ){
 
 			//to the deletion
-			D_curr[i] = lnVecMax({lnProd( M_curr[i-1], externalM12D ),
-				                  lnProd( D_curr[i-1], externalD2D )
+			D_curr[i] = lnVecMax({M_curr[i-1] + externalM12D,
+				                  D_curr[i-1] + externalD2D
 			                     });
-			maxindex = lnArgMax({lnProd( M_curr[i-1], externalM12D ),
-                               lnProd( D_curr[i-1], externalD2D )
+			maxindex = lnArgMax({ M_curr[i-1] + externalM12D,
+                               D_curr[i-1] + externalD2D
 			                  });
 			switch(maxindex){
 				case 0:
@@ -438,17 +438,17 @@ std::pair< double, std::vector< std::string > > builtinViterbi( std::vector <dou
 
 	/*-----------TERMINATION----------- */
 	double viterbiScore = NAN;
-	viterbiScore = lnVecMax( {lnProd( D_curr.back(), eln( 1.0 ) ), //D to end
-							  lnProd( M_curr.back(), externalM12M1orD ),//M to end
-							  lnProd( I_curr.back(), externalI2M1 )//I to end
+	viterbiScore = lnVecMax( {D_curr.back() + eln( 1.0 ) , //D to end
+							  M_curr.back() + externalM12M1orD,//M to end
+							  I_curr.back() + externalI2M1 //I to end
 							 });
 	//std::cout << "Builtin Viterbi score: " << viterbiScore << std::endl;
 
 
 	//figure out where to go from the end state
-	maxindex = lnArgMax({lnProd( D_curr.back(), eln( 1.0 ) ),
-	                   lnProd( M_curr.back(), externalM12M1orD ),
-					   lnProd( I_curr.back(), externalI2M1 )
+	maxindex = lnArgMax({ D_curr.back() + eln( 1.0 ) ,
+	                   M_curr.back() + externalM12M1orD ,
+					   I_curr.back() + externalI2M1
 	                   });
 
 	ssize_t  traceback_new;
@@ -1624,7 +1624,7 @@ int align_main( int argc, char** argv ){
 	const char *allReads = ".";
 	itr = sam_itr_querys(bam_idx,bam_hdr,allReads);
 
-	unsigned int windowLength = 100;
+	unsigned int windowLength = 50;
 	int result;
 	int failedEvents = 0;
 	unsigned int maxBufferSize;

@@ -891,7 +891,7 @@ int detect_main( int argc, char** argv ){
 	itr = sam_itr_querys(bam_idx,bam_hdr,allReads);
 
 	unsigned int windowLength_HMMdetect = 10;
-	unsigned int windowLength_align = 100;
+	unsigned int windowLength_align = 50;
 
 	int result;
 	int failedEvents = 0;
