@@ -71,9 +71,11 @@ struct read{
 /*function prototypes */
 std::map< std::string, std::string > import_reference( std::string );
 std::map< std::string, std::string > import_reference_pfasta( std::string );
-std::map< std::string, std::pair< double, double > > import_poreModel( std::string );
+std::vector< std::pair< double, double > > import_poreModel( std::string );
 std::string getExePath(void);
 std::string writeDetectHeader(std::string, std::string, std::string, int, bool, bool, unsigned int, unsigned int, double);
 std::string writeRegionsHeader(std::string, double, bool, unsigned int, unsigned int, double, double);
+unsigned int sixMer2index(std::string &);
+
 
 #endif

@@ -226,10 +226,11 @@ std::vector< double > solveLinearSystem( std::vector< std::vector< double > > A,
 
 //start: adapted from nanopolish
 
-inline float logProbabilityMatch(std::string sixMer, double x, double shift, double scale){
+inline float logProbabilityMatch(unsigned int sixMerIndex, double x, double shift, double scale){
 
-	double mu = scale * thymidineModel.at(sixMer).first + shift;
-	double sigma = thymidineModel.at(sixMer).second;
+	std::pair<double,double> meanStd = thymidineModel[sixMerIndex];
+	double mu = scale * meanStd.first + shift;
+	double sigma = meanStd.second;
 
 	float a = (x - mu) / sigma;
 	static const float log_inv_sqrt_2pi = log(0.3989422804014327);
@@ -298,10 +299,11 @@ void adaptive_banded_simple_event_align( std::vector< double > &raw, read &r, Po
 	// Initialize
 
 	// Precompute k-mer ranks to avoid doing this in the inner loop
-	//std::vector<size_t> kmer_ranks(n_kmers);
-	//for(size_t i = 0; i < n_kmers; ++i) {
-	//	kmer_ranks[i] = sixMerRank_nanopolish(sequence.substr(i, k).c_str());
-	//}
+	std::vector<unsigned int> kmer_ranks(n_kmers);
+	for(size_t i = 0; i < n_kmers; i++) {
+		std::string sixMer = sequence.substr(i, k);
+		kmer_ranks[i] = sixMer2index(sixMer);
+	}
 
 	typedef std::vector<float> bandscore;
 	typedef std::vector<uint8_t> bandtrace;
@@ -396,8 +398,7 @@ void adaptive_banded_simple_event_align( std::vector< double > &raw, read &r, Po
 			int event_idx = event_at_offset(band_idx, offset);
 			int kmer_idx = kmer_at_offset(band_idx, offset);
 
-			//size_t kmer_rank = kmer_ranks[kmer_idx];
-			std::string sixMer = sequence.substr(kmer_idx, k);
+			unsigned int kmer_rank = kmer_ranks[kmer_idx];
  
 			int offset_up   = band_event_to_offset(band_idx - 1, event_idx - 1); 
 			int offset_left = band_kmer_to_offset(band_idx - 1, kmer_idx - 1);
@@ -408,7 +409,7 @@ void adaptive_banded_simple_event_align( std::vector< double > &raw, read &r, Po
 			float diag = is_offset_valid(offset_diag) ? bands[band_idx - 2][offset_diag] : -INFINITY;
  
 			//float lp_emission = log_probability_match_r9(read, pore_model, kmer_rank, event_idx, strand_idx);
-			float lp_emission = logProbabilityMatch(sixMer, raw[event_idx],s.shift,s.scale);
+			float lp_emission = logProbabilityMatch(kmer_rank, raw[event_idx],s.shift,s.scale);
 
 			float score_d = diag + lp_step + lp_emission;
 			float score_u = up + lp_stay + lp_emission;
@@ -478,23 +479,21 @@ void adaptive_banded_simple_event_align( std::vector< double > &raw, read &r, Po
 		// qc stats
 		//size_t kmer_rank = sixMerRank_nanopolish(sequence.substr(curr_kmer_idx, k).c_str());
 		//sum_emission += log_probability_match_r9(read, pore_model, kmer_rank, curr_event_idx, strand_idx);
-		std::string sixMer = sequence.substr(curr_kmer_idx, k);
+		unsigned int kmer_rank = kmer_ranks[curr_kmer_idx];
+		std::pair<double,double> meanStd = thymidineModel[kmer_rank];
 		//eventToScore[curr_event_idx] = logProbabilityMatch(sixMer, raw[curr_event_idx], s.shift, s.scale);
-		float logProbability = logProbabilityMatch(sixMer, raw[curr_event_idx], s.shift, s.scale);
+		float logProbability = logProbabilityMatch(kmer_rank, raw[curr_event_idx], s.shift, s.scale);
 		sum_emission += logProbability;
-		eventDiffs += thymidineModel.at(sixMer).first - raw[curr_event_idx];
+		eventDiffs += meanStd.first - raw[curr_event_idx];
 
 		//update A,b for recomputing shift and scale
 		//only do this for sixmers that don't contain a T
 
-		//if (sixMer.find("T") == std::string::npos){
-			A[0][0] += 1.0 / pow( thymidineModel.at(sixMer).second, 2.0 );
-			A[0][1] += thymidineModel.at(sixMer).first / pow( thymidineModel.at(sixMer).second, 2.0 );
-			A[1][1] += pow( thymidineModel.at(sixMer).first, 2.0 ) / pow( thymidineModel.at(sixMer).second, 2.0 );
-			b[0] += raw[curr_event_idx] / pow( thymidineModel.at(sixMer).second, 2.0 );
-			b[1] += raw[curr_event_idx] * thymidineModel.at(sixMer).first / pow( thymidineModel.at(sixMer).second, 2.0 );
-		//	usedInScale++;
-		//}
+		A[0][0] += 1.0 / pow( meanStd.second, 2.0 );
+		A[0][1] += meanStd.first / pow( meanStd.second, 2.0 );
+		A[1][1] += pow( meanStd.first, 2.0 ) / pow( meanStd.second, 2.0 );
+		b[0] += raw[curr_event_idx] / pow( meanStd.second, 2.0 );
+		b[1] += raw[curr_event_idx] * meanStd.first / pow( meanStd.second, 2.0 );
 
 		n_aligned_events += 1;
 
@@ -548,12 +547,13 @@ void adaptive_banded_simple_event_align( std::vector< double > &raw, read &r, Po
 		//int nNormalised = 0;
 		for (unsigned int i = 0; i < r.eventAlignment.size(); i++){
 
-			std::string sixMer = sequence.substr(r.eventAlignment[i].second, k);
+			unsigned int kmer_rank = kmer_ranks[r.eventAlignment[i].second];
+			std::pair<double,double> meanStd = thymidineModel[kmer_rank];
 			//if (sixMer.find("T") != std::string::npos) continue;
 			double event = raw[r.eventAlignment[i].first];
 			double mu,stdv;
-			mu = thymidineModel.at(sixMer).first;
-			stdv = thymidineModel.at(sixMer).second;
+			mu = meanStd.first;
+			stdv = meanStd.second;
 
 			double yi = (event - rescale.shift - rescale.scale*mu);
 			rescale.var += yi * yi / (stdv * stdv);
@@ -588,9 +588,12 @@ PoreParameters roughRescale( std::vector< double > &means, std::string &basecall
 
 	double sixMer_sum = 0.0;
 	double sixMer_sq_sum = 0.0;
+	std::string sixMer;
 	for ( unsigned int i = 0; i < numOfSixMers; i ++ ){
 
-		double sixMer_mean = thymidineModel[basecall.substr(i, 6)].first;
+		sixMer = basecall.substr(i, 6);
+		std::pair<double,double> meanStd = thymidineModel[sixMer2index(sixMer)];
+		double sixMer_mean = meanStd.first;
 		sixMer_sum += sixMer_mean;
 		sixMer_sq_sum += pow( sixMer_mean, 2.0 );
 	}

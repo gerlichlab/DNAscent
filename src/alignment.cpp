@@ -190,7 +190,7 @@ inline int lnArgMax(std::vector<double> v){
 }
 
 
-inline std::pair< double, std::vector< std::string > > builtinViterbi( std::vector <double> &observations,
+std::pair< double, std::vector< std::string > > builtinViterbi( std::vector <double> &observations,
 				std::string &sequence,
 				PoreParameters scalings,
 				bool flip,
@@ -207,9 +207,20 @@ inline std::pair< double, std::vector< std::string > > builtinViterbi( std::vect
 	double externalI2M1 = eln(0.999);
 	double externalM12D = eln(0.0025);
 	double externalM12M1 = eln(1.0 - externalM12D - internalM12I - internalM12M1);
+	double externalM12M1orD = lnSum( externalM12M1, externalM12D );
+	double externalOrInternalM12M1 = lnSum( externalM12M1, internalM12M1 );
 	int maxindex;
 
 	size_t n_states = sequence.length() - 5;
+
+	//pre-compute 6mer indices
+	std::vector<unsigned int> sixMerIndices;
+	sixMerIndices.reserve(n_states);
+	for (size_t i = 0; i < n_states; i++){
+		std::string sixMer = sequence.substr(i, 6);
+		if (flip) std::reverse(sixMer.begin(),sixMer.end());
+		sixMerIndices.push_back(sixMer2index(sixMer));
+	}
 
 	std::vector< std::vector< size_t > > backtraceS( 3*n_states, std::vector< size_t >( observations.size() + 1 ) ); /*stores state indices for the Viterbi backtrace */
 	std::vector< std::vector< size_t > > backtraceT( 3*n_states, std::vector< size_t >( observations.size() + 1 ) ); /*stores observation indices for the Viterbi backtrace */
@@ -248,11 +259,10 @@ inline std::pair< double, std::vector< std::string > > builtinViterbi( std::vect
 		std::fill( M_curr.begin(), M_curr.end(), NAN );
 		std::fill( D_curr.begin(), D_curr.end(), NAN );
 
-		std::string sixMer = sequence.substr(0, 6);
-		if (flip) std::reverse(sixMer.begin(),sixMer.end());
+		std::pair<double,double> meanStd = thymidineModel[sixMerIndices[0]];
 
-		level_mu = (scalings.shift + scalings.scale * thymidineModel.at(sixMer).first);
-		level_sigma = scalings.var * thymidineModel.at(sixMer).second;
+		level_mu = (scalings.shift + scalings.scale * meanStd.first);
+		level_sigma = scalings.var * meanStd.second;
 
 		matchProb = eln( normalPDF( level_mu*signalDilation, level_sigma, observations[t]*signalDilation ) );
 		//insProb = eln( uniformPDF( 0, 250, observations[t] ) );
@@ -287,10 +297,10 @@ inline std::pair< double, std::vector< std::string > > builtinViterbi( std::vect
 
 		//to the base 1 match
 		M_curr[0] = lnVecMax({lnProd( lnProd( M_prev[0], internalM12M1 ), matchProb ),
-							  lnProd( lnProd( start_prev, lnSum( externalM12M1, internalM12M1 ) ), matchProb )
+							  lnProd( lnProd( start_prev, externalOrInternalM12M1 ), matchProb )
 							 });
 		maxindex = lnArgMax({lnProd( lnProd( M_prev[0], internalM12M1 ), matchProb ),
-							 lnProd( lnProd( start_prev, lnSum( externalM12M1, internalM12M1 ) ), matchProb )
+							 lnProd( lnProd( start_prev, externalOrInternalM12M1 ), matchProb )
 							});
 		switch(maxindex){
 			case 0:
@@ -315,15 +325,15 @@ inline std::pair< double, std::vector< std::string > > builtinViterbi( std::vect
 		//the rest of the sequence
 		for ( unsigned int i = 1; i < n_states; i++ ){
 
-			//get model parameters
-			sixMer = sequence.substr(i, 6);
-			if (flip) std::reverse(sixMer.begin(),sixMer.end());
 
 			//insProb = eln( uniformPDF( 0, 250, observations[t] ) );
 			insProb = 0.0; //log(1) = 0
 
-			level_mu = scalings.shift + scalings.scale * thymidineModel.at(sixMer).first;
-			level_sigma = scalings.var * thymidineModel.at(sixMer).second;
+			//get model parameters
+			std::pair<double,double> meanStd = thymidineModel[sixMerIndices[i]];
+
+			level_mu = scalings.shift + scalings.scale * meanStd.first;
+			level_sigma = scalings.var * meanStd.second;
 
 			//uncomment if you scale events
 			//level_mu = thymidineModel.at(sixMer).first;
@@ -429,7 +439,7 @@ inline std::pair< double, std::vector< std::string > > builtinViterbi( std::vect
 	/*-----------TERMINATION----------- */
 	double viterbiScore = NAN;
 	viterbiScore = lnVecMax( {lnProd( D_curr.back(), eln( 1.0 ) ), //D to end
-							  lnProd( M_curr.back(), lnSum( externalM12M1, externalM12D ) ),//M to end
+							  lnProd( M_curr.back(), externalM12M1orD ),//M to end
 							  lnProd( I_curr.back(), externalI2M1 )//I to end
 							 });
 	//std::cout << "Builtin Viterbi score: " << viterbiScore << std::endl;
@@ -437,7 +447,7 @@ inline std::pair< double, std::vector< std::string > > builtinViterbi( std::vect
 
 	//figure out where to go from the end state
 	maxindex = lnArgMax({lnProd( D_curr.back(), eln( 1.0 ) ),
-	                   lnProd( M_curr.back(), lnSum( externalM12M1, externalM12D ) ),
+	                   lnProd( M_curr.back(), externalM12M1orD ),
 					   lnProd( I_curr.back(), externalI2M1 )
 	                   });
 
@@ -460,6 +470,7 @@ inline std::pair< double, std::vector< std::string > > builtinViterbi( std::vect
 	}
 
 	std::vector<std::string> stateIndices;
+	stateIndices.reserve(observations.size());
 	while (traceback_old != -1){
 
 		traceback_new = backtraceS[ traceback_old ][ traceback_t ];
@@ -556,8 +567,17 @@ std::string eventalign( read &r,
 
 			for (unsigned int i = windowLength; i < 1.5*windowLength - 7; i++){
 
-				double gap1 = std::abs(thymidineModel.at(breakSnippet.substr(i,6)).first - thymidineModel.at(breakSnippet.substr(i+1,6)).first);
-				double gap2 = std::abs(thymidineModel.at(breakSnippet.substr(i,6)).first - thymidineModel.at(breakSnippet.substr(i-1,6)).first);
+				std::string sixMer = breakSnippet.substr(i,6);
+				std::pair<double,double> meanStd = thymidineModel[sixMer2index(sixMer)];
+
+				std::string sixMer_back = breakSnippet.substr(i-1,6);
+				std::pair<double,double> meanStd_back = thymidineModel[sixMer2index(sixMer_back)];
+
+				std::string sixMer_front = breakSnippet.substr(i+1,6);
+				std::pair<double,double> meanStd_front = thymidineModel[sixMer2index(sixMer_front)];
+
+				double gap1 = std::abs(meanStd.first - meanStd_front.first);
+				double gap2 = std::abs(meanStd.first - meanStd_back.first);
 
 				if (gap1 > 20. and gap2 > 20.){
 					//found = true;
@@ -667,7 +687,8 @@ std::string eventalign( read &r,
 			}
 
 			if (label == "M"){
-				out += std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(eventLength) + "\t" + sixMerStrand + "\t" + std::to_string(thymidineModel.at(sixMerStrand).first) + "\t" + std::to_string(thymidineModel.at(sixMerStrand).second) + "\n";
+				std::pair<double,double> meanStd = thymidineModel[sixMer2index(sixMerStrand)];
+				out += std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(eventLength) + "\t" + sixMerStrand + "\t" + std::to_string(meanStd.first) + "\t" + std::to_string(meanStd.second) + "\n";
 			}
 			else if (label == "I" and evIdx < lastM_ev){ //don't print insertions after the last match because we're going to align these in the next segment
 				out += std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(eventLength) + "\t" + "NNNNNN" + "\t" + "0" + "\t" + "0" + "\n";
@@ -714,8 +735,18 @@ std::string eventalign( read &r,
 
 			for (unsigned int i = 1.5*windowLength; i > windowLength; i--){
 
-				double gap1 = std::abs(thymidineModel.at((r.referenceSeqMappedTo).substr(posOnRef-i,6)).first - thymidineModel.at((r.referenceSeqMappedTo).substr(posOnRef-i+1,6)).first);
-				double gap2 = std::abs(thymidineModel.at((r.referenceSeqMappedTo).substr(posOnRef-i,6)).first - thymidineModel.at((r.referenceSeqMappedTo).substr(posOnRef-i-1,6)).first);
+				std::string sixMer = (r.referenceSeqMappedTo).substr(posOnRef-i,6);
+				std::pair<double,double> meanStd = thymidineModel[sixMer2index(sixMer)];
+
+				std::string sixMer_back = (r.referenceSeqMappedTo).substr(posOnRef-i+1,6);
+				std::pair<double,double> meanStd_back = thymidineModel[sixMer2index(sixMer_back)];
+
+				std::string sixMer_front = (r.referenceSeqMappedTo).substr(posOnRef-i-1,6);
+				std::pair<double,double> meanStd_front = thymidineModel[sixMer2index(sixMer_front)];
+
+				double gap1 = std::abs(meanStd.first - meanStd_front.first);
+				double gap2 = std::abs(meanStd.first - meanStd_back.first);
+
 
 				if (gap1 > 20. and gap2 > 20.){
 					//found = true;
@@ -829,7 +860,8 @@ std::string eventalign( read &r,
 			}
 
 			if (label == "M"){
-				lines.push_back(std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(eventLength) + "\t" + sixMerStrand + "\t" + std::to_string(thymidineModel.at(sixMerStrand).first) + "\t" + std::to_string(thymidineModel.at(sixMerStrand).second) + "\n");
+				std::pair<double,double> meanStd = thymidineModel[sixMer2index(sixMerStrand)];
+				lines.push_back(std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(eventLength) + "\t" + sixMerStrand + "\t" + std::to_string(meanStd.first) + "\t" + std::to_string(meanStd.second) + "\n");
 			}
 			else if (label == "I" and evIdx < lastM_ev){ //don't print insertions after the last match because we're going to align these in the next segment
 				lines.push_back(std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(eventLength) + "\t" + "NNNNNN" + "\t" + "0" + "\t" + "0" + "\n");
@@ -897,8 +929,17 @@ std::string eventalign_train( read &r,
 
 			for (unsigned int i = windowLength; i < 1.5*windowLength - 7; i++){
 
-				double gap1 = std::abs(thymidineModel.at(breakSnippet.substr(i,6)).first - thymidineModel.at(breakSnippet.substr(i+1,6)).first);
-				double gap2 = std::abs(thymidineModel.at(breakSnippet.substr(i,6)).first - thymidineModel.at(breakSnippet.substr(i-1,6)).first);
+				std::string sixMer = breakSnippet.substr(i,6);
+				std::pair<double,double> meanStd = thymidineModel[sixMer2index(sixMer)];
+
+				std::string sixMer_back = breakSnippet.substr(i-1,6);
+				std::pair<double,double> meanStd_back = thymidineModel[sixMer2index(sixMer_back)];
+
+				std::string sixMer_front = breakSnippet.substr(i+1,6);
+				std::pair<double,double> meanStd_front = thymidineModel[sixMer2index(sixMer_front)];
+
+				double gap1 = std::abs(meanStd.first - meanStd_front.first);
+				double gap2 = std::abs(meanStd.first - meanStd_back.first);
 
 				if (gap1 > 20. and gap2 > 20.){
 					//found = true;
@@ -1007,11 +1048,12 @@ std::string eventalign_train( read &r,
 				sixMerRef = sixMerStrand;
 			}
 
+			std::pair<double,double> meanStd = thymidineModel[sixMer2index(sixMerStrand)];
 			if (label == "M" and BrdULikelihood.count(evPos) > 0){
-				out += std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(eventLength) + "\t" + sixMerStrand + "\t" + std::to_string(thymidineModel.at(sixMerStrand).first) + "\t" + std::to_string(thymidineModel.at(sixMerStrand).second) + "\t" + std::to_string(BrdULikelihood[evPos]) + "\n";
+				out += std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(eventLength) + "\t" + sixMerStrand + "\t" + std::to_string(meanStd.first) + "\t" + std::to_string(meanStd.second) + "\t" + std::to_string(BrdULikelihood[evPos]) + "\n";
 			}
 			else if (label == "M"){
-				out += std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(eventLength) + "\t" + sixMerStrand + "\t" + std::to_string(thymidineModel.at(sixMerStrand).first) + "\t" + std::to_string(thymidineModel.at(sixMerStrand).second) + "\n";
+				out += std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(eventLength) + "\t" + sixMerStrand + "\t" + std::to_string(meanStd.first) + "\t" + std::to_string(meanStd.second) + "\n";
 			}
 			else if (label == "I" and evIdx < lastM_ev){ //don't print insertions after the last match because we're going to align these in the next segment
 				out += std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(eventLength) + "\t" + "NNNNNN" + "\t" + "0" + "\t" + "0" + "\n";
@@ -1051,8 +1093,17 @@ std::string eventalign_train( read &r,
 
 			for (unsigned int i = 1.5*windowLength; i > windowLength; i--){
 
-				double gap1 = std::abs(thymidineModel.at((r.referenceSeqMappedTo).substr(posOnRef-i,6)).first - thymidineModel.at((r.referenceSeqMappedTo).substr(posOnRef-i+1,6)).first);
-				double gap2 = std::abs(thymidineModel.at((r.referenceSeqMappedTo).substr(posOnRef-i,6)).first - thymidineModel.at((r.referenceSeqMappedTo).substr(posOnRef-i-1,6)).first);
+				std::string sixMer = (r.referenceSeqMappedTo).substr(posOnRef-i,6);
+				std::pair<double,double> meanStd = thymidineModel[sixMer2index(sixMer)];
+
+				std::string sixMer_back = (r.referenceSeqMappedTo).substr(posOnRef-i+1,6);
+				std::pair<double,double> meanStd_back = thymidineModel[sixMer2index(sixMer_back)];
+
+				std::string sixMer_front = (r.referenceSeqMappedTo).substr(posOnRef-i-1,6);
+				std::pair<double,double> meanStd_front = thymidineModel[sixMer2index(sixMer_front)];
+
+				double gap1 = std::abs(meanStd.first - meanStd_front.first);
+				double gap2 = std::abs(meanStd.first - meanStd_back.first);
 
 				if (gap1 > 20. and gap2 > 20.){
 					//found = true;
@@ -1165,11 +1216,12 @@ std::string eventalign_train( read &r,
 				sixMerRef = sixMerStrand;
 			}
 
+			std::pair<double,double> meanStd = thymidineModel[sixMer2index(sixMerStrand)];
 			if (label == "M" and BrdULikelihood.count(evPos) > 0){
-				lines.push_back(std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(eventLength) + "\t" + sixMerStrand + "\t" + std::to_string(thymidineModel.at(sixMerStrand).first) + "\t" + std::to_string(thymidineModel.at(sixMerStrand).second) + "\t" + std::to_string(BrdULikelihood[evPos]) + "\n");
+				lines.push_back(std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(eventLength) + "\t" + sixMerStrand + "\t" + std::to_string(meanStd.first) + "\t" + std::to_string(meanStd.second) + "\t" + std::to_string(BrdULikelihood[evPos]) + "\n");
 			}
 			else if (label == "M"){
-				lines.push_back(std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(eventLength) + "\t" + sixMerStrand + "\t" + std::to_string(thymidineModel.at(sixMerStrand).first) + "\t" + std::to_string(thymidineModel.at(sixMerStrand).second) + "\n");
+				lines.push_back(std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(eventLength) + "\t" + sixMerStrand + "\t" + std::to_string(meanStd.first) + "\t" + std::to_string(meanStd.second) + "\n");
 			}
 			else if (label == "I" and evIdx < lastM_ev){ //don't print insertions after the last match because we're going to align these in the next segment
 				lines.push_back(std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(eventLength) + "\t" + "NNNNNN" + "\t" + "0" + "\t" + "0" + "\n");
@@ -1230,8 +1282,17 @@ std::pair<bool,AlignedRead> eventalign_detect( read &r,
 
 			for (unsigned int i = windowLength; i < 1.5*windowLength - 7; i++){
 
-				double gap1 = std::abs(thymidineModel.at(breakSnippet.substr(i,6)).first - thymidineModel.at(breakSnippet.substr(i+1,6)).first);
-				double gap2 = std::abs(thymidineModel.at(breakSnippet.substr(i,6)).first - thymidineModel.at(breakSnippet.substr(i-1,6)).first);
+				std::string sixMer = breakSnippet.substr(i,6);
+				std::pair<double,double> meanStd = thymidineModel[sixMer2index(sixMer)];
+
+				std::string sixMer_back = breakSnippet.substr(i-1,6);
+				std::pair<double,double> meanStd_back = thymidineModel[sixMer2index(sixMer_back)];
+
+				std::string sixMer_front = breakSnippet.substr(i+1,6);
+				std::pair<double,double> meanStd_front = thymidineModel[sixMer2index(sixMer_front)];
+
+				double gap1 = std::abs(meanStd.first - meanStd_front.first);
+				double gap2 = std::abs(meanStd.first - meanStd_back.first);
 
 				if (gap1 > 20. and gap2 > 20.){
 					//found = true;
@@ -1377,8 +1438,17 @@ std::pair<bool,AlignedRead> eventalign_detect( read &r,
 
 			for (unsigned int i = 1.5*windowLength; i > windowLength; i--){
 
-				double gap1 = std::abs(thymidineModel.at((r.referenceSeqMappedTo).substr(posOnRef-i,6)).first - thymidineModel.at((r.referenceSeqMappedTo).substr(posOnRef-i+1,6)).first);
-				double gap2 = std::abs(thymidineModel.at((r.referenceSeqMappedTo).substr(posOnRef-i,6)).first - thymidineModel.at((r.referenceSeqMappedTo).substr(posOnRef-i-1,6)).first);
+				std::string sixMer = (r.referenceSeqMappedTo).substr(posOnRef-i,6);
+				std::pair<double,double> meanStd = thymidineModel[sixMer2index(sixMer)];
+
+				std::string sixMer_back = (r.referenceSeqMappedTo).substr(posOnRef-i+1,6);
+				std::pair<double,double> meanStd_back = thymidineModel[sixMer2index(sixMer_back)];
+
+				std::string sixMer_front = (r.referenceSeqMappedTo).substr(posOnRef-i-1,6);
+				std::pair<double,double> meanStd_front = thymidineModel[sixMer2index(sixMer_front)];
+
+				double gap1 = std::abs(meanStd.first - meanStd_front.first);
+				double gap2 = std::abs(meanStd.first - meanStd_back.first);
 
 				if (gap1 > 20. and gap2 > 20.){
 					//found = true;
@@ -1584,7 +1654,7 @@ int align_main( int argc, char** argv ){
 		/*if we've filled up the buffer with short reads, compute them in parallel */
 		if (buffer.size() >= maxBufferSize or (buffer.size() > 0 and result == -1 ) ){
 
-			#pragma omp parallel for schedule(dynamic) shared(buffer,windowLength,analogueModel,thymidineModel,methyl5mCModel,args,prog,failed) num_threads(args.threads)
+			#pragma omp parallel for schedule(dynamic) shared(buffer,windowLength,analogueModel,thymidineModel,args,prog,failed) num_threads(args.threads)
 			for (unsigned int i = 0; i < buffer.size(); i++){
 
 				read r;

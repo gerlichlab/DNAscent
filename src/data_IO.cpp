@@ -186,7 +186,23 @@ std::string getExePath(void){
 }
 
 
-std::map< std::string, std::pair< double, double > > import_poreModel( std::string poreModelFilename ){
+std::map<std::string, int> base2index = {{"A",0}, {"T",1}, {"G",2}, {"C",3}};
+
+
+unsigned int sixMer2index(std::string &sixMer){
+
+	unsigned int p = 1;
+	unsigned int r = 0;
+	for (size_t i = 0; i < 6; i++){
+
+		r += base2index[sixMer.substr(6-i-1,1)] * p;
+		p *= 4;
+	}
+	return r;
+}
+
+
+std::vector< std::pair< double, double > > import_poreModel( std::string poreModelFilename ){
 
 	std::string pathExe = getExePath();
 	std::string modelPath = pathExe + "/pore_models/" + poreModelFilename;
@@ -196,7 +212,6 @@ std::map< std::string, std::pair< double, double > > import_poreModel( std::stri
 
 	/*file handle, and delimiter between columns (a \t character in the case of ONT model files) */
 	std::ifstream file( modelPath );
-
 	if ( not file.is_open() ) throw IOerror( modelPath );
 
 	std::string line, key, mean, std;
@@ -223,10 +238,17 @@ std::map< std::string, std::pair< double, double > > import_poreModel( std::stri
 		}
 	}
 
-	/*if you need to print out the map for debugging purposes 
+	std::vector< std::pair< double, double > > indexedPoreModel(4096, std::make_pair(0,0));
+
 	for(auto it = kmer2MeanStd.cbegin(); it != kmer2MeanStd.cend(); ++it){
-	    std::cout << it->first << " " << it->second.first << " " << it->second.second << "\n";
-	}*/
-	
-	return kmer2MeanStd;
+
+		std::string sixMer = it -> first;
+		kmer2MeanStd[sixMer] = std::make_pair(it->second.first, it->second.second);
+
+		indexedPoreModel[sixMer2index(sixMer)] = std::make_pair(it->second.first, it->second.second);
+
+	    //std::cout << it->first << " " << it->second.first << " " << it->second.second << "\n";
+	}
+
+	return indexedPoreModel;
 }

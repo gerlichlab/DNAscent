@@ -209,8 +209,9 @@ double sequenceProbability( std::vector <double> &observations,
 
 		std::string sixMer = sequence.substr(0, 6);
 
-		level_mu = scalings.shift + scalings.scale * thymidineModel.at(sixMer).first;
-		level_sigma = scalings.var * thymidineModel.at(sixMer).second;
+		std::pair<double,double> meanStd = thymidineModel[sixMer2index(sixMer)];
+		level_mu = scalings.shift + scalings.scale * meanStd.first;
+		level_sigma = scalings.var * meanStd.second;
 
 		//uncomment to scale events
 		//level_mu = thymidineModel.at(sixMer).first;
@@ -242,11 +243,12 @@ double sequenceProbability( std::vector <double> &observations,
 
 			//get model parameters
 			sixMer = sequence.substr(i, 6); 
+			std::pair<double,double> analogue_meanStd = analogueModel[sixMer2index(sixMer)];
 			insProb = eln( uniformPDF( 0, 250, observations[t] ) );
-			if ( useBrdU and BrdUStart <= i and i <= BrdUEnd and sixMer.find('T') != std::string::npos and analogueModel.count(sixMer) > 0 ){
+			if ( useBrdU and BrdUStart <= i and i <= BrdUEnd and sixMer.find('T') != std::string::npos and analogue_meanStd.first != 0. ){
 
-				level_mu = scalings.shift + scalings.scale * analogueModel.at(sixMer).first;
-				level_sigma = scalings.var * analogueModel.at(sixMer).second;
+				level_mu = scalings.shift + scalings.scale * analogue_meanStd.first;
+				level_sigma = scalings.var * analogue_meanStd.second;
 
 				//uncomment if you scale events
 				//level_mu = analogueModel.at(sixMer).first;
@@ -256,8 +258,9 @@ double sequenceProbability( std::vector <double> &observations,
 			}
 			else{
 
-				level_mu = scalings.shift + scalings.scale * thymidineModel.at(sixMer).first;
-				level_sigma = scalings.var * thymidineModel.at(sixMer).second;
+				std::pair<double,double> meanStd = thymidineModel[sixMer2index(sixMer)];
+				level_mu = scalings.shift + scalings.scale * meanStd.first;
+				level_sigma = scalings.var * meanStd.second;
 
 				//uncomment if you scale events				
 				//level_mu = thymidineModel.at(sixMer).first;
@@ -310,151 +313,6 @@ for (auto ob = observations.begin(); ob < observations.end(); ob++){
 std::cerr << std::endl;
 std::cerr << forwardProb << std::endl;
 #endif
-
-	return forwardProb;
-}
-
-
-
-double sequenceProbability_methyl( std::vector <double> &observations,
-				std::string &sequence,
-				std::string &sequence_methylated,
-				size_t windowSize, 
-				PoreParameters scalings,
-				size_t MethylStart,
-				size_t MethylEnd ){
-
-	//Initial transitions within modules (internal transitions)
-	double internalM12I = 0.3475;
-	double internalI2I = 0.5;
-	double internalM12M1 = 0.4;
-
-	//Initial transitions between modules (external transitions)
-	double externalD2D = 0.3;
-	double externalD2M1 = 0.7;
-	double externalI2M1 = 0.5;
-	double externalM12D = 0.0025;
-	double externalM12M1 = 0.25;
-
-	std::vector< double > I_curr(2*windowSize+1, NAN), D_curr(2*windowSize+1, NAN), M_curr(2*windowSize+1, NAN), I_prev(2*windowSize+1, NAN), D_prev(2*windowSize+1, NAN), M_prev(2*windowSize+1, NAN);
-	double firstI_curr = NAN, firstI_prev = NAN;
-	double start_curr = NAN, start_prev = 0.0;
-
-	double matchProb, insProb;
-
-	/*-----------INITIALISATION----------- */
-	//transitions from the start state
-	D_prev[0] = lnProd( start_prev, eln( 0.25 ) );
-
-	//account for transitions between deletion states before we emit the first observation
-	for ( unsigned int i = 1; i < D_prev.size(); i++ ){
-
-		D_prev[i] = lnProd( D_prev[i-1], eln ( externalD2D ) );
-	}
-
-
-	/*-----------RECURSION----------- */
-	/*complexity is O(T*N^2) where T is the number of observations and N is the number of states */
-	double level_mu, level_sigma;
-	for ( unsigned int t = 0; t < observations.size(); t++ ){
-
-		std::fill( I_curr.begin(), I_curr.end(), NAN );
-		std::fill( M_curr.begin(), M_curr.end(), NAN );
-		std::fill( D_curr.begin(), D_curr.end(), NAN );
-		firstI_curr = NAN;
-
-		std::string sixMer = sequence.substr(0, 6);
-		std::string sixMer_methyl;
-
-		level_mu = scalings.shift + scalings.scale * thymidineModel.at(sixMer).first;
-		level_sigma = scalings.var * thymidineModel.at(sixMer).second;
-
-		//uncomment to scale events
-		//level_mu = thymidineModel.at(sixMer).first;
-		//level_sigma = scalings.var / scalings.scale * thymidineModel.at(sixMer).second;
-		//observations[t] = (observations[t] - scalings.shift) / scalings.scale;
-
-		matchProb = eln( normalPDF( level_mu, level_sigma, observations[t] ) );
-		insProb = eln( uniformPDF( 0, 250, observations[t] ) );
-
-		//first insertion
-		firstI_curr = lnSum( firstI_curr, lnProd( lnProd( start_prev, eln( 0.25 ) ), insProb ) ); //start to first I
-		firstI_curr = lnSum( firstI_curr, lnProd( lnProd( firstI_prev, eln( 0.25 ) ), insProb ) ); //first I to first I
-
-		//to the base 1 insertion
-		I_curr[0] = lnSum( I_curr[0], lnProd( lnProd( I_prev[0], eln( internalI2I ) ), insProb ) );  //I to I
-		I_curr[0] = lnSum( I_curr[0], lnProd( lnProd( M_prev[0], eln( internalM12I ) ), insProb ) ); //M to I 
-
-		//to the base 1 match
-		M_curr[0] = lnSum( M_curr[0], lnProd( lnProd( firstI_prev, eln( 0.5 ) ), matchProb ) ); //first I to first match
-		M_curr[0] = lnSum( M_curr[0], lnProd( lnProd( M_prev[0], eln( internalM12M1 ) ), matchProb ) );  //M to M
-		M_curr[0] = lnSum( M_curr[0], lnProd( lnProd( start_prev, eln( 0.5 ) ), matchProb ) );  //start to M
-
-		//to the base 1 deletion
-		D_curr[0] = lnSum( D_curr[0], lnProd( NAN, eln( 0.25 ) ) );  //start to D
-		D_curr[0] = lnSum( D_curr[0], lnProd( firstI_curr, eln( 0.25 ) ) ); //first I to first deletion
-
-		//the rest of the sequence
-		for ( unsigned int i = 1; i < I_curr.size(); i++ ){
-
-			//get model parameters
-			sixMer = sequence.substr(i, 6);
-			sixMer_methyl = sequence_methylated.substr(i,6);
-			insProb = eln( uniformPDF( 0, 250, observations[t] ) );
-			if ( methyl5mCModel.count(sixMer_methyl) > 0 and MethylStart <= i and i <= MethylEnd ){
-
-				level_mu = scalings.shift + scalings.scale * methyl5mCModel.at(sixMer_methyl).first;
-				level_sigma = scalings.var * methyl5mCModel.at(sixMer_methyl).second;
-
-				//uncomment if you scale events
-				//level_mu = analogueModel.at(sixMer).first;
-				//level_sigma = scalings.var / scalings.scale * analogueModel.at(sixMer).second;
-
-				matchProb = eln( normalPDF( level_mu, level_sigma, observations[t] ) );
-			}
-			else{
-				level_mu = scalings.shift + scalings.scale * thymidineModel.at(sixMer).first;
-				level_sigma = scalings.var * thymidineModel.at(sixMer).second;
-
-				//uncomment if you scale events				
-				//level_mu = thymidineModel.at(sixMer).first;
-				//level_sigma = scalings.var / scalings.scale * thymidineModel.at(sixMer).second;
-
-				matchProb = eln( normalPDF( level_mu, level_sigma, observations[t] ) );
-			}
-
-			//to the insertion
-			I_curr[i] = lnSum( I_curr[i], lnProd( lnProd( I_prev[i], eln( internalI2I ) ), insProb ) );  //I to I
-			I_curr[i] = lnSum( I_curr[i], lnProd( lnProd( M_prev[i], eln( internalM12I ) ), insProb ) ); //M to I 
-
-			//to the match
-			M_curr[i] = lnSum( M_curr[i], lnProd( lnProd( I_prev[i-1], eln( externalI2M1 ) ), matchProb ) );  //external I to M
-			M_curr[i] = lnSum( M_curr[i], lnProd( lnProd( M_prev[i-1], eln( externalM12M1 ) ), matchProb ) );  //external M to M
-			M_curr[i] = lnSum( M_curr[i], lnProd( lnProd( M_prev[i], eln( internalM12M1 ) ), matchProb ) );  //interal M to M
-			M_curr[i] = lnSum( M_curr[i], lnProd( lnProd( D_prev[i-1], eln( externalD2M1 ) ), matchProb ) );  //external D to M
-		}
-
-		for ( unsigned int i = 1; i < I_curr.size(); i++ ){
-
-			//to the deletion
-			D_curr[i] = lnSum( D_curr[i], lnProd( M_curr[i-1], eln( externalM12D ) ) );  //external M to D
-			D_curr[i] = lnSum( D_curr[i], lnProd( D_curr[i-1], eln( externalD2D ) ) );  //external D to D
-		}
-		
-		I_prev = I_curr;
-		M_prev = M_curr;
-		D_prev = D_curr;
-		firstI_prev = firstI_curr;
-		start_prev = start_curr;
-	}
-
-
-	/*-----------TERMINATION----------- */
-	double forwardProb = NAN;
-
-	forwardProb = lnSum( forwardProb, lnProd( D_curr.back(), eln( 1.0 ) ) ); //D to end
-	forwardProb = lnSum( forwardProb, lnProd( M_curr.back(), eln( externalM12M1 + externalM12D ) ) ); //M to end
-	forwardProb = lnSum( forwardProb, lnProd( I_curr.back(), eln( externalI2M1 ) ) ); //I to end
 
 	return forwardProb;
 }
@@ -699,39 +557,7 @@ std::cerr << std::endl;
 std::cerr << logLikelihoodRatio << std::endl;
 #endif
 
-		if ( methylAware) {
-
-			std::string readSnippetMethylated = methylateSequence( readSnippet );
-			std::string conflictSubseq = readSnippetMethylated.substr(BrdUStart, BrdUEnd - BrdUStart + 6);
-
-			if (conflictSubseq.find("M") == std::string::npos){
-
-				out += std::to_string(globalPosOnRef) + "\t" + std::to_string(logLikelihoodRatio) + "\t" + sixMerRef + "\t" + sixMerQuery + "\n";
-			}
-			else{
-
-				size_t MethylStart = conflictSubseq.find('M') + BrdUStart - 5;
-				size_t MethylEnd = conflictSubseq.rfind('M') + BrdUStart;
-
-#if TEST_METHYL
-std::cerr << "<-------------------" << std::endl;
-std::cerr << "Read snippet: " << readSnippet << std::endl;
-std::cerr << "Methylated:   " << readSnippetMethylated << std::endl;
-std::cerr << "Conflict subseq: " << conflictSubseq << std::endl;
-std::cerr << "BrdU start/end: " << BrdUStart << " " << BrdUEnd << std::endl;
-std::cerr << "Methyl start/end: " << MethylStart << " " << MethylEnd  << std::endl;
-#endif
-
-				double logProbMethylated = sequenceProbability_methyl( eventSnippet, readSnippet, readSnippetMethylated, windowLength, r.scalings, MethylStart, MethylEnd );
-				double logLikelihood_BrdUvsMethyl = logProbAnalogue - logProbMethylated;
-				double logLikelihood_MethylvsThym = logProbMethylated - logProbThymidine;
-				out +=  std::to_string(globalPosOnRef) + "\t" + std::to_string(logLikelihoodRatio) + "\t" + std::to_string(logLikelihood_BrdUvsMethyl) + "\t" + std::to_string(logLikelihood_MethylvsThym) + "\t" + sixMerRef + "\t" + sixMerQuery + "\n";
-			}
-		}
-		else{
-
-			out += std::to_string(globalPosOnRef) + "\t" + std::to_string(logLikelihoodRatio) + "\t" + sixMerRef + "\t" + sixMerQuery + "\n";
-		}
+		out += std::to_string(globalPosOnRef) + "\t" + std::to_string(logLikelihoodRatio) + "\t" + sixMerRef + "\t" + sixMerQuery + "\n";
 	}
 	return out;
 }
@@ -1096,7 +922,7 @@ int detect_main( int argc, char** argv ){
 		/*if we've filled up the buffer with short reads, compute them in parallel */
 		if (buffer.size() >= maxBufferSize or (buffer.size() > 0 and result == -1 ) ){
 
-			#pragma omp parallel for schedule(dynamic) shared(session,buffer,windowLength_HMMdetect,windowLength_align,modelPath,analogueModel,thymidineModel,methyl5mCModel,args,prog,failed) num_threads(args.threads)
+			#pragma omp parallel for schedule(dynamic) shared(session,buffer,windowLength_HMMdetect,windowLength_align,modelPath,analogueModel,thymidineModel,args,prog,failed) num_threads(args.threads)
 			for (unsigned int i = 0; i < buffer.size(); i++){
 
 				read r; 

@@ -77,8 +77,9 @@ class AlignedPosition{
 			feature.push_back(vectorStdv(lengths, lengthsMean));
 
 			//pore model
-			feature.push_back(thymidineModel.at(sixMer).first);
-			feature.push_back(thymidineModel.at(sixMer).second);
+			std::pair<double,double> meanStd = thymidineModel[sixMer2index(sixMer)];
+			feature.push_back(meanStd.first);
+			feature.push_back(meanStd.second);
 
 			return feature;
 		}

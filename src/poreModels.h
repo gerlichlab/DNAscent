@@ -7,7 +7,8 @@
 //----------------------------------------------------------
 
 #include <map>
+#include <vector>
 
-extern std::map< std::string, std::pair< double, double > > analogueModel;
-extern std::map< std::string, std::pair< double, double > > thymidineModel;
-extern std::map< std::string, std::pair< double, double > > methyl5mCModel;
+extern std::vector< std::pair< double, double > > analogueModel;
+extern std::vector< std::pair< double, double > > thymidineModel;
+//extern std::vector< std::pair< double, double > > methyl5mCModel;

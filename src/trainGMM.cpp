@@ -364,6 +364,43 @@ unsigned int CountLines( const std::vector<char> &buff, int sz ){
 }
 
 
+void printAllKLengthRec(char set[], std::string prefix,
+                                    int n, int k, std::vector<std::string> &out)
+{
+
+    // Base case: k is 0,
+    // print prefix
+    if (k == 0)
+    {
+        out.push_back(prefix);
+        return;
+    }
+
+    // One by one add all characters
+    // from set and recursively
+    // call for k equals to k-1
+    for (int i = 0; i < n; i++)
+    {
+        std::string newPrefix;
+
+        // Next character of input added
+        newPrefix = prefix + set[i];
+
+        // k is decreased, because
+        // we have added a new character
+        printAllKLengthRec(set, newPrefix, n, k - 1, out);
+    }
+
+}
+
+void printAllKLength(char set[], int k,int n, std::vector<std::string> &out)
+{
+    printAllKLengthRec(set, "", n, k, out);
+
+}
+
+
+
 int train_main( int argc, char** argv ){
 
 	Arguments trainArgs = parseTrainingArguments( argc, argv );
@@ -379,15 +416,20 @@ int train_main( int argc, char** argv ){
 	int prog, failed;
 
 	/*fudge for openmp */
-	std::map< int, std::string > indexToSixmer;
-	std::map< std::string, int > sixmerToIndex;
+    char set1[] = {'A', 'T', 'G', 'C'};
+    int k = 6;
+    std::vector<std::string> allSixMers;
+    printAllKLength(set1, k, 2, allSixMers);
+	std::map< int, std::string > intToSixmer;
+	std::map< std::string, int > sixmerToInt;
 	int index = 0;
-	for ( auto i = thymidineModel.cbegin(); i != thymidineModel.cend(); i++ ){
+	for ( unsigned int i = 0; i < allSixMers.size(); i++ ){
 
-		indexToSixmer[index] = i -> first;
-		sixmerToIndex[i->first] = index;
+		intToSixmer[index] = allSixMers[i];
+		sixmerToInt[allSixMers[i]] = index;
 		index++;
 	}
+
 
 	std::vector< std::vector< double > > importedEvents( 4096 );
 
@@ -448,9 +490,9 @@ int train_main( int argc, char** argv ){
 
 		assert (eventMean != 0.0 and eventLength != 0.0);
 
-		if ( eventLength >= 0.002 and importedEvents[sixmerToIndex[sixMer]].size() < trainArgs.maxEvents ){
+		if ( eventLength >= 0.002 and importedEvents[sixMer2index(sixMer)].size() < trainArgs.maxEvents ){
 
-			importedEvents[sixmerToIndex[sixMer]].push_back( eventMean );
+			importedEvents[sixMer2index(sixMer)].push_back( eventMean );
 		}
 		if (readsRead > trainArgs.maxReads) break;
 	}
@@ -462,7 +504,7 @@ int train_main( int argc, char** argv ){
 	outFile << "6mer" << '\t' << "ONT_mean" << '\t' << "ONT_stdv" << '\t' << "pi_1" << '\t' << "mean_1" << '\t' << "stdv_1" << '\t' << "pi_2" << '\t' << "mean_2" << '\t' << "stdv_2" << std::endl;
 	progressBar pb_fit( importedEvents.size(),true );
 
-	#pragma omp parallel for schedule(dynamic) shared(pb_fit, indexToSixmer, thymidineModel, prog, failed, outFile, importedEvents, trainArgs) num_threads(trainArgs.threads)
+	#pragma omp parallel for schedule(dynamic) shared(pb_fit, thymidineModel, prog, failed, outFile, importedEvents, trainArgs) num_threads(trainArgs.threads)
 	for ( unsigned int i = 0; i < importedEvents.size(); i++ ){
 
 		/*don't train if we have less than 200 events for this 6mer */
@@ -486,16 +528,17 @@ int train_main( int argc, char** argv ){
 			continue;
 		}
 
-		std::string sixMer = indexToSixmer[i];
+		std::string sixMer = intToSixmer[i];
 		double mu1, stdv1, mu2, stdv2;
 
 		/*get the ONT distribution for the mixture */
-		mu1 = thymidineModel[sixMer].first;
-		stdv1 = thymidineModel[sixMer].second;
+		std::pair<double,double> meanStd = thymidineModel[sixMer2index(sixMer)];
+		mu1 = meanStd.first;
+		stdv1 = meanStd.second;
 
 		/*make a second distribution that's similar to the ONT distribution */
-		mu2 = thymidineModel[sixMer].first;
-		stdv2 = 2*thymidineModel[sixMer].second;
+		mu2 = meanStd.first;
+		stdv2 = 2*meanStd.second;
 
 		/*fit the model */
 		std::vector< double > fitParameters;
@@ -511,7 +554,7 @@ int train_main( int argc, char** argv ){
 		}
 		#pragma omp critical
 		{	
-			outFile << sixMer << '\t' << thymidineModel[sixMer].first << '\t' << thymidineModel[sixMer].second << '\t' << fitParameters[0] << '\t' << fitParameters[1] << '\t' << fitParameters[2] << '\t' << fitParameters[3] << '\t' << fitParameters[4] << '\t' << fitParameters[5] << '\t' << (importedEvents[i]).size() << "\t" << filteredEvents.size() << std::endl; 
+			outFile << sixMer << '\t' << meanStd.first << '\t' << meanStd.second << '\t' << fitParameters[0] << '\t' << fitParameters[1] << '\t' << fitParameters[2] << '\t' << fitParameters[3] << '\t' << fitParameters[4] << '\t' << fitParameters[5] << '\t' << (importedEvents[i]).size() << "\t" << filteredEvents.size() << std::endl;
 			pb_fit.displayProgress( prog, failed, 0 );
 		}
 		prog++;
