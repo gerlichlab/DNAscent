@@ -28,6 +28,7 @@
 #include "htsInterface.h"
 #include "tensor.h"
 #include "alignment.h"
+#include "error_handling.h"
 
 
 static const char *help=
@@ -168,16 +169,16 @@ double sequenceProbability( std::vector <double> &observations,
 //covered in: tests/detect/hmm_forward
 
 	//Initial transitions within modules (internal transitions)
-	double internalM12I = 0.3475;
-	double internalI2I = 0.5;
-	double internalM12M1 = 0.4;
+	double internalM12I = eln(0.3475);
+	double internalI2I = eln(0.5);
+	double internalM12M1 = eln(0.4);
 
 	//Initial transitions between modules (external transitions)
-	double externalD2D = 0.3;
-	double externalD2M1 = 0.7;
-	double externalI2M1 = 0.5;
-	double externalM12D = 0.0025;
-	double externalM12M1 = 0.25;
+	double externalD2D = eln(0.3);
+	double externalD2M1 = eln(0.7);
+	double externalI2M1 = eln(0.5);
+	double externalM12D = eln(0.0025);
+	double externalM12M1 = eln(0.25);
 
 	std::vector< double > I_curr(2*windowSize+1, NAN), D_curr(2*windowSize+1, NAN), M_curr(2*windowSize+1, NAN), I_prev(2*windowSize+1, NAN), D_prev(2*windowSize+1, NAN), M_prev(2*windowSize+1, NAN);
 	double firstI_curr = NAN, firstI_prev = NAN;
@@ -192,7 +193,7 @@ double sequenceProbability( std::vector <double> &observations,
 	//account for transitions between deletion states before we emit the first observation
 	for ( unsigned int i = 1; i < D_prev.size(); i++ ){
 
-		D_prev[i] = lnProd( D_prev[i-1], eln ( externalD2D ) );
+		D_prev[i] = lnProd( D_prev[i-1], externalD2D );
 	}
 
 
@@ -224,12 +225,12 @@ double sequenceProbability( std::vector <double> &observations,
 		firstI_curr = lnSum( firstI_curr, lnProd( lnProd( firstI_prev, eln( 0.25 ) ), insProb ) ); //first I to first I
 
 		//to the base 1 insertion
-		I_curr[0] = lnSum( I_curr[0], lnProd( lnProd( I_prev[0], eln( internalI2I ) ), insProb ) );  //I to I
-		I_curr[0] = lnSum( I_curr[0], lnProd( lnProd( M_prev[0], eln( internalM12I ) ), insProb ) ); //M to I 
+		I_curr[0] = lnSum( I_curr[0], lnProd( lnProd( I_prev[0], internalI2I ), insProb ) );  //I to I
+		I_curr[0] = lnSum( I_curr[0], lnProd( lnProd( M_prev[0], internalM12I ), insProb ) ); //M to I
 
 		//to the base 1 match
 		M_curr[0] = lnSum( M_curr[0], lnProd( lnProd( firstI_prev, eln( 0.5 ) ), matchProb ) ); //first I to first match
-		M_curr[0] = lnSum( M_curr[0], lnProd( lnProd( M_prev[0], eln( internalM12M1 ) ), matchProb ) );  //M to M
+		M_curr[0] = lnSum( M_curr[0], lnProd( lnProd( M_prev[0], internalM12M1 ), matchProb ) );  //M to M
 		M_curr[0] = lnSum( M_curr[0], lnProd( lnProd( start_prev, eln( 0.5 ) ), matchProb ) );  //start to M
 
 		//to the base 1 deletion
@@ -266,21 +267,21 @@ double sequenceProbability( std::vector <double> &observations,
 			}
 
 			//to the insertion
-			I_curr[i] = lnSum( I_curr[i], lnProd( lnProd( I_prev[i], eln( internalI2I ) ), insProb ) );  //I to I
-			I_curr[i] = lnSum( I_curr[i], lnProd( lnProd( M_prev[i], eln( internalM12I ) ), insProb ) ); //M to I 
+			I_curr[i] = lnSum( I_curr[i], lnProd( lnProd( I_prev[i], internalI2I ), insProb ) );  //I to I
+			I_curr[i] = lnSum( I_curr[i], lnProd( lnProd( M_prev[i], internalM12I ), insProb ) ); //M to I
 
 			//to the match
-			M_curr[i] = lnSum( M_curr[i], lnProd( lnProd( I_prev[i-1], eln( externalI2M1 ) ), matchProb ) );  //external I to M
-			M_curr[i] = lnSum( M_curr[i], lnProd( lnProd( M_prev[i-1], eln( externalM12M1 ) ), matchProb ) );  //external M to M
-			M_curr[i] = lnSum( M_curr[i], lnProd( lnProd( M_prev[i], eln( internalM12M1 ) ), matchProb ) );  //interal M to M
-			M_curr[i] = lnSum( M_curr[i], lnProd( lnProd( D_prev[i-1], eln( externalD2M1 ) ), matchProb ) );  //external D to M
+			M_curr[i] = lnSum( M_curr[i], lnProd( lnProd( I_prev[i-1], externalI2M1 ), matchProb ) );  //external I to M
+			M_curr[i] = lnSum( M_curr[i], lnProd( lnProd( M_prev[i-1], externalM12M1 ), matchProb ) );  //external M to M
+			M_curr[i] = lnSum( M_curr[i], lnProd( lnProd( M_prev[i], internalM12M1 ), matchProb ) );  //interal M to M
+			M_curr[i] = lnSum( M_curr[i], lnProd( lnProd( D_prev[i-1], externalD2M1 ), matchProb ) );  //external D to M
 		}
 
 		for ( unsigned int i = 1; i < I_curr.size(); i++ ){
 
 			//to the deletion
-			D_curr[i] = lnSum( D_curr[i], lnProd( M_curr[i-1], eln( externalM12D ) ) );  //external M to D
-			D_curr[i] = lnSum( D_curr[i], lnProd( D_curr[i-1], eln( externalD2D ) ) );  //external D to D
+			D_curr[i] = lnSum( D_curr[i], lnProd( M_curr[i-1], externalM12D ) );  //external M to D
+			D_curr[i] = lnSum( D_curr[i], lnProd( D_curr[i-1], externalD2D ) );  //external D to D
 		}
 		
 		I_prev = I_curr;
@@ -295,8 +296,8 @@ double sequenceProbability( std::vector <double> &observations,
 	double forwardProb = NAN;
 
 	forwardProb = lnSum( forwardProb, lnProd( D_curr.back(), eln( 1.0 ) ) ); //D to end
-	forwardProb = lnSum( forwardProb, lnProd( M_curr.back(), eln( externalM12M1 + externalM12D ) ) ); //M to end
-	forwardProb = lnSum( forwardProb, lnProd( I_curr.back(), eln( externalI2M1 ) ) ); //I to end
+	forwardProb = lnSum( forwardProb, lnProd( M_curr.back(), lnSum(externalM12M1, externalM12D) ) ); //M to end
+	forwardProb = lnSum( forwardProb, lnProd( I_curr.back(), externalI2M1 ) ); //I to end
 
 #if TEST_HMM
 std::cerr << "<-------------------" << std::endl;

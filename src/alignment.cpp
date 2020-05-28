@@ -163,7 +163,7 @@ Arguments parseAlignArguments( int argc, char** argv ){
 }
 
 
-double lnVecMax(std::vector<double> v){
+inline double lnVecMax(std::vector<double> v){
 
 	double maxVal = v[0];
 	for (size_t i = 1; i < v.size(); i++){
@@ -175,7 +175,7 @@ double lnVecMax(std::vector<double> v){
 }
 
 
-int lnArgMax(std::vector<double> v){
+inline int lnArgMax(std::vector<double> v){
 
 	double maxVal = v[0];
 	int maxarg = 0;
@@ -190,23 +190,23 @@ int lnArgMax(std::vector<double> v){
 }
 
 
-std::pair< double, std::vector< std::string > > builtinViterbi( std::vector <double> &observations,
+inline std::pair< double, std::vector< std::string > > builtinViterbi( std::vector <double> &observations,
 				std::string &sequence,
 				PoreParameters scalings,
 				bool flip,
 				double signalDilation){
 
 	//Initial transitions within modules (internal transitions)
-	double internalM12I = 0.001;
-	double internalI2I = 0.001;
-	double internalM12M1 = 1. - (1./scalings.eventsPerBase);
+	double internalM12I = eln(0.001);
+	double internalI2I = eln(0.001);
+	double internalM12M1 = eln(1. - (1./scalings.eventsPerBase));
 
 	//Initial transitions between modules (external transitions)
-	double externalD2D = 0.3;
-	double externalD2M1 = 0.7;
-	double externalI2M1 = 0.999;
-	double externalM12D = 0.0025;
-	double externalM12M1 = 1.0 - externalM12D - internalM12I - internalM12M1;
+	double externalD2D = eln(0.3);
+	double externalD2M1 = eln(0.7);
+	double externalI2M1 = eln(0.999);
+	double externalM12D = eln(0.0025);
+	double externalM12M1 = eln(1.0 - externalM12D - internalM12I - internalM12M1);
 	int maxindex;
 
 	size_t n_states = sequence.length() - 5;
@@ -226,14 +226,14 @@ std::pair< double, std::vector< std::string > > builtinViterbi( std::vector <dou
 
 	/*-----------INITIALISATION----------- */
 	//transitions from the start state
-	D_prev[0] = lnProd( start_prev, eln( externalM12D ) );
+	D_prev[0] = lnProd( start_prev, externalM12D );
 	backtraceS[0 + D_offset][0] = -1;
 	backtraceT[0 + D_offset][0] = 0;
 
 	//account for transitions between deletion states before we emit the first observation
 	for ( unsigned int i = 1; i < n_states; i++ ){
 
-		D_prev[i] = lnProd( D_prev[i-1], eln ( externalD2D ) );
+		D_prev[i] = lnProd( D_prev[i-1], externalD2D );
 		backtraceS[i + D_offset][0] = i -1 + D_offset;
 		backtraceT[i + D_offset][0] = 0;
 	}
@@ -259,13 +259,13 @@ std::pair< double, std::vector< std::string > > builtinViterbi( std::vector <dou
 		insProb = 0.0; //log(1) = 0
 
 		//to the base 1 insertion
-		I_curr[0] = lnVecMax({lnProd( lnProd( I_prev[0], eln( internalI2I ) ), insProb ),
-			                  lnProd( lnProd( M_prev[0], eln( internalM12I ) ), insProb ),
-							  lnProd( lnProd( start_prev, eln( internalM12I ) ), insProb )
+		I_curr[0] = lnVecMax({lnProd( lnProd( I_prev[0], internalI2I ), insProb ),
+			                  lnProd( lnProd( M_prev[0], internalM12I ), insProb ),
+							  lnProd( lnProd( start_prev, internalM12I ), insProb )
 		                     });
-		maxindex = lnArgMax({lnProd( lnProd( I_prev[0], eln( internalI2I ) ), insProb ),
-					         lnProd( lnProd( M_prev[0], eln( internalM12I ) ), insProb ),
-							 lnProd( lnProd( start_prev, eln( internalM12I ) ), insProb*0.001 )
+		maxindex = lnArgMax({lnProd( lnProd( I_prev[0], internalI2I ), insProb ),
+					         lnProd( lnProd( M_prev[0], internalM12I ), insProb ),
+							 lnProd( lnProd( start_prev, internalM12I ), insProb*0.001 )
 						     });
 		switch(maxindex){
 			case 0:
@@ -286,11 +286,11 @@ std::pair< double, std::vector< std::string > > builtinViterbi( std::vector <dou
 		}
 
 		//to the base 1 match
-		M_curr[0] = lnVecMax({lnProd( lnProd( M_prev[0], eln( internalM12M1 ) ), matchProb ),
-							  lnProd( lnProd( start_prev, eln( externalM12M1 + internalM12M1 ) ), matchProb )
+		M_curr[0] = lnVecMax({lnProd( lnProd( M_prev[0], internalM12M1 ), matchProb ),
+							  lnProd( lnProd( start_prev, lnSum( externalM12M1, internalM12M1 ) ), matchProb )
 							 });
-		maxindex = lnArgMax({lnProd( lnProd( M_prev[0], eln( internalM12M1 ) ), matchProb ),
-							 lnProd( lnProd( start_prev, eln( externalM12M1 + internalM12M1 ) ), matchProb )
+		maxindex = lnArgMax({lnProd( lnProd( M_prev[0], internalM12M1 ), matchProb ),
+							 lnProd( lnProd( start_prev, lnSum( externalM12M1, internalM12M1 ) ), matchProb )
 							});
 		switch(maxindex){
 			case 0:
@@ -307,7 +307,7 @@ std::pair< double, std::vector< std::string > > builtinViterbi( std::vector <dou
 		}
 
 		//to the base 1 deletion
-		D_curr[0] = lnProd( NAN, eln( externalM12D  ) );  //start to D
+		D_curr[0] = lnProd( NAN, externalM12D );  //start to D
 		backtraceS[0 + D_offset][t+1] = -1;
 		backtraceT[0 + D_offset][t+1] = t + 1;
 
@@ -322,7 +322,7 @@ std::pair< double, std::vector< std::string > > builtinViterbi( std::vector <dou
 			//insProb = eln( uniformPDF( 0, 250, observations[t] ) );
 			insProb = 0.0; //log(1) = 0
 
-			level_mu = (scalings.shift + scalings.scale * thymidineModel.at(sixMer).first);
+			level_mu = scalings.shift + scalings.scale * thymidineModel.at(sixMer).first;
 			level_sigma = scalings.var * thymidineModel.at(sixMer).second;
 
 			//uncomment if you scale events
@@ -332,11 +332,11 @@ std::pair< double, std::vector< std::string > > builtinViterbi( std::vector <dou
 			matchProb = eln( normalPDF( level_mu*signalDilation, level_sigma, observations[t]*signalDilation ) );
 
 			//to the insertion
-			I_curr[i] = lnVecMax({lnProd( lnProd( I_prev[i], eln( internalI2I ) ), insProb ),
-								  lnProd( lnProd( M_prev[i], eln( internalM12I ) ), insProb )
+			I_curr[i] = lnVecMax({lnProd( lnProd( I_prev[i], internalI2I ), insProb ),
+								  lnProd( lnProd( M_prev[i], internalM12I ), insProb )
 								 });
-			maxindex = lnArgMax({lnProd( lnProd( I_prev[i], eln( internalI2I ) ), insProb ),
-							     lnProd( lnProd( M_prev[i], eln( internalM12I ) ), insProb )
+			maxindex = lnArgMax({lnProd( lnProd( I_prev[i], internalI2I ), insProb ),
+							     lnProd( lnProd( M_prev[i], internalM12I ), insProb )
 								});
 			switch(maxindex){
 				case 0:
@@ -353,15 +353,15 @@ std::pair< double, std::vector< std::string > > builtinViterbi( std::vector <dou
 			}
 
 			//to the match
-			M_curr[i] = lnVecMax({lnProd( lnProd( I_prev[i-1], eln( externalI2M1 ) ), matchProb ),
-								   lnProd( lnProd( M_prev[i-1], eln( externalM12M1 ) ), matchProb ),
-								   lnProd( lnProd( M_prev[i], eln( internalM12M1 ) ), matchProb ),
-								   lnProd( lnProd( D_prev[i-1], eln( externalD2M1 ) ), matchProb )
+			M_curr[i] = lnVecMax({lnProd( lnProd( I_prev[i-1], externalI2M1 ), matchProb ),
+								   lnProd( lnProd( M_prev[i-1], externalM12M1 ), matchProb ),
+								   lnProd( lnProd( M_prev[i], internalM12M1 ), matchProb ),
+								   lnProd( lnProd( D_prev[i-1], externalD2M1 ), matchProb )
 								   });
-			maxindex = lnArgMax({lnProd( lnProd( I_prev[i-1], eln( externalI2M1 ) ), matchProb ),
-							   lnProd( lnProd( M_prev[i-1], eln( externalM12M1 ) ), matchProb ),
-							   lnProd( lnProd( M_prev[i], eln( internalM12M1 ) ), matchProb ),
-							   lnProd( lnProd( D_prev[i-1], eln( externalD2M1 ) ), matchProb )
+			maxindex = lnArgMax({lnProd( lnProd( I_prev[i-1], externalI2M1 ), matchProb ),
+							   lnProd( lnProd( M_prev[i-1], externalM12M1 ), matchProb ),
+							   lnProd( lnProd( M_prev[i], internalM12M1 ), matchProb ),
+							   lnProd( lnProd( D_prev[i-1], externalD2M1 ), matchProb )
 							   });
 			switch(maxindex){
 				case 0:
@@ -389,11 +389,11 @@ std::pair< double, std::vector< std::string > > builtinViterbi( std::vector <dou
 		for ( unsigned int i = 1; i < n_states; i++ ){
 
 			//to the deletion
-			D_curr[i] = lnVecMax({lnProd( M_curr[i-1], eln( externalM12D ) ),
-				                  lnProd( D_curr[i-1], eln( externalD2D ) )
+			D_curr[i] = lnVecMax({lnProd( M_curr[i-1], externalM12D ),
+				                  lnProd( D_curr[i-1], externalD2D )
 			                     });
-			maxindex = lnArgMax({lnProd( M_curr[i-1], eln( externalM12D ) ),
-                               lnProd( D_curr[i-1], eln( externalD2D ) )
+			maxindex = lnArgMax({lnProd( M_curr[i-1], externalM12D ),
+                               lnProd( D_curr[i-1], externalD2D )
 			                  });
 			switch(maxindex){
 				case 0:
@@ -429,16 +429,16 @@ std::pair< double, std::vector< std::string > > builtinViterbi( std::vector <dou
 	/*-----------TERMINATION----------- */
 	double viterbiScore = NAN;
 	viterbiScore = lnVecMax( {lnProd( D_curr.back(), eln( 1.0 ) ), //D to end
-							  lnProd( M_curr.back(), eln( externalM12M1 + externalM12D ) ),//M to end
-							  lnProd( I_curr.back(), eln( externalI2M1 ) )//I to end
+							  lnProd( M_curr.back(), lnSum( externalM12M1, externalM12D ) ),//M to end
+							  lnProd( I_curr.back(), externalI2M1 )//I to end
 							 });
 	//std::cout << "Builtin Viterbi score: " << viterbiScore << std::endl;
 
 
 	//figure out where to go from the end state
 	maxindex = lnArgMax({lnProd( D_curr.back(), eln( 1.0 ) ),
-	                   lnProd( M_curr.back(), eln( externalM12M1 + externalM12D ) ),
-					   lnProd( I_curr.back(), eln( externalI2M1 ) )
+	                   lnProd( M_curr.back(), lnSum( externalM12M1, externalM12D ) ),
+					   lnProd( I_curr.back(), externalI2M1 )
 	                   });
 
 	ssize_t  traceback_new;

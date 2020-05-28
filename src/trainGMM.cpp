@@ -189,9 +189,11 @@ std::vector< double > gaussianMixtureEM_PRIOR( double pi, double mu1, double sig
 
 	/*INITIALISATION - calculuate the log likelihood using the paramters initially passed */
 	logLikelihood_Old = 0;
+	double expll;
 	for ( unsigned int i = 0; i < data.size(); i++ ){
 
-		logLikelihood_Old += eln(pi1 * normalPDF(mu1,sigma1,data[i]) + pi2 * normalPDF(mu2,sigma2,data[i])); 
+		expll = pi1 * normalPDF(mu1,sigma1,data[i]) + pi2 * normalPDF(mu2,sigma2,data[i]);
+		logLikelihood_Old += eln(expll);
 	}
 	double improvement = std::numeric_limits< double >::max();
 
@@ -246,7 +248,8 @@ std::vector< double > gaussianMixtureEM_PRIOR( double pi, double mu1, double sig
 		logLikelihood_New = 0;
 		for ( unsigned int i = 0; i < data.size(); i++ ){
 
-			logLikelihood_New += eln(pi1 * normalPDF(mu1,sigma1,data[i]) + pi2 * normalPDF(mu2,sigma2,data[i])); 
+			expll = pi1 * normalPDF(mu1,sigma1,data[i]) + pi2 * normalPDF(mu2,sigma2,data[i]);
+			logLikelihood_New += eln(expll);
 		}
 
 		improvement = logLikelihood_New - logLikelihood_Old;
@@ -268,9 +271,11 @@ std::vector< double > gaussianMixtureEM( double mu1, double sigma1, double mu2, 
 
 	/*INITIALISATION - calculuate the log likelihood using the paramters initially passed */
 	logLikelihood_Old = 0;
+	double expll;
 	for ( unsigned int i = 0; i < data.size(); i++ ){
 
-		logLikelihood_Old += eln(pi1 * normalPDF(mu1,sigma1,data[i]) + pi2 * normalPDF(mu2,sigma2,data[i])); 
+		expll = pi1 * normalPDF(mu1,sigma1,data[i]) + pi2 * normalPDF(mu2,sigma2,data[i]);
+		logLikelihood_Old += eln(expll);
 	}
 	double improvement = std::numeric_limits< double >::max();
 
@@ -327,7 +332,8 @@ std::vector< double > gaussianMixtureEM( double mu1, double sigma1, double mu2, 
 		logLikelihood_New = 0;
 		for ( unsigned int i = 0; i < data.size(); i++ ){
 
-			logLikelihood_New += eln(pi1 * normalPDF(mu1,sigma1,data[i]) + pi2 * normalPDF(mu2,sigma2,data[i])); 
+			expll = pi1 * normalPDF(mu1,sigma1,data[i]) + pi2 * normalPDF(mu2,sigma2,data[i]);
+			logLikelihood_New += eln(expll);
 		}
 
 		improvement = logLikelihood_New - logLikelihood_Old;

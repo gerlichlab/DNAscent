@@ -24,6 +24,8 @@
 #include "detect.h"
 #include "alignment.h"
 #include "htsInterface.h"
+#include "error_handling.h"
+
 
 static const char *help=
 "trainCNN: DNAscent executable that generates HMM bootstrapped to build training data for DNAscent ResNet training.\n"
