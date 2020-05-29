@@ -23,9 +23,7 @@
 static const char *help=
 "forkSense: DNAscent AI executable that calls replication origins, fork movement, and fork stalling.\n"
 "To run DNAscent forkSense, do:\n"
-"  ./DNAscent forkSense [arguments]\n"
-"Example:\n"
-"  ./DNAscent forkSense -d /path/to/BrdUCalls.detect -o /path/to/output.forkSense\n"
+"   DNAscent forkSense -d /path/to/BrdUCalls.detect -o /path/to/output.forkSense\n"
 "Required arguments are:\n"
 "  -d,--detect               path to output file from DNAscent detect,\n"
 "  -o,--output               path to output file for forkSense.\n"

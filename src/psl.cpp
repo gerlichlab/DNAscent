@@ -17,7 +17,7 @@
  static const char *help=
 "psl: DNAscent executable that builds a PSL file from the output of DNAscent detect.\n"
 "To run DNAscent psl, do:\n"
-"  ./DNAscent psl -d /path/to/DNAscentOutput.detect -r /path/to/reference.fasta -o /path/to/psl_prefix\n"
+"   DNAscent psl -d /path/to/DNAscentOutput.detect -r /path/to/reference.fasta -o /path/to/psl_prefix\n"
 "Required arguments are:\n"
 "  -d,--detect               path to output file from DNAscent detect,\n"
 "  -r,--reference            path to genome reference in fasta format,\n"

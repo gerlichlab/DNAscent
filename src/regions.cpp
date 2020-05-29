@@ -24,15 +24,17 @@
 static const char *help=
 "regions: DNAscent executable that finds regions of analogue incorporation from the output of DNAscent detect.\n"
 "To run DNAscent regions, do:\n"
-"  ./DNAscent regions -d /path/to/output.detect -o /path/to/output.regions\n"
+"   DNAscent regions -d /path/to/output.detect -o /path/to/output.regions\n"
 "Required arguments are:\n"
 "  -d,--detect               path to output file from DNAscent detect,\n"
 "  -o,--output               path to output directory for bedgraph files.\n"
-"Optional arguments (only valid for detection with HMM) are:\n"
+"Optional arguments (if used with default ResNet-based detect) are:\n"
+"  -r,--resolution           number of thymidines in a region (default is 10).\n"
+"Optional arguments (if used with HMM-based detect) are:\n"
 "     --replication          detect fork direction and call origin firing (default: off),\n"
 "     --threshold            threshold for a positive analogue call (default: 0.7),\n"
 "  -c,--cooldown             minimum gap between positive analogue calls (default: 4),\n"
-"  -r,--resolution           number of thymidines in a region (default is 10),\n"
+"  -r,--resolution           number of thymidines in a region (default is 2 kb),\n"
 "  -p,--probability          override probability that a thymidine 6mer contains a BrdU (default: automatically calculated),\n"
 "  -z,--zScore               override zScore threshold for BrdU call (default: automatically calculated).\n"
 "Written by Michael Boemo, Department of Pathology, University of Cambridge.\n"
@@ -42,7 +44,7 @@ static const char *help=
 
 	std::string detectFilename;
 	double probability, threshold, likelihood;
-	bool overrideProb,overrideZ;
+	bool overrideProb,overrideZ,overrideResolution;
 	unsigned int resolution;
 	int cooldown;
 	std::string outputFilename;
@@ -74,6 +76,8 @@ Arguments parseRegionsArguments( int argc, char** argv ){
 	args.overrideZ = false;
 	args.likelihood = 0.7;
 	args.cooldown = 4;
+	args.overrideResolution = false;
+
 
  	/*parse the command line arguments */
 	for ( int i = 1; i < argc; ){
@@ -120,6 +124,7 @@ Arguments parseRegionsArguments( int argc, char** argv ){
 		else if ( flag == "-r" or flag == "--resolution" ){
  			std::string strArg( argv[ i + 1 ] );
 			args.resolution = std::stoi( strArg.c_str() );
+			args.overrideResolution = true;
 			i+=2;
 		}
 		else throw InvalidOption( flag );
@@ -421,11 +426,11 @@ std::pair<int,double> parseDetectLine_CNN(std::string line, std::string strand){
 
 			position = std::stoi(column);
 		}
-		else if ( cIndex == 2 ){
+		else if ( cIndex == 1 ){
 
 			B.set(std::stof(column));
 		}
-		else if ( cIndex == 3 ){
+		else if ( cIndex == 2 ){
 
 			sixMer = column;
 		}

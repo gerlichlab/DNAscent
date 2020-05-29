@@ -24,7 +24,7 @@ static const char *help=
 "trainGMM: DNAscent executable that determines the mean and standard deviation of a base analogue's current.\n"
 "Note: This executable is geared towards developers and advanced users.\n"
 "To run DNAscent trainGMM, do:\n"
-"  ./DNAscent trainGMM -d /path/to/eventalign.nanopolish -o output.model\n"
+"   DNAscent trainGMM -d /path/to/eventalign.nanopolish -o output.model\n"
 "Required arguments are:\n"
 "  -d,--trainingData         path to training data from nanopolish eventalign,\n"
 "  -o,--output               path to the output trained pore model file.\n"

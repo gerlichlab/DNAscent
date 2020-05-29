@@ -20,7 +20,7 @@
  static const char *help=
 "index: DNAscent executable that builds an index file for DNAscent detect.\n"
 "To run DNAscent index, do:\n"
-"  ./DNAscent index -f /path/to/fast5Directory\n"
+"   DNAscent index -f /path/to/fast5Directory\n"
 "Required arguments are:\n"
 "  -f,--files                path to fast5 files.\n"
 "Optional arguments are:\n"
