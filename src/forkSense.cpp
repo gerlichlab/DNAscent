@@ -31,8 +31,6 @@ static const char *help=
 "  -o,--output               path to output file for forkSense.\n"
 "Optional arguments are:\n"
 "  -t,--threads              number of threads (default: 1 thread),\n"
-"  -l,--likelihood           log-likelihood threshold for a positive analogue call (default: 1.25),\n"
-"  -c,--cooldown             minimum gap between positive analogue calls (default: 4),\n"
 "  --markOrigins             writes replication origin locations to a bed file (default: off),\n"
 "  --markStalls              writes fork stall locations to a bed file (default: off).\n"
 "Written by Michael Boemo, Department of Pathology, University of Cambridge.\n"
@@ -45,9 +43,6 @@ struct Arguments {
 	bool markOrigins = false;
 	bool markStalls = false;
 	unsigned int threads = 1;
-	int cooldown;
-	double likelihood;
-
 };
 
 Arguments parseSenseArguments( int argc, char** argv ){
@@ -66,8 +61,6 @@ Arguments parseSenseArguments( int argc, char** argv ){
 	}
 
  	Arguments args;
-	args.likelihood = 1.25;
-	args.cooldown = 4;
 
  	/*parse the command line arguments */
 	for ( int i = 1; i < argc; ){
@@ -99,16 +92,6 @@ Arguments parseSenseArguments( int argc, char** argv ){
 
 			args.markStalls = true;
 			i+=1;
-		}
-		else if ( flag == "-c" or flag == "--cooldown" ){
- 			std::string strArg( argv[ i + 1 ] );
-			args.cooldown = std::stoi( strArg.c_str() );
-			i+=2;
-		}
-		else if ( flag == "-l" or flag == "--likelihood" ){
- 			std::string strArg( argv[ i + 1 ] );
-			args.likelihood = std::stof( strArg.c_str() );
-			i+=2;
 		}
 		else throw InvalidOption( flag );
 	}
@@ -426,7 +409,7 @@ int sense_main( int argc, char** argv ){
 
 	//get the model
 	std::string pathExe = getExePath();
-	std::string modelPath = pathExe + "/dnn_models/" + "forks.pb";
+	std::string modelPath = pathExe + "/dnn_models/" + "forkSense.pb";
 	std::unique_ptr<ModelSession> session = std::unique_ptr<ModelSession>(model_load(modelPath.c_str(), "conv1d_input", "time_distributed_2/Reshape_1"));
 
 	//get a read count
@@ -438,7 +421,7 @@ int sense_main( int argc, char** argv ){
 
 		if ( line.substr(0,1) == ">" ) readCount++;
 	}	
-	progressBar pb(readCount,false);
+	progressBar pb(readCount,true);
 	inFile.close();
 
 	//open all the files
@@ -460,28 +443,33 @@ int sense_main( int argc, char** argv ){
 
 	//compute trim factor
 	unsigned int trimFactor = 1;
+	unsigned int failed = 0;
 	for (auto p = pooling.begin(); p < pooling.end(); p++) trimFactor *= *p;
 
 	std::vector< DetectedRead > readBuffer;
 	int progress = 0;
-	int callCooldown = 0;
-	int attemptCooldown = 0;
 	while( std::getline( inFile, line ) ){
 
-		if ( line.substr(0,1) == ">" ){
+		if ( line.substr(0,1) == "#"){
+			continue;
+		}
+		else if ( line.substr(0,1) == ">" ){
 
 			//check the read length on the back of the buffer
 			if (readBuffer.size() > 0){
 
 				bool longEnough = checkReadLength( readBuffer.back().positions.size() );
-				if (not longEnough) readBuffer.pop_back();
+				if (not longEnough){
+					failed++;
+					readBuffer.pop_back();
+				}
 			}
 
 			//empty the buffer if it's full
 			if (readBuffer.size() >= maxBufferSize) emptyBuffer(readBuffer, args, session, outFile, originFile, stallFile, trimFactor);
 
 			progress++;
-			pb.displayProgress( progress, 0, 0 );
+			pb.displayProgress( progress, failed, 0 );
 
 			DetectedRead d;
 			d.header = line;
@@ -500,8 +488,6 @@ int sense_main( int argc, char** argv ){
 			}
 			assert(d.mappingUpper > d.mappingLower);
 			readBuffer.push_back(d);
-			callCooldown = 0;
-			attemptCooldown = 0;
 		}
 		else{
 
@@ -509,7 +495,6 @@ int sense_main( int argc, char** argv ){
 			std::stringstream ssLine(line);
 			int position = -1, cIndex = 0;
 			AnalogueScore B, BM;
-			int countCol = std::count(line.begin(), line.end(), '\t');
 			while ( std::getline( ssLine, column, '\t' ) ){
 
 				if ( cIndex == 0 ){
@@ -520,26 +505,11 @@ int sense_main( int argc, char** argv ){
 
 					B.set(std::stof(column));
 				}
-				else if ( cIndex == 2 and countCol > 3 ){ //methyl-aware detect file
-
-					BM.set(std::stof(column));
-				}
 				cIndex++;
 			}
 
-			if ( B.get() > args.likelihood and position - callCooldown >= args.cooldown ){
-
-				readBuffer.back().positions.push_back(position);
-				readBuffer.back().brduCalls.push_back(B.get());
-				attemptCooldown = position;
-				callCooldown = position;
-			}
-			else if ( B.get() < args.likelihood and position - attemptCooldown >= args.cooldown) {
-
-				readBuffer.back().positions.push_back(position);
-				readBuffer.back().brduCalls.push_back(B.get());
-				attemptCooldown = position;
-			}
+			readBuffer.back().positions.push_back(position);
+			readBuffer.back().brduCalls.push_back(B.get());
 		}
 	}
 

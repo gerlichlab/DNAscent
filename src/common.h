@@ -71,8 +71,10 @@ class progressBar{
 				if (_withFail){
 
 					std::cout << std::right << std::setw(2) << hours << "hr" << std::setw(2) << mins << "min" << std::setw(2) << secs << "sec  ";
-					std::cout << "fr: " << std::right << std::setw(_digits) << failed << std::setw(3);
-					std::cout << "  fe: " << std::right << std::setw(_digits) << failedEvents << std::setw(3) << "\r";
+					std::cout << "failed: " << std::right << std::setw(_digits) << failed << std::setw(3) << "\r";
+
+					//testing
+					//std::cout << "  fe: " << std::right << std::setw(_digits) << failedEvents << std::setw(3) << "\r";
 				}
 				else{
 
