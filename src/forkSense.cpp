@@ -422,7 +422,7 @@ std::string callTerminations(DetectedRead &r){
 		int bestMatch = -1;
 		for ( size_t ri = 0; ri < rightForks.size(); ri++ ){
 
-			if (leftForks[li].second < rightForks[ri].first ) continue;
+			if (leftForks[li].first < rightForks[ri].second ) continue;
 
 			int dist = leftForks[ri].first - rightForks[li].second;
 			if (dist < minDist){
@@ -438,7 +438,7 @@ std::string callTerminations(DetectedRead &r){
 
 			for (size_t l2 = li+1; l2 < leftForks.size(); l2++){
 
-				if (leftForks[l2].second < rightForks[bestMatch].first ) continue;
+				if (leftForks[l2].first < rightForks[bestMatch].second ) continue;
 
 				int dist = leftForks[l2].first - rightForks[bestMatch].second;
 				if (dist < minDist){
