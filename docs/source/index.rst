@@ -11,7 +11,7 @@ Usage
 .. code-block:: console
 
    To run DNAscent index, do:
-     ./DNAscent index -f /path/to/fast5Directory
+      DNAscent index -f /path/to/fast5Directory
    Required arguments are:
      -f,--files                path to fast5 files.
    Optional arguments are:

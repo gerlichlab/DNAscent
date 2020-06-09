@@ -11,7 +11,7 @@ Usage
 .. code-block:: console
 
    To run DNAscent psl, do:
-     ./DNAscent psl -d /path/to/DNAscentOutput.detect -r /path/to/reference.fasta -o /path/to/psl_prefix
+      DNAscent psl -d /path/to/DNAscentOutput.detect -r /path/to/reference.fasta -o /path/to/psl_prefix
    Required arguments are:
      -d,--detect               path to output file from DNAscent detect,
      -r,--reference            path to genome reference in fasta format,

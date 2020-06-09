@@ -14,13 +14,17 @@ DNAscent
    index
    detect
    regions
+   forkSense
    psl
+   visualisation
    workflows
+   cookbook
+   releaseNotes
 
 Overview
 --------
 
-DNAscent is software designed to detect the modified base BrdU in Oxford Nanopore reads.  It uses a hidden Markov approach to differentiate between BrdU and thymidine using the raw nanopore signal.  In an experimental setup where BrdU is incorporated into nascent DNA by replication forks, this software can be used to answer questions that were traditionally answered by DNA fibre analysis.  
+DNAscent is software designed to detect the modified base BrdU in Oxford Nanopore reads.  In an experimental setup where BrdU is incorporated into nascent DNA by replication forks, this software can be used to answer questions that were traditionally answered by DNA fibre analysis.  
 
 DNAscent is under active development by the `Boemo Group <https://www.boemogroup.org/>`_ based in the `Department of Pathology, University of Cambridge <https://www.path.cam.ac.uk/>`_.  We aim to push regular updates and improvements, and incorporating new functionality is an active area of our computational research.
 

@@ -1,6 +1,6 @@
-.. _installation:
+.. _visualisation:
 
-Download & Installation
+Visualisation
 ===============================
 
 Development was done using gcc 5.4.0 on an Ubuntu 16.04 platform. While installation on other platforms is possible, Ubuntu is the platform that is recommended and supported.
@@ -27,6 +27,5 @@ Cloning the repository recursively (see above) will provide all the required dep
 * htslib (https://github.com/samtools/htslib.git)
 * hdf5lib (https://support.hdfgroup.org/HDF5/)
 * tinydir (https://github.com/cxong/tinydir.git)
-* TensorFlow (https://www.tensorflow.org/install/lang_c)
 
 Please note that the high throughput sequencing library (htslib) requires bzlib and lzma for compression. While these are common on most systems, if you don't have these, apt-get lzma-dev, liblzma-dev, and libbz2-dev. In addition, pfasta requires libbsd on Linux.

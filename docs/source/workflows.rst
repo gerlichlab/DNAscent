@@ -45,11 +45,11 @@ This should put a file called ``index.dnascent`` in the current directory.  You 
 
    DNAscent detect -b alignment.sorted.bam -r /full/path/to/reference.fasta -i index.dnascent -o output.detect -t 10
 
-This should put a file called ``output.detect`` in the current directory.  We can look at the individual positive BrdU calls by running:
+This should put a file called ``output.detect`` in the current directory.  We can look at the individual positive BrdU calls with ``DNAscent psl``.  Let's create a psl file that shows any position where BrdU is called at 0.7 probability or higher:
 
 .. code-block:: console
 
-   DNAscent psl -d output.detect -r /full/path/to/reference.fasta -o output
+   DNAscent psl -d output.detect -r /full/path/to/reference.fasta -o output --threshold 0.7
 
 The resulting file ``output.psl`` can be loaded into IGV or the UCSC Genome Browser.
 
@@ -58,6 +58,10 @@ We can measure the regions of each read with high BrdU incorporation by using ``
 .. code-block:: console
 
    DNAscent regions -d output.detect -o output.regions
+
+.. code-block:: console
+
+   DNAscent forkSense -d output.detect -o output.forkSense --markOrigins
 
 Lastly, we can take a look at the DNAscent regions results in IVG by generating a bedgraph file for each read.  Note that the bedgraph format requires that we make a separate file for each read, so we'll want to make a separate directory for this.
 
