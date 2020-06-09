@@ -185,6 +185,15 @@ std::string callOrigins(DetectedRead &r, bool stallsMarked){
 	std::vector<std::pair<int,int>> leftForks, rightForks;
 	std::string outBed;
 
+	//check of any sections of this read were called as BrdU-saturated which could lead to origin calling artefacts
+	for (unsigned int i = 0; i < r.probability_saturated.size(); i++){
+
+		if (r.probability_saturated[i] >= 0.4){
+
+			return outBed;
+		}
+	}
+
 	bool inFork = false;
 	int forkStart = -1, potentialEnd = -1;
 
@@ -332,11 +341,11 @@ std::string runCNN(DetectedRead &r, std::unique_ptr<ModelSession> &session){
 	TF_Tensor &output = *outputs[0];
 	if(TF_TensorType(&output) != TF_FLOAT){
 		std::cerr << "Error, unexpected output tensor type." << std::endl;
-		exit (EXIT_FAILURE);
+		exit(EXIT_FAILURE);
 	}
 
 	std::string str_output;
-	unsigned int outputFields = 3;
+	unsigned int outputFields = 4;
 	{
 		str_output += r.readID + " " + r.chromosome + " " + std::to_string(r.mappingLower) + " " + std::to_string(r.mappingUpper) + " " + r.strand + "\n"; //header
 		size_t output_size = TF_TensorByteSize(&output) / sizeof(float);
@@ -345,13 +354,14 @@ std::string runCNN(DetectedRead &r, std::unique_ptr<ModelSession> &session){
 		unsigned int pos = 0;
 		str_output += std::to_string(r.positions[0]);
 		for(size_t i = 0; i < output_size; i++){
-			str_output += "\t" + std::to_string(output_array[i]);
 			if((i+1)%outputFields==0){
-				r.probabilities.push_back({output_array[i-2],output_array[i-1],output_array[i]});
-				str_output += "\n";
+				r.probabilities.push_back({output_array[i-3],output_array[i-2],output_array[i]});
+				//r.probabilities.push_back({output_array[i-2],output_array[i-1],output_array[i]});
+				r.probability_saturated.push_back(output_array[i-1]);
+				str_output += "\t" + std::to_string(output_array[i-3]) + "\t" + std::to_string(output_array[i-1]) + "\t" + std::to_string(output_array[i]) + "\n";
+				//str_output += "\t" + std::to_string(output_array[i-2]) + "\t" + std::to_string(output_array[i-1]) + "\t" + std::to_string(output_array[i]) + "\n";
 				pos++;
 				if (i != output_size-1) str_output += std::to_string(r.positions[pos]);
-
 			}
 		}
 	}

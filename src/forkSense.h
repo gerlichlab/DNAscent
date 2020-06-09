@@ -24,6 +24,7 @@ class DetectedRead{
 		std::string readID, chromosome, strand, header;
 		int mappingLower, mappingUpper;
 		std::vector<std::vector<float>> probabilities;
+		std::vector<float> probability_saturated;
 		std::vector<std::pair<int,int>> stalls;
 		std::vector<std::pair<int,int>> origins;
 		std::vector<float> tensorInput;
