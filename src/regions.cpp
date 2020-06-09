@@ -724,12 +724,12 @@ void regionsHMM(Arguments args){
 }
 
 
-std::pair<double,double> pmf(std::vector<double> &buffer){
+double windowAverage(std::vector<double> &buffer){
 
 	double sum = 0.;
 	for (size_t k = 0; k < buffer.size(); k++) sum += buffer[k];
 	double avg = sum / buffer.size();
-	return std::make_pair(avg, 0.);
+	return avg;
 }
 
 
@@ -791,9 +791,9 @@ void regionsCNN(Arguments args){
 			}
 			else{
 
-				std::pair<double,double> stats = pmf(buffer);
+				double avg = windowAverage(buffer);
 
-				outFile << startingPos << "\t" << cnnLine.first << "\t" << stats.first << "\t" << stats.second << std::endl;
+				outFile << startingPos << "\t" << cnnLine.first << "\t" << avg << std::endl;
 				buffer.clear();
 				buffer.push_back(cnnLine.second);
 				startingPos = cnnLine.first;

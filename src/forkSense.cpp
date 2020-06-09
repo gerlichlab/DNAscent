@@ -30,7 +30,7 @@ static const char *help=
 "Optional arguments are:\n"
 "  -t,--threads              number of threads (default: 1 thread),\n"
 "  --markOrigins             writes replication origin locations to a bed file (default: off),\n"
-"  --markStalls              writes fork stall locations to a bed file (default: off).\n"
+"  --markTerminations        writes replication termination locations to a bed file (default: off).\n"
 "Written by Michael Boemo, Department of Pathology, University of Cambridge.\n"
 "Please submit bug reports to GitHub Issues (https://github.com/MBoemo/DNAscent/issues).";
 
@@ -40,6 +40,7 @@ struct Arguments {
 	std::string outputFilename;
 	bool markOrigins = false;
 	bool markStalls = false;
+	bool markTerms = false;
 	unsigned int threads = 1;
 };
 
@@ -84,6 +85,11 @@ Arguments parseSenseArguments( int argc, char** argv ){
 		else if ( flag == "--markOrigins" ){
 
 			args.markOrigins = true;
+			i+=1;
+		}
+		else if ( flag == "--markTerminations" ){
+
+			args.markTerms = true;
 			i+=1;
 		}
 		else if ( flag == "--markStalls" ){
@@ -315,6 +321,145 @@ std::string callOrigins(DetectedRead &r, bool stallsMarked){
 }
 
 
+std::string callTerminations(DetectedRead &r){
+
+	assert(r.positions.size() == r.probabilities.size());
+
+	float threshold = 0.8;
+
+	std::vector<std::pair<int,int>> leftForks, rightForks;
+	std::string outBed;
+
+	//check of any sections of this read were called as BrdU-saturated which could lead to origin calling artefacts
+	for (unsigned int i = 0; i < r.probability_saturated.size(); i++){
+
+		if (r.probability_saturated[i] >= 0.4){
+
+			return outBed;
+		}
+	}
+
+	bool inFork = false;
+	int forkStart = -1, potentialEnd = -1;
+
+	//rightward-moving forks
+	for (size_t i = 1; i < r.probabilities.size(); i++){
+
+		if (r.probabilities[i][2] > threshold and not inFork){ //initialise the site
+
+			forkStart = r.positions[i];
+			inFork = true;
+		}
+		else if (inFork and r.probabilities[i][2] < threshold and r.probabilities[i-1][2] > threshold){
+
+			potentialEnd = r.positions[i];
+		}
+		else if (inFork and (r.probabilities[i][0] > threshold or r.probabilities[i][1] > threshold)){//close if we've confidently moved to something else
+
+			assert(forkStart != -1 and potentialEnd != -1);
+			rightForks.push_back(std::make_pair(forkStart,potentialEnd));
+			inFork = false;
+			forkStart = -1;
+			potentialEnd = -1;
+
+		}
+	}
+
+	//if we got to the end of the read without closing
+	if (inFork){
+
+		assert(forkStart != -1);
+		if (potentialEnd == -1) potentialEnd = r.positions.back();
+
+		rightForks.push_back(std::make_pair(forkStart,potentialEnd));
+	}
+
+	inFork = false;
+	forkStart = -1;
+	potentialEnd = -1;
+
+	//reverse order for leftward-moving forks
+	std::vector<int> revPositions(r.positions.rbegin(), r.positions.rend());
+	std::vector<std::vector<float>> revProbabilities(r.probabilities.rbegin(), r.probabilities.rend());
+
+	//leftward-moving forks
+	for (size_t i = 1; i < revProbabilities.size(); i++){
+
+		if (revProbabilities[i][0] > threshold and not inFork){ //initialise the site
+
+			forkStart = revPositions[i];
+			inFork = true;
+		}
+		else if (inFork and revProbabilities[i][0] < threshold and revProbabilities[i-1][0] > threshold){
+
+			potentialEnd = revPositions[i];
+		}
+		else if (inFork and (revProbabilities[i][1] > threshold or revProbabilities[i][2] > threshold)){//close if we've confidently moved to something else
+
+			assert(forkStart != -1 and potentialEnd != -1);
+			leftForks.push_back(std::make_pair(potentialEnd,forkStart));
+			inFork = false;
+			forkStart = -1;
+			potentialEnd = -1;
+
+		}
+	}
+
+	//if we got to the end of the read without closing
+	if (inFork){
+
+		assert(forkStart != -1);
+		if (potentialEnd == -1) potentialEnd = revPositions.back();
+
+		leftForks.push_back(std::make_pair(potentialEnd,forkStart));
+	}
+
+	//match up regions
+	for ( size_t li = 0; li < leftForks.size(); li++ ){
+
+		//find the closest right fork region
+		int minDist = std::numeric_limits<int>::max();
+		int bestMatch = -1;
+		for ( size_t ri = 0; ri < rightForks.size(); ri++ ){
+
+			if (leftForks[li].second < rightForks[ri].first ) continue;
+
+			int dist = leftForks[ri].first - rightForks[li].second;
+			if (dist < minDist){
+				minDist = dist;
+				bestMatch = ri;
+
+			}
+		}
+
+		//make sure no other left forks are closer
+		bool failed = false;
+		if (bestMatch != -1){
+
+			for (size_t l2 = li+1; l2 < leftForks.size(); l2++){
+
+				if (leftForks[l2].second < rightForks[bestMatch].first ) continue;
+
+				int dist = leftForks[l2].first - rightForks[bestMatch].second;
+				if (dist < minDist){
+
+					failed = true;
+					break;
+				}
+			}
+		}
+		if (failed) continue;
+		else if (bestMatch != -1){
+
+			r.terminations.push_back(std::make_pair(rightForks[li].second, leftForks[bestMatch].first));
+			outBed += r.chromosome + " " + std::to_string(leftForks[li].second) + " " + std::to_string(rightForks[bestMatch].first) + " " + r.header.substr(1) + "\n";
+		}
+	}
+
+	return outBed;
+}
+
+
 std::string runCNN(DetectedRead &r, std::unique_ptr<ModelSession> &session){
 
 	TensorShape input_shape={{1, (int64_t)r.brduCalls.size(), 4}, 3};
@@ -369,7 +514,7 @@ std::string runCNN(DetectedRead &r, std::unique_ptr<ModelSession> &session){
 }
 
 
-void emptyBuffer(std::vector< DetectedRead > &buffer, Arguments args, std::unique_ptr<ModelSession> &session, std::ofstream &outFile, std::ofstream &originFile, std::ofstream &stallFile, int trimFactor){
+void emptyBuffer(std::vector< DetectedRead > &buffer, Arguments args, std::unique_ptr<ModelSession> &session, std::ofstream &outFile, std::ofstream &originFile, std::ofstream &termFile, int trimFactor){
 
 	#pragma omp parallel for schedule(dynamic) shared(args, outFile, session) num_threads(args.threads)
 	for ( auto b = buffer.begin(); b < buffer.end(); b++) {
@@ -377,20 +522,19 @@ void emptyBuffer(std::vector< DetectedRead > &buffer, Arguments args, std::uniqu
 		b -> trim(trimFactor);
 		std::string readOutput = runCNN(*b, session);
 
-		std::string stallOutput, originOutput;
-		if (args.markStalls){
-
-			stallOutput = callStalls(*b);
-		}
+		std::string termOutput, originOutput;
 		if (args.markOrigins){
 
 			originOutput = callOrigins(*b,args.markStalls);
+		}
+		if (args.markTerms){
+			termOutput = callTerminations(*b);
 		}
 
 		#pragma omp critical
 		{
 			outFile << readOutput;
-			if (args.markStalls and (*b).stalls.size() > 0) stallFile << stallOutput;
+			if (args.markTerms and (*b).terminations.size() > 0) termFile << termOutput;
 			if (args.markOrigins and (*b).origins.size() > 0) originFile << originOutput;
 		}
 	}
@@ -437,11 +581,11 @@ int sense_main( int argc, char** argv ){
 	if ( not inFile.is_open() ) throw IOerror( args.detectFilename );
  	std::ofstream outFile( args.outputFilename );
 	if ( not outFile.is_open() ) throw IOerror( args.outputFilename );
- 	std::ofstream originFile, stallFile;
-	if (args.markStalls){
+ 	std::ofstream originFile, termFile;
+	if (args.markTerms){
 
-		stallFile.open("forkStalls_DNAscent_forkSense.bed");
-		if ( not stallFile.is_open() ) throw IOerror( "forkStalls_DNAscent_forkSense.bed" );
+		termFile.open("terminations_DNAscent_forkSense.bed");
+		if ( not termFile.is_open() ) throw IOerror( "terminations_DNAscent_forkSense.bed" );
 	}
 	if (args.markOrigins){
 
@@ -474,7 +618,7 @@ int sense_main( int argc, char** argv ){
 			}
 
 			//empty the buffer if it's full
-			if (readBuffer.size() >= maxBufferSize) emptyBuffer(readBuffer, args, session, outFile, originFile, stallFile, trimFactor);
+			if (readBuffer.size() >= maxBufferSize) emptyBuffer(readBuffer, args, session, outFile, originFile, termFile, trimFactor);
 
 			progress++;
 			pb.displayProgress( progress, failed, 0 );
@@ -522,11 +666,11 @@ int sense_main( int argc, char** argv ){
 	}
 
 	//empty the buffer at the end
-	emptyBuffer(readBuffer, args, session, outFile, originFile, stallFile, trimFactor);
+	emptyBuffer(readBuffer, args, session, outFile, originFile, termFile, trimFactor);
 
 	inFile.close();
 	outFile.close();
-	if (args.markStalls) stallFile.close();
+	if (args.markTerms) termFile.close();
 	if (args.markOrigins) originFile.close();
 
 	std::cout << std::endl << "Done." << std::endl;

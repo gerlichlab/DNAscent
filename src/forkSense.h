@@ -27,6 +27,7 @@ class DetectedRead{
 		std::vector<float> probability_saturated;
 		std::vector<std::pair<int,int>> stalls;
 		std::vector<std::pair<int,int>> origins;
+		std::vector<std::pair<int,int>> terminations;
 		std::vector<float> tensorInput;
 		void trim(unsigned int trimFactor){
 			
