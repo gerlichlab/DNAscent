@@ -1,31 +1,34 @@
 //----------------------------------------------------------
-// Copyright 2017 University of Oxford
-// Written by Michael A. Boemo (michael.boemo@path.ox.ac.uk)
-// This software is licensed under GPL-2.0.  You should have
+// Copyright 2019 University of Oxford
+// Written by Michael A. Boemo (mb915@cam.ac.uk)
+// This software is licensed under GPL-3.0.  You should have
 // received a copy of the license with this software.  If
 // not, please Email the author.
 //----------------------------------------------------------
- #include <fstream>
+
+#include <fstream>
 #include "psl.h"
 #include "common.h"
 #include "data_IO.h"
 #include "error_handling.h"
 #include <cmath>
- #define _USE_MATH_DEFINES
+#define _USE_MATH_DEFINES
 
  static const char *help=
 "psl: DNAscent executable that builds a PSL file from the output of DNAscent detect.\n"
 "To run DNAscent psl, do:\n"
-"  ./DNAscent psl [arguments]\n"
-"Example:\n"
-"  ./DNAscent psl -d /path/to/detect_output.out -r path/to/reference.fasta -o /path/to/output_prefix\n"
+"   DNAscent psl -d /path/to/DNAscentOutput.detect -r /path/to/reference.fasta -o /path/to/psl_prefix\n"
 "Required arguments are:\n"
 "  -d,--detect               path to output file from DNAscent detect,\n"
 "  -r,--reference            path to genome reference in fasta format,\n"
 "  -o,--output               path to output bed prefix.\n"
 "Optional arguments are:\n"
+"  -l,--likelihood           log-likelihood threshold for a positive analogue call (default: 1.25),\n"
+"  -c,--cooldown             minimum gap between positive analogue calls (default: 4),\n"
 "     --min                  minimum read length to compute (default is 1),\n"
-"     --max                  maximum read length to compute (default is Inf).\n";
+"     --max                  maximum read length to compute (default is Inf).\n"
+"Written by Michael Boemo, Department of Pathology, University of Cambridge.\n"
+"Please submit bug reports to GitHub Issues (https://github.com/MBoemo/DNAscent/issues).";
 
 
  struct Arguments {
@@ -36,6 +39,9 @@
 	unsigned int min = 0;
 	bool cropToMax = false;
 	unsigned int max = 0;
+	double likelihood;
+	int cooldown;
+
 
 };
  Arguments parsePslArguments( int argc, char** argv ){
@@ -52,6 +58,8 @@
 		exit(EXIT_FAILURE);
 	}
  	Arguments args;
+	args.likelihood = 1.25;
+	args.cooldown = 4;
 
  	/*parse the command line arguments */
 	for ( int i = 1; i < argc; ){
@@ -83,8 +91,20 @@
 			args.referenceFilename = strArg;
 			i+=2;
 		}
+		else if ( flag == "-c" or flag == "--cooldown" ){
+ 			std::string strArg( argv[ i + 1 ] );
+			args.cooldown = std::stoi( strArg.c_str() );
+			i+=2;
+		}
+		else if ( flag == "-l" or flag == "--likelihood" ){
+ 			std::string strArg( argv[ i + 1 ] );
+			args.likelihood = std::stof( strArg.c_str() );
+			i+=2;
+		}
 		else throw InvalidOption( flag );
 	}
+	if (args.outputFilename == args.referenceFilename or args.outputFilename == args.detectFilename) throw OverwriteFailure();
+
 	return args;
 }
 
@@ -143,6 +163,7 @@
  	std::string line;
 	std::vector< readDetection > buffer;
 	bool recordRead = true;
+	int callCooldown = 0;
 
 	while ( std::getline( inFile, line ) ){
 
@@ -157,6 +178,8 @@
 				buffer.clear();
 			}
  			readDetection rd;
+
+			callCooldown = 0;
 
 			std::stringstream ssLine(line);
 			std::string column;
@@ -189,8 +212,9 @@
 
 			std::string column;
 			std::stringstream ssLine(line);
-			int position, cIndex = 0;
+			int position = 0, cIndex = 0;
 			double B;
+
 			while( std::getline( ssLine, column, '\t' ) ){
 
 				if (cIndex == 0){
@@ -200,8 +224,11 @@
 				else if (cIndex == 1){
 
 					B = std::stof(column);
-					if ( B > 2.5 ){
+
+					if ( B > args.likelihood and position - callCooldown >= args.cooldown ){
+
 						buffer.back().positions.push_back(position);
+						callCooldown = position;
 					}
 					break;
 				}
@@ -209,5 +236,12 @@
 			}
 		}
 	}
+
+ 	for ( unsigned int i = 0; i < buffer.size(); i++ ){
+
+		writePSL( buffer[i], reference, outFile );
+	}
+	buffer.clear();
+
  	return 0;
 }

@@ -1,7 +1,7 @@
 //----------------------------------------------------------
 // Copyright 2019 University of Oxford
-// Written by Michael A. Boemo (michael.boemo@path.ox.ac.uk)
-// This software is licensed under GPL-2.0.  You should have
+// Written by Michael A. Boemo (mb915@cam.ac.uk)
+// This software is licensed under GPL-3.0.  You should have
 // received a copy of the license with this software.  If
 // not, please Email the author.
 //----------------------------------------------------------
@@ -15,23 +15,24 @@
 #include "data_IO.h"
 #include "error_handling.h"
 #include <cmath>
- #define _USE_MATH_DEFINES
+#define _USE_MATH_DEFINES
 
  static const char *help=
 "index: DNAscent executable that builds an index file for DNAscent detect.\n"
 "To run DNAscent index, do:\n"
-"  ./DNAscent index [arguments]\n"
-"Example:\n"
-"  ./DNAscent index -d /path/to/detect_output.out\n"
+"   DNAscent index -f /path/to/fast5Directory\n"
 "Required arguments are:\n"
 "  -f,--files                full path to fast5 files.\n"
 "Optional arguments are:\n"
-"  -s,--sequencing-summary   path to sequencing summary file from guppy/albacore basecalling.\n";
-
+"  -o,--output               output file name (default is index.dnascent),\n"
+"  -s,--sequencing-summary   path to sequencing summary file Guppy (optional but strongly recommended).\n"
+"Written by Michael Boemo, Department of Pathology, University of Cambridge.\n"
+"Please submit bug reports to GitHub Issues (https://github.com/MBoemo/DNAscent/issues).";
 
  struct Arguments {
 	std::string fast5path;
 	std::string ssPath;
+	std::string outfile;
 	bool gaveSeqSummary = false;
 };
 
@@ -51,6 +52,7 @@ Arguments parseIndexArguments( int argc, char** argv ){
 		exit(EXIT_FAILURE);
 	}
  	Arguments args;
+	args.outfile = "index.dnascent";
 
  	/*parse the command line arguments */
 	for ( int i = 1; i < argc; ){
@@ -67,6 +69,12 @@ Arguments parseIndexArguments( int argc, char** argv ){
 			std::string strArg( argv[ i + 1 ] );
 			args.ssPath = strArg;
 			args.gaveSeqSummary = true;
+			i+=2;
+		}
+		else if ( flag == "-o" or flag == "--output" ){
+
+			std::string strArg( argv[ i + 1 ] );
+			args.outfile = strArg;
 			i+=2;
 		}
 		else throw InvalidOption( flag );
@@ -110,6 +118,14 @@ void countFast5(std::string path, int &count){
 }
 
 
+const char *get_ext(const char *filename){
+
+	const char *ext = strrchr(filename, '.');
+	if(!ext || ext == filename) return "";
+	return ext + 1;
+}
+
+
 void readDirectory(std::string path, std::map<std::string,std::string> &allfast5paths){
 
 	tinydir_dir dir;
@@ -133,11 +149,23 @@ void readDirectory(std::string path, std::map<std::string,std::string> &allfast5
 
 			if (strcmp(file.name,".") != 0 and strcmp(file.name,"..") != 0){
 
+				char &trail = path.back();
+				if (trail == '/') path.pop_back();
+
 				std::string newPath = path + "/" + file.name;
 				readDirectory(newPath, allfast5paths);
 			}
 		}
-		else allfast5paths[file.name] = path + "/" + file.name;
+		else{
+			const char *ext = get_ext(file.name);
+			if ( strcmp(ext,"fast5") == 0 ){
+
+				char &trail = path.back();
+				if (trail == '/') path.pop_back();
+
+				allfast5paths[file.name] = path + "/" + file.name;
+			}
+		}
 	}
 
 	fail:
@@ -147,7 +175,7 @@ void readDirectory(std::string path, std::map<std::string,std::string> &allfast5
 
 std::vector<std::string> fast5_get_multi_read_groups(hid_t &hdf5_file){
     std::vector<std::string> out;
-    size_t buffer_size = 0;
+    ssize_t buffer_size = 0;
     char* buffer = NULL;
 
     // get the number of groups in the root group
@@ -239,8 +267,8 @@ int index_main( int argc, char** argv ){
 	int progress = 0;
 	progressBar pb(totalFast5,false);
 
-	std::ofstream outFile( "index.dnascent" );
-	if ( not outFile.is_open() ) throw IOerror( "index.dnascent" );
+	std::ofstream outFile( args.outfile );
+	if ( not outFile.is_open() ) throw IOerror( args.outfile );
 
 	//iterate on the filesystem to find the full path for each fast5 file
 	std::map<std::string,std::string> fast52fullpath;
