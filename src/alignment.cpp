@@ -6,6 +6,9 @@
 // not, please Email the author.
 //----------------------------------------------------------
 
+//#define TEST_DETECT 1
+//#define TEST_VITERBI 1
+
 #include <fstream>
 #include "detect.h"
 #include <math.h>
@@ -469,6 +472,11 @@ std::pair< double, std::vector< std::string > > builtinViterbi( std::vector <dou
 			exit(EXIT_FAILURE);
 	}
 
+#if TEST_VITERBI
+std::cerr << "Starting traceback..." << std::endl;
+std::cerr << "Number of events: " << observations.size() << std::endl;
+#endif
+
 	std::vector<std::string> stateIndices;
 	stateIndices.reserve(observations.size());
 	while (traceback_old != -1){
@@ -496,6 +504,11 @@ std::pair< double, std::vector< std::string > > builtinViterbi( std::vector <dou
 		traceback_old = traceback_new;
 	}
 	std::reverse( stateIndices.begin(), stateIndices.end() );
+
+#if TEST_VITERBI
+std::cout << "Traceback terminated." << std::endl;
+#endif
+
 	return std::make_pair( viterbiScore,stateIndices);
 }
 
@@ -593,6 +606,7 @@ std::string eventalign( read &r,
 
 		bool isDefined = referenceDefined(readSnippet);
 		if (not isDefined){
+
 			posOnRef += windowLength;
 			continue;
 		}
@@ -729,7 +743,7 @@ std::string eventalign( read &r,
 
 			bool isDefined = referenceDefined(breakSnippet);
 			if (not isDefined){
-				posOnRef += windowLength;
+				posOnRef -= windowLength;
 				continue;
 			}
 
@@ -764,7 +778,8 @@ std::string eventalign( read &r,
 
 		bool isDefined = referenceDefined(readSnippet);
 		if (not isDefined){
-			posOnRef += windowLength;
+
+			posOnRef -= windowLength;
 			continue;
 		}
 
@@ -800,7 +815,7 @@ std::string eventalign( read &r,
 		//pass on this window if we have a deletion
 		//TODO: make sure this does actually catch deletion cases properly
 		if ( eventSnippet.size() < 2){
-			//std::cout << "NO EVENTS" << std::endl;
+
 			posOnRef -= windowLength;
 			continue;
 		}
@@ -1087,7 +1102,7 @@ std::string eventalign_train( read &r,
 
 			bool isDefined = referenceDefined(breakSnippet);
 			if (not isDefined){
-				posOnRef += windowLength;
+				posOnRef -= windowLength;
 				continue;
 			}
 
@@ -1121,7 +1136,7 @@ std::string eventalign_train( read &r,
 
 		bool isDefined = referenceDefined(readSnippet);
 		if (not isDefined){
-			posOnRef += windowLength;
+			posOnRef -= windowLength;
 			continue;
 		}
 
@@ -1308,6 +1323,14 @@ std::pair<bool,AlignedRead> eventalign_detect( read &r,
 
 		bool isDefined = referenceDefined(readSnippet);
 		if (not isDefined){
+
+#if TEST_DETECT
+std::cerr << "Undefined reference in forward, skipping..." << std::endl;
+std::cerr << "Position on reference: " << posOnRef << std::endl;
+std::cerr << "Skipping to: " << posOnRef + windowLength << std::endl;
+std::cerr << "Out of reference sequence size: " << (r.referenceSeqMappedTo).length() << std::endl;
+#endif
+
 			posOnRef += windowLength;
 			continue;
 		}
@@ -1342,6 +1365,13 @@ std::pair<bool,AlignedRead> eventalign_detect( read &r,
 		//pass on this window if we have a deletion
 		//TODO: make sure this does actually catch deletion cases properly
 		if ( eventSnippet.size() < 2){
+
+#if TEST_DETECT
+std::cerr << "Low event count in forward, skipping..." << std::endl;
+std::cerr << "Position on reference: " << posOnRef << std::endl;
+std::cerr << "Skipping to: " << posOnRef + windowLength << std::endl;
+std::cerr << "Out of reference sequence size: " << (r.referenceSeqMappedTo).length() << std::endl;
+#endif
 
 			posOnRef += windowLength;
 			continue;
@@ -1432,7 +1462,7 @@ std::pair<bool,AlignedRead> eventalign_detect( read &r,
 
 			bool isDefined = referenceDefined(breakSnippet);
 			if (not isDefined){
-				posOnRef += windowLength;
+				posOnRef -= windowLength;
 				continue;
 			}
 
@@ -1466,7 +1496,15 @@ std::pair<bool,AlignedRead> eventalign_detect( read &r,
 
 		bool isDefined = referenceDefined(readSnippet);
 		if (not isDefined){
-			posOnRef += windowLength;
+
+#if TEST_DETECT
+std::cerr << "Undefined reference in reverse, skipping..." << std::endl;
+std::cerr << "Position on reference: " << posOnRef << std::endl;
+std::cerr << "Skipping to: " << posOnRef - windowLength << std::endl;
+std::cerr << "Out of reference sequence size: " << (r.referenceSeqMappedTo).length() << std::endl;
+#endif
+
+			posOnRef -= windowLength;
 			continue;
 		}
 
@@ -1502,7 +1540,13 @@ std::pair<bool,AlignedRead> eventalign_detect( read &r,
 		//pass on this window if we have a deletion
 		//TODO: make sure this does actually catch deletion cases properly
 		if ( eventSnippet.size() < 2){
-			//std::cout << "NO EVENTS" << std::endl;
+
+#if TEST_DETECT
+std::cerr << "Low event count in reverse, skipping..." << std::endl;
+std::cerr << "Position on reference: " << posOnRef << std::endl;
+std::cerr << "Skipping to: " << posOnRef - windowLength << std::endl;
+std::cerr << "Out of reference sequence size: " << (r.referenceSeqMappedTo).length() << std::endl;
+#endif
 			posOnRef -= windowLength;
 			continue;
 		}

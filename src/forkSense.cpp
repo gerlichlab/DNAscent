@@ -331,13 +331,13 @@ std::string callTerminations(DetectedRead &r){
 	std::string outBed;
 
 	//check of any sections of this read were called as BrdU-saturated which could lead to origin calling artefacts
-	for (unsigned int i = 0; i < r.probability_saturated.size(); i++){
+	//for (unsigned int i = 0; i < r.probability_saturated.size(); i++){
 
-		if (r.probability_saturated[i] >= 0.4){
+	//	if (r.probability_saturated[i] >= 0.4){
 
-			return outBed;
-		}
-	}
+	//		return outBed;
+	//	}
+	//}
 
 	bool inFork = false;
 	int forkStart = -1, potentialEnd = -1;
@@ -424,7 +424,7 @@ std::string callTerminations(DetectedRead &r){
 
 			if (leftForks[li].first < rightForks[ri].second ) continue;
 
-			int dist = leftForks[ri].first - rightForks[li].second;
+			int dist = leftForks[li].first - rightForks[ri].second;
 			if (dist < minDist){
 				minDist = dist;
 				bestMatch = ri;
@@ -452,7 +452,7 @@ std::string callTerminations(DetectedRead &r){
 		else if (bestMatch != -1){
 
 			r.terminations.push_back(std::make_pair(rightForks[li].second, leftForks[bestMatch].first));
-			outBed += r.chromosome + " " + std::to_string(leftForks[li].second) + " " + std::to_string(rightForks[bestMatch].first) + " " + r.header.substr(1) + "\n";
+			outBed += r.chromosome + " " + std::to_string(rightForks[bestMatch].second) + " " + std::to_string(leftForks[li].first) + " " + r.header.substr(1) + "\n";
 		}
 	}
 
@@ -490,7 +490,7 @@ std::string runCNN(DetectedRead &r, std::unique_ptr<ModelSession> &session){
 	}
 
 	std::string str_output;
-	unsigned int outputFields = 4;
+	unsigned int outputFields = 3;
 	{
 		str_output += r.readID + " " + r.chromosome + " " + std::to_string(r.mappingLower) + " " + std::to_string(r.mappingUpper) + " " + r.strand + "\n"; //header
 		size_t output_size = TF_TensorByteSize(&output) / sizeof(float);
@@ -500,10 +500,10 @@ std::string runCNN(DetectedRead &r, std::unique_ptr<ModelSession> &session){
 		str_output += std::to_string(r.positions[0]);
 		for(size_t i = 0; i < output_size; i++){
 			if((i+1)%outputFields==0){
-				r.probabilities.push_back({output_array[i-3],output_array[i-2],output_array[i]});
+				r.probabilities.push_back({output_array[i-2],output_array[i-1],output_array[i]});
 				//r.probabilities.push_back({output_array[i-2],output_array[i-1],output_array[i]});
-				r.probability_saturated.push_back(output_array[i-1]);
-				str_output += "\t" + std::to_string(output_array[i-3]) + "\t" + std::to_string(output_array[i-1]) + "\t" + std::to_string(output_array[i]) + "\n";
+				//r.probability_saturated.push_back(output_array[i-1]);
+				str_output += "\t" + std::to_string(output_array[i-2]) + "\t" + std::to_string(output_array[i]) + "\n";
 				//str_output += "\t" + std::to_string(output_array[i-2]) + "\t" + std::to_string(output_array[i-1]) + "\t" + std::to_string(output_array[i]) + "\n";
 				pos++;
 				if (i != output_size-1) str_output += std::to_string(r.positions[pos]);
@@ -562,7 +562,7 @@ int sense_main( int argc, char** argv ){
 	//get the model
 	std::string pathExe = getExePath();
 	std::string modelPath = pathExe + "/dnn_models/" + "forkSense.pb";
-	std::unique_ptr<ModelSession> session = std::unique_ptr<ModelSession>(model_load(modelPath.c_str(), "conv1d_input", "time_distributed_2/Reshape_1"));
+	std::unique_ptr<ModelSession> session = std::unique_ptr<ModelSession>(model_load(modelPath.c_str(), "conv1d_input", "time_distributed_1/Reshape_1"));
 
 	//get a read count
 	int readCount = 0;
@@ -677,4 +677,5 @@ int sense_main( int argc, char** argv ){
 
 	return 0;
 }
+
 

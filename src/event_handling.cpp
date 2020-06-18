@@ -7,6 +7,7 @@
 //-----------------------------------------------------------
 
 //#define EVENT_LENGTHS 1
+//#define SHOW_PROGRESS 1
 
 #include <iterator>
 #include <algorithm>
@@ -616,6 +617,10 @@ PoreParameters roughRescale( std::vector< double > &means, std::string &basecall
 
 void normaliseEvents( read &r, bool bulkFast5 ){
 
+#if SHOW_PROGRESS
+std::cerr << "Normalisation: getting fast5..." << std::endl;
+#endif
+
 	float sample_rate;
 	try{
 
@@ -627,8 +632,16 @@ void normaliseEvents( read &r, bool bulkFast5 ){
 		return;
 	}
 
+#if SHOW_PROGRESS
+std::cerr << "Normalisation: getting event table..." << std::endl;
+#endif
+
 	event_table et = detect_events(&(r.raw)[0], (r.raw).size(), event_detection_defaults);
 	assert(et.n > 0);
+
+#if SHOW_PROGRESS
+std::cerr << "Normalisation: pull out means and lengths..." << std::endl;
+#endif
 
 	//get the event mean and length
 	r.normalisedEvents.reserve(et.n);
@@ -642,10 +655,22 @@ void normaliseEvents( read &r, bool bulkFast5 ){
 	}
 	free(et.event);
 
+#if SHOW_PROGRESS
+std::cerr << "Normalisation: rough rescale..." << std::endl;
+#endif
+
 	/*rough calculation of shift and scale so that we can align events */
 	PoreParameters s = roughRescale( r.normalisedEvents, r.basecall );
+
+#if SHOW_PROGRESS
+std::cerr << "Normalisation: adaptive banded alignment..." << std::endl;
+#endif
 
 	/*align 5mers to events using the basecall */
 	adaptive_banded_simple_event_align(r.normalisedEvents, r, s);
 	r.scalings.eventsPerBase = std::max(1.25, (double) r.eventAlignment.size() / (double) (r.basecall.size() - 5));
+
+#if SHOW_PROGRESS
+std::cerr << "Ok." << std::endl;
+#endif
 }
