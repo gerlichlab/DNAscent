@@ -59,9 +59,9 @@ class DetectedRead{
 
 			for (size_t i = 0; i < positions.size(); i++){
 				tensorInput.push_back(brduCalls[i]);
-				tensorInput.push_back(gaps[i]);
-				tensorInput.push_back(strandPairs[i].first);
-				tensorInput.push_back(strandPairs[i].second);
+				//tensorInput.push_back(gaps[i]);
+				//tensorInput.push_back(strandPairs[i].first);
+				//tensorInput.push_back(strandPairs[i].second);
 			}
 		}
 };

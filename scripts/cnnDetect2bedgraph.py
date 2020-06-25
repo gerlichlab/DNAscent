@@ -53,12 +53,7 @@ for line in f:
 
 		splitLine = line.rstrip().split()
 		pos = int(splitLine[0])
-		probBrdU = float(splitLine[2])
-		sixMer = splitLine[3]
-
-		#only consider T positions
-		if (strand == "fwd" and sixMer[0] != "T") or (strand == "rev" and sixMer[-1:] != "A"):
-			continue
+		probBrdU = float(splitLine[1])
 
 		#left and right moving forks
 		buffer_prob.append( chromosome + ' ' + str(pos) + ' ' + str(pos+1) + ' ' + str(probBrdU) + '\n' )

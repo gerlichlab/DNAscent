@@ -107,7 +107,7 @@ Arguments parseSenseArguments( int argc, char** argv ){
 
 TF_Tensor *read2tensor(DetectedRead &r, const TensorShape &shape){
 
-	size_t size = r.brduCalls.size() * 4;
+	size_t size = r.brduCalls.size();
 	//put a check in here for size
 
 	r.generateInput();
@@ -462,7 +462,7 @@ std::string callTerminations(DetectedRead &r){
 
 std::string runCNN(DetectedRead &r, std::unique_ptr<ModelSession> &session){
 
-	TensorShape input_shape={{1, (int64_t)r.brduCalls.size(), 4}, 3};
+	TensorShape input_shape={{1, (int64_t)r.brduCalls.size(), 1}, 3};
 	auto input_values = tf_obj_unique_ptr(read2tensor(r, input_shape));
 	if(!input_values){
 		std::cerr << "Tensor creation failure." << std::endl;
@@ -562,6 +562,7 @@ int sense_main( int argc, char** argv ){
 	//get the model
 	std::string pathExe = getExePath();
 	std::string modelPath = pathExe + "/dnn_models/" + "forkSense.pb";
+	//std::unique_ptr<ModelSession> session = std::unique_ptr<ModelSession>(model_load(modelPath.c_str(), "input_1", "time_distributed/Reshape_1"));
 	std::unique_ptr<ModelSession> session = std::unique_ptr<ModelSession>(model_load(modelPath.c_str(), "conv1d_input", "time_distributed_1/Reshape_1"));
 
 	//get a read count
