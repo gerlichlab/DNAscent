@@ -47,8 +47,8 @@ tensorflow/include/tensorflow/c/c_api.h:
 	if [ ! -e tensorflow/include/tensorflow/c/c_api.h ]; then \
 		mkdir tensorflow; \
 		cd tensorflow; \
-		wget https://storage.googleapis.com/tensorflow/libtensorflow/libtensorflow-cpu-linux-x86_64-1.14.0.tar.gz; \
-		tar -xzf libtensorflow-cpu-linux-x86_64-1.14.0.tar.gz || exit 255; \
+		wget https://storage.googleapis.com/tensorflow/libtensorflow/libtensorflow-cpu-linux-x86_64-1.15.0.tar.gz; \
+		tar -xzf libtensorflow-cpu-linux-x86_64-1.15.0.tar.gz || exit 255; \
 		cd ..; \
 	fi 
 	

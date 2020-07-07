@@ -968,10 +968,10 @@ int detect_main( int argc, char** argv ){
 				}
 
 				std::string readOut;
-				if (args.useHMM){ //use old style HMM-based detection
-					readOut = llAcrossRead(r, windowLength_HMMdetect, failedEvents, args.methylAware);
-				}
-				else{ //use neural network detection
+				//if (args.useHMM){ //use old style HMM-based detection
+				//	readOut = llAcrossRead(r, windowLength_HMMdetect, failedEvents, args.methylAware);
+				//}
+				//else{ //use neural network detection
 
 					std::pair<bool,AlignedRead> ar = eventalign_detect( r, windowLength_align, args.dilation );
 					if (not ar.first){
@@ -981,10 +981,11 @@ int detect_main( int argc, char** argv ){
 						continue;
 					}
 					readOut = runCNN(ar.second, session);
-				}
+				//}
 
 				#pragma omp critical
 				{
+					//readOut = runCNN(ar.second, session);
 					outFile << readOut;
 					prog++;
 					pb.displayProgress( prog, failed, failedEvents );

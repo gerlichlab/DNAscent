@@ -1269,7 +1269,7 @@ std::pair<bool,AlignedRead> eventalign_detect( read &r,
 	if ( r.isReverse ) strand = "rev";
 	else strand = "fwd";
 
-	AlignedRead ar(r.readID, r.referenceMappedTo, strand, r.refStart, r.refEnd);
+	AlignedRead ar(r.readID, r.referenceMappedTo, strand, r.refStart, r.refEnd, (r.eventAlignment).size());
 
 	//midpoint for bidirectional alignment
 	size_t midpoint = (r.referenceSeqMappedTo.size()) / 2;

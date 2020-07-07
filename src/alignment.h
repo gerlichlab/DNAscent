@@ -51,6 +51,10 @@ class AlignedPosition{
 
 			return sixMer;
 		}
+		unsigned int getRefPos(void){
+
+			return refPos;
+		}
 		std::vector<double> makeFeature(void){
 
 			assert(events.size() > 0 && events.size() == lengths.size());
@@ -90,30 +94,36 @@ class AlignedRead{
 
 	private:
 		std::string readID, chromosome, strand;
-		std::map<unsigned int, std::shared_ptr<AlignedPosition>> positions;
+		std::vector<AlignedPosition> positions;
 		unsigned int mappingLower, mappingUpper;
 
 	public:
-		AlignedRead(std::string readID, std::string chromosome, std::string strand, unsigned int ml, unsigned int mu){
+		AlignedRead(std::string readID, std::string chromosome, std::string strand, unsigned int ml, unsigned int mu, unsigned int numEvents){
 
 			this -> readID = readID;
 			this -> chromosome = chromosome;
 			this -> strand = strand;
 			this -> mappingLower = ml;
 			this -> mappingUpper = mu;
+			positions.reserve(numEvents);
 		}
 		~AlignedRead(){}
 		void addEvent(std::string sixMer, unsigned int refPos, double ev, double len){
 
-			if (positions.count(refPos) == 0){
+			if (positions.size() > 0){
 
-				std::shared_ptr<AlignedPosition> ap( new AlignedPosition(sixMer, refPos));
-				ap -> addEvent(ev,len);
-				positions[refPos] = ap;
+				if (positions.back().getRefPos() == refPos){
+
+					positions.back().addEvent(ev,len);
+				}
+				else{
+					positions.push_back(AlignedPosition(sixMer, refPos));
+					positions.back().addEvent(ev,len);
+				}
 			}
 			else{
-
-				positions[refPos] -> addEvent(ev,len);
+				positions.push_back(AlignedPosition(sixMer, refPos));
+				positions.back().addEvent(ev,len);
 			}
 		}
 		std::string getReadID(void){
@@ -139,26 +149,26 @@ class AlignedRead{
 
 			if (strand == "fwd"){
 
-				for (auto p = positions.begin(); p != positions.end(); p++){
+				for (auto p = positions.begin(); p < positions.end(); p++){
 
 					//sort out gaps
 					double gap = 0.0;
-					if (p != positions.begin()) gap = (p -> first) - (std::prev(p) -> first);
+					if (p != positions.begin()) gap = (p -> getRefPos()) - (std::prev(p) -> getRefPos());
 
-					std::vector<double> feature = (p -> second) -> makeFeature();
+					std::vector<double> feature = p -> makeFeature();
 					feature.push_back(gap);
 					tensor.insert(tensor.end(), feature.begin(), feature.end());
 				}
 			}
 			else{
 
-				for (auto p = positions.rbegin(); p != positions.rend(); p++){
+				for (auto p = positions.rbegin(); p < positions.rend(); p++){
 
 					//sort out gaps
 					double gap = 0.0;
-					if (p != positions.rbegin()) gap =  (std::prev(p) -> first) - (p -> first);
+					if (p != positions.rbegin()) gap =  (std::prev(p) -> getRefPos()) - (p -> getRefPos());
 
-					std::vector<double> feature = (p -> second) -> makeFeature();
+					std::vector<double> feature = p -> makeFeature();
 					feature.push_back(gap);
 					tensor.insert(tensor.end(), feature.begin(), feature.end());
 				}
@@ -172,13 +182,13 @@ class AlignedRead{
 			if (strand == "fwd"){
 
 				for (auto p = positions.begin(); p != positions.end(); p++){
-					out.push_back(p -> first);
+					out.push_back(p -> getRefPos());
 				}
 			}
 			else{
 
-				for (auto p = positions.rbegin(); p != positions.rend(); p++){
-					out.push_back(p -> first);
+				for (auto p = positions.rbegin(); p < positions.rend(); p++){
+					out.push_back(p -> getRefPos());
 				}
 			}
 			return out;
@@ -190,13 +200,13 @@ class AlignedRead{
 			if (strand == "fwd"){
 
 				for (auto p = positions.begin(); p != positions.end(); p++){
-					out.push_back((p -> second) -> getSixMer());
+					out.push_back(p -> getSixMer());
 				}
 			}
 			else{
 
-				for (auto p = positions.rbegin(); p != positions.rend(); p++){
-					out.push_back((p -> second) -> getSixMer());
+				for (auto p = positions.rbegin(); p < positions.rend(); p++){
+					out.push_back(p -> getSixMer());
 				}
 			}
 			return out;
