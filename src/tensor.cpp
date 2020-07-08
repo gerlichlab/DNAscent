@@ -27,45 +27,46 @@ static TF_Buffer* read_tf_buffer_from_file(const char* file) {
 }
 
 
-ModelSession *model_load(const char *filename, const char *input_name, const char *output_name){
+std::shared_ptr<ModelSession> model_load(const char *filename, const char *input_name, const char *output_name){
 
 	CStatus status;
+	std::shared_ptr<ModelSession> ms = std::make_shared<ModelSession>();
+	std::shared_ptr<TF_Graph *> graph = std::make_shared<TF_Graph *>(TF_NewGraph());
 
-	auto graph=tf_obj_unique_ptr(TF_NewGraph());
 	{
         // Load a protobuf containing a GraphDef
-        auto graph_def=tf_obj_unique_ptr(read_tf_buffer_from_file(filename));
+        auto graph_def=read_tf_buffer_from_file(filename);
         if(!graph_def) return nullptr;
-
-        auto graph_opts=tf_obj_unique_ptr(TF_NewImportGraphDefOptions());
-        TF_GraphImportGraphDef(graph.get(), graph_def.get(), graph_opts.get(), status.ptr);
+        auto graph_opts=TF_NewImportGraphDefOptions();
+        TF_GraphImportGraphDef(*(graph.get()), graph_def, graph_opts, status.ptr);
 	}
 
 	if(status.failure()){
 		status.dump_error();
 		return nullptr;
 	}
+	ms -> graph = graph;
 
-	auto input_op = TF_GraphOperationByName(graph.get(), input_name);
-	auto output_op = TF_GraphOperationByName(graph.get(), output_name);
+	auto input_op = TF_GraphOperationByName(*(graph.get()), input_name);
+	auto output_op = TF_GraphOperationByName(*(graph.get()), output_name);
 	if(!input_op || !output_op){
 		return nullptr;
 	}
 
-	auto session = std::make_unique<ModelSession>();
-	{
-		auto opts = tf_obj_unique_ptr(TF_NewSessionOptions());
-		session->session = tf_obj_unique_ptr(TF_NewSession(graph.get(), opts.get(), status.ptr));
-	}
+
+	auto opts = TF_NewSessionOptions();
+	std::shared_ptr<TF_Session*> session = std::make_shared<TF_Session*>(TF_NewSession(*(graph.get()), opts, status.ptr));
+
+	//session = TF_NewSession(graph.get(), opts, status.ptr);
 
 	if(status.failure()){
 		return nullptr;
 	}
 	assert(session);
+	ms -> session = session;
 
-	graph.swap(session->graph);
-	session->inputs = {input_op, 0};
-	session->outputs = {output_op, 0};
+	ms -> inputs = {input_op, 0};
+	ms -> outputs = {output_op, 0};
 
-	return session.release();
+	return ms;
 }

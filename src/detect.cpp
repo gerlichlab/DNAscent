@@ -160,9 +160,9 @@ Arguments parseDetectArguments( int argc, char** argv ){
 
 
 double sequenceProbability( std::vector <double> &observations,
-				std::string &sequence, 
-				size_t windowSize, 
-				bool useBrdU, 
+				std::string &sequence,
+				size_t windowSize,
+				bool useBrdU,
 				PoreParameters scalings,
 				size_t BrdUStart,
 				size_t BrdUEnd ){
@@ -242,7 +242,7 @@ double sequenceProbability( std::vector <double> &observations,
 		for ( unsigned int i = 1; i < I_curr.size(); i++ ){
 
 			//get model parameters
-			sixMer = sequence.substr(i, 6); 
+			sixMer = sequence.substr(i, 6);
 			std::pair<double,double> analogue_meanStd = analogueModel[sixMer2index(sixMer)];
 			insProb = eln( uniformPDF( 0, 250, observations[t] ) );
 			if ( useBrdU and BrdUStart <= i and i <= BrdUEnd and sixMer.find('T') != std::string::npos and analogue_meanStd.first != 0. ){
@@ -262,7 +262,7 @@ double sequenceProbability( std::vector <double> &observations,
 				level_mu = scalings.shift + scalings.scale * meanStd.first;
 				level_sigma = scalings.var * meanStd.second;
 
-				//uncomment if you scale events				
+				//uncomment if you scale events
 				//level_mu = thymidineModel.at(sixMer).first;
 				//level_sigma = scalings.var / scalings.scale * thymidineModel.at(sixMer).second;
 
@@ -286,7 +286,7 @@ double sequenceProbability( std::vector <double> &observations,
 			D_curr[i] = lnSum( D_curr[i], lnProd( M_curr[i-1], externalM12D ) );  //external M to D
 			D_curr[i] = lnSum( D_curr[i], lnProd( D_curr[i-1], externalD2D ) );  //external D to D
 		}
-		
+
 		I_prev = I_curr;
 		M_prev = M_curr;
 		D_prev = D_curr;
@@ -378,7 +378,7 @@ std::string methylateSequence( std::string &inSeq ){
 
 
 std::string llAcrossRead( read &r,
-                          unsigned int windowLength, 
+                          unsigned int windowLength,
                           int &failedEvents,
                           bool methylAware ){
 
@@ -394,7 +394,7 @@ std::string llAcrossRead( read &r,
 		std::reverse( POIs.begin(), POIs.end() );
 	}
 	else{
-		
+
 		strand = "fwd";
 		readHead = 0;
 	}
@@ -415,7 +415,7 @@ std::string llAcrossRead( read &r,
 		//make sure the read snippet is fully defined as A/T/G/C in reference
 		unsigned int As = 0, Ts = 0, Cs = 0, Gs = 0;
 		for ( std::string::iterator i = readSnippet.begin(); i < readSnippet.end(); i++ ){
-	
+
 			switch( *i ){
 				case 'A' :
 					As++;
@@ -501,12 +501,12 @@ std::string llAcrossRead( read &r,
 
 		//catch abnormally few or many events (this QC was set using results of tests/detect/hmm_falsePositives)
 		if ( eventSnippet.size() > 8*windowLength or eventSnippet.size() < 3.5*windowLength ) continue;
-	
+
 		/*
-		TESTING - print out the read snippet, the ONT model, and the aligned events 
+		TESTING - print out the read snippet, the ONT model, and the aligned events
 		std::cout << readSnippet << std::endl;
 		for ( int pos = 0; pos < readSnippet.length()-5; pos++ ){
-		
+
 			std::cout << readSnippet.substr(pos,6) << "\t" << thymidineModel.at( readSnippet.substr(pos,6) ).first << std::endl;
 		}
 		for ( auto ev = eventSnippet.begin(); ev < eventSnippet.end(); ev++){
@@ -757,7 +757,7 @@ TF_Tensor *read2tensor(AlignedRead &r, const TensorShape &shape){
 }
 
 
-std::string runCNN(AlignedRead &r, std::unique_ptr<ModelSession> &session){
+std::string runCNN(AlignedRead &r,std::shared_ptr<ModelSession> session){
 
 	std::pair<size_t, size_t> protoShape = r.getShape();
 	TensorShape input_shape={{1, (int64_t) protoShape.first, (int64_t) protoShape.second}, 3};
@@ -770,7 +770,7 @@ std::string runCNN(AlignedRead &r, std::unique_ptr<ModelSession> &session){
 	CStatus status;
 	TF_Tensor* inputs[]={input_values.get()};
 	TF_Tensor* outputs[1]={};
-	TF_SessionRun(session->session.get(), nullptr,
+	TF_SessionRun(*(session->session.get()), nullptr,
 		&session->inputs, inputs, 1,
 		&session->outputs, outputs, 1,
 		nullptr, 0, nullptr, status.ptr);
@@ -851,7 +851,7 @@ int detect_main( int argc, char** argv ){
 	//get the neural network model path
 	std::string pathExe = getExePath();
 	std::string modelPath = pathExe + "/dnn_models/" + "BrdU_detect.pb";
-	std::unique_ptr<ModelSession> session = std::unique_ptr<ModelSession>(model_load(modelPath.c_str(), "input_1", "time_distributed/Reshape_1"));
+	std::shared_ptr<ModelSession> session = model_load(modelPath.c_str(), "input_1", "time_distributed/Reshape_1");
 
 	//import fasta reference
 	std::map< std::string, std::string > reference = import_reference_pfasta( args.referenceFilename );
@@ -907,7 +907,7 @@ int detect_main( int argc, char** argv ){
 
 		//add the record to the buffer if it passes the user's criteria, otherwise destroy it cleanly
 		int mappingQual = record -> core.qual;
-		int refStart,refEnd;		
+		int refStart,refEnd;
 		getRefEnd(record,refStart,refEnd);
 		int queryLen = record -> core.l_qseq;
 
@@ -918,14 +918,14 @@ int detect_main( int argc, char** argv ){
 		else{
 			bam_destroy1(record);
 		}
-		
+
 		/*if we've filled up the buffer with short reads, compute them in parallel */
 		if (buffer.size() >= maxBufferSize or (buffer.size() > 0 and result == -1 ) ){
 
-			#pragma omp parallel for schedule(dynamic) shared(session,buffer,windowLength_HMMdetect,windowLength_align,modelPath,analogueModel,thymidineModel,args,prog,failed) num_threads(args.threads)
+			#pragma omp parallel for schedule(dynamic) shared(session,buffer,windowLength_HMMdetect,windowLength_align,analogueModel,thymidineModel,args,prog,failed) num_threads(args.threads)
 			for (unsigned int i = 0; i < buffer.size(); i++){
 
-				read r; 
+				read r;
 
 				//get the read name (which will be the ONT readID from Albacore basecall)
 				const char *queryName = bam_get_qname(buffer[i]);
@@ -980,12 +980,12 @@ int detect_main( int argc, char** argv ){
 						prog++;
 						continue;
 					}
-					readOut = runCNN(ar.second, session);
+					readOut = runCNN(ar.second,session);
 				//}
 
 				#pragma omp critical
 				{
-					//readOut = runCNN(ar.second, session);
+					//readOut = runCNN(ar.second);
 					outFile << readOut;
 					prog++;
 					pb.displayProgress( prog, failed, failedEvents );
@@ -1005,7 +1005,7 @@ int detect_main( int argc, char** argv ){
 			for ( unsigned int i = 0; i < buffer.size(); i++ ) bam_destroy1(buffer[i]);
 			buffer.clear();
 		}
-		pb.displayProgress( prog, failed, failedEvents );	
+		pb.displayProgress( prog, failed, failedEvents );
 	} while (result > 0);
 	sam_itr_destroy(itr);
 	std::cout << std::endl;

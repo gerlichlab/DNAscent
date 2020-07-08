@@ -95,9 +95,8 @@ template<class T> typename TFObjMeta<T>::UniquePtr tf_obj_unique_ptr(T *obj){
 
 class ModelSession{
 	public:
-		typename TFObjMeta<TF_Graph>::UniquePtr graph;
-		typename TFObjMeta<TF_Session>::UniquePtr session;
-
+		std::shared_ptr<TF_Graph*> graph;
+		std::shared_ptr<TF_Session*>	session;
 		TF_Output inputs, outputs;
 };
 
@@ -126,7 +125,7 @@ struct TensorShape{
 
 
 //prototypes
-ModelSession *model_load(const char *filename, const char *input_name, const char *output_name);
+std::shared_ptr<ModelSession> model_load(const char *filename, const char *input_name, const char *output_name);
 
 
 #endif

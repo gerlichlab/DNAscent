@@ -460,7 +460,7 @@ std::string callTerminations(DetectedRead &r){
 }
 
 
-std::string runCNN(DetectedRead &r, std::unique_ptr<ModelSession> &session){
+std::string runCNN(DetectedRead &r, std::shared_ptr<ModelSession> session){
 
 	TensorShape input_shape={{1, (int64_t)r.brduCalls.size(), 1}, 3};
 	auto input_values = tf_obj_unique_ptr(read2tensor(r, input_shape));
@@ -514,7 +514,7 @@ std::string runCNN(DetectedRead &r, std::unique_ptr<ModelSession> &session){
 }
 
 
-void emptyBuffer(std::vector< DetectedRead > &buffer, Arguments args, std::unique_ptr<ModelSession> &session, std::ofstream &outFile, std::ofstream &originFile, std::ofstream &termFile, int trimFactor){
+void emptyBuffer(std::vector< DetectedRead > &buffer, Arguments args, std::shared_ptr<ModelSession> session, std::ofstream &outFile, std::ofstream &originFile, std::ofstream &termFile, int trimFactor){
 
 	#pragma omp parallel for schedule(dynamic) shared(args, outFile, session) num_threads(args.threads)
 	for ( auto b = buffer.begin(); b < buffer.end(); b++) {
@@ -563,7 +563,7 @@ int sense_main( int argc, char** argv ){
 	std::string pathExe = getExePath();
 	std::string modelPath = pathExe + "/dnn_models/" + "forkSense.pb";
 	//std::unique_ptr<ModelSession> session = std::unique_ptr<ModelSession>(model_load(modelPath.c_str(), "input_1", "time_distributed/Reshape_1"));
-	std::unique_ptr<ModelSession> session = std::unique_ptr<ModelSession>(model_load(modelPath.c_str(), "conv1d_input", "time_distributed_1/Reshape_1"));
+	std::shared_ptr<ModelSession> session = model_load(modelPath.c_str(), "conv1d_input", "time_distributed_1/Reshape_1");
 
 	//get a read count
 	int readCount = 0;
@@ -678,5 +678,4 @@ int sense_main( int argc, char** argv ){
 
 	return 0;
 }
-
 
