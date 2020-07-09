@@ -1259,7 +1259,7 @@ std::string eventalign_train( read &r,
 }
 
 
-std::pair<bool,AlignedRead> eventalign_detect( read &r,
+std::pair<bool,std::shared_ptr<AlignedRead>> eventalign_detect( read &r,
             unsigned int totalWindowLength,
 			double signalDilation ){
 
@@ -1269,7 +1269,8 @@ std::pair<bool,AlignedRead> eventalign_detect( read &r,
 	if ( r.isReverse ) strand = "rev";
 	else strand = "fwd";
 
-	AlignedRead ar(r.readID, r.referenceMappedTo, strand, r.refStart, r.refEnd, (r.eventAlignment).size());
+	std::shared_ptr<AlignedRead> ar = std::make_shared<AlignedRead>(AlignedRead(r.readID, r.referenceMappedTo, strand, r.refStart, r.refEnd, (r.eventAlignment).size()));
+	//AlignedRead ar(r.readID, r.referenceMappedTo, strand, r.refStart, r.refEnd, (r.eventAlignment).size());
 
 	//midpoint for bidirectional alignment
 	size_t midpoint = (r.referenceSeqMappedTo.size()) / 2;
@@ -1432,7 +1433,7 @@ std::cerr << "Out of reference sequence size: " << (r.referenceSeqMappedTo).leng
 			}
 
 			if (label == "M"){
-				ar.addEvent(sixMerStrand, evPos, scaledEvent, eventLength);
+				ar -> addEvent(sixMerStrand, evPos, scaledEvent, eventLength);
 			}
 
 	        evIdx ++;
@@ -1606,7 +1607,7 @@ std::cerr << "Out of reference sequence size: " << (r.referenceSeqMappedTo).leng
 			}
 
 			if (label == "M"){
-				ar.addEvent(sixMerStrand, evPos, scaledEvent, eventLength);
+				ar -> addEvent(sixMerStrand, evPos, scaledEvent, eventLength);
 			}
 
 			evIdx ++;

@@ -12,7 +12,7 @@
 #include <iostream>
 #include <memory>
 #include <cassert>
-#include "../tensorflow/include/tensorflow/c/c_api.h"
+#include "../tensorflow/include/tensorflow/c/eager/c_api.h"
 
 #define MAX_DIM 16
 

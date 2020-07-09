@@ -6,7 +6,7 @@
 // not, please Email the author.
 //----------------------------------------------------------
 
-#include "../tensorflow/include/tensorflow/c/c_api.h"
+#include "../tensorflow/include/tensorflow/c/eager/c_api.h"
 #include <fstream>
 #include "regions.h"
 #include "data_IO.h"
@@ -472,7 +472,7 @@ std::string runCNN(DetectedRead &r, std::shared_ptr<ModelSession> session){
 	CStatus status;
 	TF_Tensor* inputs[]={input_values.get()};
 	TF_Tensor* outputs[1]={};
-	TF_SessionRun(session->session.get(), nullptr,
+	TF_SessionRun(*(session->session.get()), nullptr,
 		&session->inputs, inputs, 1,
 		&session->outputs, outputs, 1,
 		nullptr, 0, nullptr, status.ptr);

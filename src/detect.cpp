@@ -24,11 +24,12 @@
 #include "poreModels.h"
 #include "../htslib/htslib/hts.h"
 #include "../htslib/htslib/sam.h"
-#include "../tensorflow/include/tensorflow/c/c_api.h"
+#include "../tensorflow/include/tensorflow/c/eager/c_api.h"
 #include "htsInterface.h"
 #include "tensor.h"
 #include "alignment.h"
 #include "error_handling.h"
+#include <omp.h>
 
 
 static const char *help=
@@ -732,9 +733,9 @@ std::cerr << logLikelihoodRatio << std::endl;
 }
 
 
-TF_Tensor *read2tensor(AlignedRead &r, const TensorShape &shape){
+TF_Tensor *read2tensor(std::shared_ptr<AlignedRead> r, const TensorShape &shape){
 
-	std::vector<double> unformattedTensor = r.makeTensor();
+	std::vector<double> unformattedTensor = r -> makeTensor();
 
 	size_t size = unformattedTensor.size();
 	//put a check in here for size
@@ -757,9 +758,9 @@ TF_Tensor *read2tensor(AlignedRead &r, const TensorShape &shape){
 }
 
 
-std::string runCNN(AlignedRead &r,std::shared_ptr<ModelSession> session){
+std::string runCNN(std::shared_ptr<AlignedRead> r,std::shared_ptr<ModelSession> session){
 
-	std::pair<size_t, size_t> protoShape = r.getShape();
+	std::pair<size_t, size_t> protoShape = r -> getShape();
 	TensorShape input_shape={{1, (int64_t) protoShape.first, (int64_t) protoShape.second}, 3};
 	auto input_values = tf_obj_unique_ptr(read2tensor(r, input_shape));
 	if(!input_values){
@@ -770,6 +771,7 @@ std::string runCNN(AlignedRead &r,std::shared_ptr<ModelSession> session){
 	CStatus status;
 	TF_Tensor* inputs[]={input_values.get()};
 	TF_Tensor* outputs[1]={};
+
 	TF_SessionRun(*(session->session.get()), nullptr,
 		&session->inputs, inputs, 1,
 		&session->outputs, outputs, 1,
@@ -791,11 +793,11 @@ std::string runCNN(AlignedRead &r,std::shared_ptr<ModelSession> session){
 	unsigned int outputFields = 2;
 
 	//write the header
-	str_output += ">" + r.getReadID() + " " + r.getChromosome() + " " + std::to_string(r.getMappingLower()) + " " + std::to_string(r.getMappingUpper()) + " " + r.getStrand() + "\n"; //header
+	str_output += ">" + r -> getReadID() + " " + r -> getChromosome() + " " + std::to_string(r -> getMappingLower()) + " " + std::to_string(r -> getMappingUpper()) + " " + r -> getStrand() + "\n"; //header
 
 	//get positions on the read reference to write the output
-	std::vector<unsigned int> positions = r.getPositions();
-	std::vector<std::string> sixMers = r.getSixMers();
+	std::vector<unsigned int> positions = r -> getPositions();
+	std::vector<std::string> sixMers = r -> getSixMers();
 
 	size_t output_size = TF_TensorByteSize(&output) / sizeof(float);
 	assert(output_size == protoShape.first * outputFields);
@@ -817,7 +819,7 @@ std::string runCNN(AlignedRead &r,std::shared_ptr<ModelSession> session){
 			}
 
 			str_line += thisPosition + "\t" + std::to_string(output_array[i]);
-			if (r.getStrand() == "rev") str_line += "\t" + reverseComplement(sixMers[pos]);
+			if (r -> getStrand() == "rev") str_line += "\t" + reverseComplement(sixMers[pos]);
 			else str_line += "\t" + sixMers[pos];
 			lines.push_back(str_line);
 			str_line = "";
@@ -828,7 +830,7 @@ std::string runCNN(AlignedRead &r,std::shared_ptr<ModelSession> session){
 		}
 	}
 
-	if (r.getStrand() == "rev") std::reverse(lines.begin(),lines.end());
+	if (r -> getStrand() == "rev") std::reverse(lines.begin(),lines.end());
 
 	for (auto s = lines.begin(); s < lines.end(); s++){
 		str_output += *s + "\n";
@@ -836,7 +838,6 @@ std::string runCNN(AlignedRead &r,std::shared_ptr<ModelSession> session){
 
 	return str_output;
 }
-
 
 
 int detect_main( int argc, char** argv ){
@@ -850,7 +851,7 @@ int detect_main( int argc, char** argv ){
 
 	//get the neural network model path
 	std::string pathExe = getExePath();
-	std::string modelPath = pathExe + "/dnn_models/" + "BrdU_detect.pb";
+	std::string modelPath = pathExe + "/dnn_models/" + "build42_optimised.pb";
 	std::shared_ptr<ModelSession> session = model_load(modelPath.c_str(), "input_1", "time_distributed/Reshape_1");
 
 	//import fasta reference
@@ -922,12 +923,14 @@ int detect_main( int argc, char** argv ){
 		/*if we've filled up the buffer with short reads, compute them in parallel */
 		if (buffer.size() >= maxBufferSize or (buffer.size() > 0 and result == -1 ) ){
 
-			#pragma omp parallel for schedule(dynamic) shared(session,buffer,windowLength_HMMdetect,windowLength_align,analogueModel,thymidineModel,args,prog,failed) num_threads(args.threads)
+			std::vector<std::pair<bool,std::shared_ptr<AlignedRead>>> buffer_ar(buffer.size());
+
+			#pragma omp parallel for schedule(dynamic) shared(buffer_ar,buffer,windowLength_HMMdetect,windowLength_align,analogueModel,thymidineModel,args,prog,failed) num_threads(args.threads)
 			for (unsigned int i = 0; i < buffer.size(); i++){
 
 				read r;
 
-				//get the read name (which will be the ONT readID from Albacore basecall)
+				//get the read name (which will be the ONT readID from basecall)
 				const char *queryName = bam_get_qname(buffer[i]);
 				if (queryName == NULL) continue;
 				std::string s_queryName(queryName);
@@ -967,41 +970,44 @@ int detect_main( int argc, char** argv ){
 					continue;
 				}
 
-				std::string readOut;
 				//if (args.useHMM){ //use old style HMM-based detection
 				//	readOut = llAcrossRead(r, windowLength_HMMdetect, failedEvents, args.methylAware);
 				//}
 				//else{ //use neural network detection
 
-					std::pair<bool,AlignedRead> ar = eventalign_detect( r, windowLength_align, args.dilation );
-					if (not ar.first){
+				buffer_ar[i] = eventalign_detect( r, windowLength_align, args.dilation );
+				/*
+				if (not buffer_ar[i].first){
 
-						failed++;
-						prog++;
-						continue;
-					}
-					readOut = runCNN(ar.second,session);
+					failed++;
+					prog++;
+					continue;
+				}
+				*/
+				//readOut = runCNN(ar.second,session);
 				//}
+			}
+
+			#pragma omp parallel for schedule(dynamic) shared(buffer_ar,prog,failed) num_threads(args.threads)
+			for (unsigned int i = 0; i < buffer_ar.size(); i++){
+
+				if (not buffer_ar[i].first){
+					failed++;
+					prog++;
+					continue;
+				}
+
+				std::string readOut;
+				readOut = runCNN(buffer_ar[i].second,session);
+				prog++;
 
 				#pragma omp critical
 				{
-					//readOut = runCNN(ar.second);
-					outFile << readOut;
-					prog++;
-					pb.displayProgress( prog, failed, failedEvents );
-
-#if TEST_ALIGNMENT
-					std::cerr << ">" << r.readID << std::endl;
-					std::cout << r.readID << std::endl;
-					for ( auto p_align = r.eventAlignment.begin(); p_align < r.eventAlignment.end(); p_align++ ){
-
-						std::cerr<< p_align -> first << " " << p_align -> second << std::endl;
-					}
-					r.alignmentQCs.printQCs();
-					r.printScalings();
-#endif
+				outFile << readOut;
+				pb.displayProgress( prog, failed, failedEvents );
 				}
 			}
+
 			for ( unsigned int i = 0; i < buffer.size(); i++ ) bam_destroy1(buffer[i]);
 			buffer.clear();
 		}

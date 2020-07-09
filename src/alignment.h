@@ -107,6 +107,15 @@ class AlignedRead{
 			this -> mappingUpper = mu;
 			positions.reserve(numEvents);
 		}
+		AlignedRead( const AlignedRead &ar ){
+
+			this -> readID = ar.readID;
+			this -> chromosome = ar.chromosome;
+			this -> strand = ar.strand;
+			this -> mappingLower = ar.mappingLower;
+			this -> mappingUpper = ar.mappingUpper;
+			this -> positions = ar.positions;
+		}
 		~AlignedRead(){}
 		void addEvent(std::string sixMer, unsigned int refPos, double ev, double len){
 
@@ -221,6 +230,6 @@ class AlignedRead{
 /*function prototypes */
 int align_main( int argc, char** argv );
 std::string eventalign_train( read &, unsigned int , std::map<unsigned int, double> &, double);
-std::pair<bool,AlignedRead> eventalign_detect( read &, unsigned int, double );
+std::pair<bool,std::shared_ptr<AlignedRead>> eventalign_detect( read &, unsigned int, double );
 
 #endif
