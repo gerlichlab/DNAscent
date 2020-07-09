@@ -7,6 +7,7 @@
 //----------------------------------------------------------
 
 #include "tensor.h"
+//#include "../tensorflow/include/tensorflow/c/c_api_experimental.h"
 #include <fstream>
 
 
@@ -55,10 +56,11 @@ std::shared_ptr<ModelSession> model_load(const char *filename, const char *input
 
 
 	TF_SessionOptions *opts = TF_NewSessionOptions();
-    uint8_t intra_op_parallelism_threads = 0;
-    uint8_t inter_op_parallelism_threads = 0;
+    uint8_t intra_op_parallelism_threads = 1;
+    uint8_t inter_op_parallelism_threads = 1;
     uint8_t buf[]={0x10,intra_op_parallelism_threads,0x28,inter_op_parallelism_threads};
     TF_SetConfig(opts, buf,sizeof(buf),status.ptr);
+    //TF_EnableXLACompilation(opts,true);
 	std::shared_ptr<TF_Session*> session = std::make_shared<TF_Session*>(TF_NewSession(*(graph.get()), opts, status.ptr));
 
 	if(status.failure()){

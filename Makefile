@@ -2,8 +2,8 @@ CC = gcc
 CXX = g++
 DEBUG = -g
 LIBFLAGS =
-CXXFLAGS = -Wall -O3 -fopenmp -std=c++14
-CFLAGS = -Wall -std=c99 -O3
+CXXFLAGS = -Wall -O2 -fopenmp -std=c++14
+CFLAGS = -Wall -std=c99 -O2
 
 #hdf5
 H5_LIB = ./hdf5-1.8.14/hdf5/lib/libhdf5.a

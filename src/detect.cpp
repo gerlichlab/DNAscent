@@ -772,10 +772,14 @@ std::string runCNN(std::shared_ptr<AlignedRead> r,std::shared_ptr<ModelSession> 
 	TF_Tensor* inputs[]={input_values.get()};
 	TF_Tensor* outputs[1]={};
 
+    //int tid = omp_get_thread_num();
+    //std::cout << tid << std::endl;
 	TF_SessionRun(*(session->session.get()), nullptr,
 		&session->inputs, inputs, 1,
 		&session->outputs, outputs, 1,
 		nullptr, 0, nullptr, status.ptr);
+    //std::cout << tid << std::endl;
+
 	auto _output_holder = tf_obj_unique_ptr(outputs[0]);
 
 	if(status.failure()){
@@ -851,7 +855,7 @@ int detect_main( int argc, char** argv ){
 
 	//get the neural network model path
 	std::string pathExe = getExePath();
-	std::string modelPath = pathExe + "/dnn_models/" + "build42_optimised.pb";
+	std::string modelPath = pathExe + "/dnn_models/" + "testSmall_optimised.pb";
 	std::shared_ptr<ModelSession> session = model_load(modelPath.c_str(), "input_1", "time_distributed/Reshape_1");
 
 	//import fasta reference
@@ -898,8 +902,9 @@ int detect_main( int argc, char** argv ){
 	int failedEvents = 0;
 	unsigned int maxBufferSize;
 	std::vector< bam1_t * > buffer;
-	if ( args.threads <= 4 ) maxBufferSize = args.threads;
-	else maxBufferSize = 4*(args.threads);
+	maxBufferSize = 16*(args.threads);
+	//if ( args.threads <= 4 ) maxBufferSize = args.threads;
+	//else maxBufferSize = 4*(args.threads);
 
 	do {
 		//initialise the record and get the record from the file iterator
@@ -923,9 +928,9 @@ int detect_main( int argc, char** argv ){
 		/*if we've filled up the buffer with short reads, compute them in parallel */
 		if (buffer.size() >= maxBufferSize or (buffer.size() > 0 and result == -1 ) ){
 
-			std::vector<std::pair<bool,std::shared_ptr<AlignedRead>>> buffer_ar(buffer.size());
+			//std::vector<std::pair<bool,std::shared_ptr<AlignedRead>>> buffer_ar(buffer.size());
 
-			#pragma omp parallel for schedule(dynamic) shared(buffer_ar,buffer,windowLength_HMMdetect,windowLength_align,analogueModel,thymidineModel,args,prog,failed) num_threads(args.threads)
+			#pragma omp parallel for schedule(dynamic) shared(buffer,windowLength_HMMdetect,windowLength_align,analogueModel,thymidineModel,args,prog,failed) num_threads(args.threads)
 			for (unsigned int i = 0; i < buffer.size(); i++){
 
 				read r;
@@ -975,7 +980,7 @@ int detect_main( int argc, char** argv ){
 				//}
 				//else{ //use neural network detection
 
-				buffer_ar[i] = eventalign_detect( r, windowLength_align, args.dilation );
+				std::pair<bool,std::shared_ptr<AlignedRead>> ar = eventalign_detect( r, windowLength_align, args.dilation );
 				/*
 				if (not buffer_ar[i].first){
 
@@ -986,8 +991,25 @@ int detect_main( int argc, char** argv ){
 				*/
 				//readOut = runCNN(ar.second,session);
 				//}
-			}
 
+				if (not ar.first){
+					failed++;
+					prog++;
+					continue;
+				}
+
+				std::string readOut;
+				readOut = runCNN(ar.second,session);
+				prog++;
+
+				#pragma omp critical
+				{
+					outFile << readOut;
+					pb.displayProgress( prog, failed, failedEvents );
+				}
+
+			}
+			/*
 			#pragma omp parallel for schedule(dynamic) shared(outFile,buffer_ar,prog,failed) num_threads(args.threads)
 			for (unsigned int i = 0; i < buffer_ar.size(); i++){
 
@@ -1007,6 +1029,7 @@ int detect_main( int argc, char** argv ){
 					pb.displayProgress( prog, failed, failedEvents );
 				}
 			}
+			*/
 
 			for ( unsigned int i = 0; i < buffer.size(); i++ ) bam_destroy1(buffer[i]);
 			buffer.clear();

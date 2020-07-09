@@ -70,6 +70,8 @@ int main( int argc, char** argv ){
 		std::cerr << "Suppression of Tensorflow logs and warnings failed." << std::endl;
 	}
 
+	system("export OMP_NUM_THREADS=4,1");
+
 	//load pore models
 	thymidineModel = import_poreModel("template_median68pA.6mer.model");
 	analogueModel = import_poreModel("BrdU.model");
