@@ -988,7 +988,7 @@ int detect_main( int argc, char** argv ){
 				//}
 			}
 
-			#pragma omp parallel for schedule(dynamic) shared(buffer_ar,prog,failed) num_threads(args.threads)
+			#pragma omp parallel for schedule(dynamic) shared(outFile,buffer_ar,prog,failed) num_threads(args.threads)
 			for (unsigned int i = 0; i < buffer_ar.size(); i++){
 
 				if (not buffer_ar[i].first){
@@ -1003,8 +1003,8 @@ int detect_main( int argc, char** argv ){
 
 				#pragma omp critical
 				{
-				outFile << readOut;
-				pb.displayProgress( prog, failed, failedEvents );
+					outFile << readOut;
+					pb.displayProgress( prog, failed, failedEvents );
 				}
 			}
 
