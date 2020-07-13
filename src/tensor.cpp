@@ -28,7 +28,18 @@ static TF_Buffer* read_tf_buffer_from_file(const char* file) {
 }
 
 
-std::shared_ptr<ModelSession> model_load(const char *filename, const char *input_name, const char *output_name){
+std::shared_ptr<ModelSession> model_load_cpu(const char *filename, const char *input_name, const char *output_name){
+
+	int vis = setenv("CUDA_VISIBLE_DEVICES", "", 1);
+	if (vis == -1){
+		std::cerr << "Suppression of GPU devices failed." << std::endl;
+	}
+
+	//for CPU-only useage, the tensorflow gpu library will still print out warnings about not finding GPU/CUDA - suppress them here
+	int env = setenv("TF_CPP_MIN_LOG_LEVEL", "3", 1);
+	if (env == -1){
+		std::cerr << "Suppression of Tensorflow logs and warnings failed." << std::endl;
+	}
 
 	CStatus status;
 	std::shared_ptr<ModelSession> ms = std::make_shared<ModelSession>();
@@ -56,9 +67,63 @@ std::shared_ptr<ModelSession> model_load(const char *filename, const char *input
 
 
 	TF_SessionOptions *opts = TF_NewSessionOptions();
-    uint8_t intra_op_parallelism_threads = 1;
-    uint8_t inter_op_parallelism_threads = 1;
-    uint8_t buf[]={0x10,intra_op_parallelism_threads,0x28,inter_op_parallelism_threads};
+
+	//uncomment to cap CPU threads
+    //uint8_t intra_op_parallelism_threads = 1;
+    //uint8_t inter_op_parallelism_threads = 1;
+    //uint8_t buf[]={0x10,intra_op_parallelism_threads,0x28,inter_op_parallelism_threads};
+    //TF_SetConfig(opts, buf,sizeof(buf),status.ptr);
+    //TF_EnableXLACompilation(opts,true);
+
+	std::shared_ptr<TF_Session*> session = std::make_shared<TF_Session*>(TF_NewSession(*(graph.get()), opts, status.ptr));
+
+	if(status.failure()){
+		return nullptr;
+	}
+	assert(session);
+	ms -> session = session;
+
+	ms -> inputs = {input_op, 0};
+	ms -> outputs = {output_op, 0};
+
+	return ms;
+}
+
+
+std::shared_ptr<ModelSession> model_load_gpu(const char *filename, const char *input_name, const char *output_name, unsigned char device){
+
+	CStatus status;
+	std::shared_ptr<ModelSession> ms = std::make_shared<ModelSession>();
+	std::shared_ptr<TF_Graph *> graph = std::make_shared<TF_Graph *>(TF_NewGraph());
+
+	{
+        // Load a protobuf containing a GraphDef
+        auto graph_def=read_tf_buffer_from_file(filename);
+        if(!graph_def) return nullptr;
+        auto graph_opts=TF_NewImportGraphDefOptions();
+        TF_GraphImportGraphDef(*(graph.get()), graph_def, graph_opts, status.ptr);
+	}
+
+	if(status.failure()){
+		status.dump_error();
+		return nullptr;
+	}
+	ms -> graph = graph;
+
+	auto input_op = TF_GraphOperationByName(*(graph.get()), input_name);
+	auto output_op = TF_GraphOperationByName(*(graph.get()), output_name);
+	if(!input_op || !output_op){
+		return nullptr;
+	}
+
+	//the buffer that follows is equivalent to:
+	//config = tf.ConfigProto(allow_soft_placement=True,device_count = {'GPU': 1,'CPU':1},intra_op_parallelism_threads=1,inter_op_parallelism_threads=1)
+	//config.gpu_options.allow_growth=True
+	//config.gpu_options.per_process_gpu_memory_fraction = 0.1
+	//config.gpu_options.visible_device_list= <device_name>
+
+	TF_SessionOptions *opts = TF_NewSessionOptions();
+    uint8_t buf[]={0xa, 0x7, 0xa, 0x3, 0x47, 0x50, 0x55, 0x10, 0x1, 0xa, 0x7, 0xa, 0x3, 0x43, 0x50, 0x55, 0x10, 0x1, 0x10, 0x1, 0x28, 0x1, 0x32, 0xe, 0x9, 0x9a, 0x99, 0x99, 0x99, 0x99, 0x99, 0xb9, 0x3f, 0x20, 0x1, 0x2a, 0x1, device, 0x38, 0x1};
     TF_SetConfig(opts, buf,sizeof(buf),status.ptr);
     //TF_EnableXLACompilation(opts,true);
 	std::shared_ptr<TF_Session*> session = std::make_shared<TF_Session*>(TF_NewSession(*(graph.get()), opts, status.ptr));
@@ -74,3 +139,4 @@ std::shared_ptr<ModelSession> model_load(const char *filename, const char *input
 
 	return ms;
 }
+

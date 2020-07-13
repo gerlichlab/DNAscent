@@ -65,12 +65,19 @@ std::vector< std::pair< double, double > > thymidineModel;
 /*main DNAscent executable that will link to other executables */
 int main( int argc, char** argv ){
 
+	/* suppresses tensorflow warnings
 	int env = setenv("TF_CPP_MIN_LOG_LEVEL", "2", 1);
 	if (env == -1){
 		std::cerr << "Suppression of Tensorflow logs and warnings failed." << std::endl;
 	}
+	*/
 
-	system("export OMP_NUM_THREADS=4,1");
+	/* suppresses tensorflow warnings
+	int env = setenv("CUDA_VISIBLE_DEVICES", "", 1);
+	if (env == -1){
+		std::cerr << "Suppression of Tensorflow logs and warnings failed." << std::endl;
+	}
+	*/
 
 	//load pore models
 	thymidineModel = import_poreModel("template_median68pA.6mer.model");

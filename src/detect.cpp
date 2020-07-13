@@ -43,6 +43,7 @@ static const char *help=
 "  -o,--output               path to output file that will be generated.\n"
 "Optional arguments are:\n"
 "  -t,--threads              number of threads (default is 1 thread),\n"
+"  --GPU                     use the GPU device indicated for prediction (default is CPU),\n"
 "  --HMM                     revert to old style HMM-based detection,\n"
 "  -q,--quality              minimum mapping quality (default is 20),\n"
 "  -l,--length               minimum read length in bp (default is 1000).\n"
@@ -56,6 +57,8 @@ struct Arguments {
 	std::string indexFilename;
 	bool methylAware = false;
 	bool useHMM = false;
+	bool useGPU = false;
+	unsigned char GPUdevice = '0';
 	int minQ = 20;
 	int minL = 1000;
 	unsigned int threads = 1;
@@ -135,6 +138,16 @@ Arguments parseDetectArguments( int argc, char** argv ){
 
 			args.useHMM = true;
 			i+=1;
+		}
+		else if ( flag == "--GPU" ){
+
+			args.useGPU = true;
+			std::string strArg( argv[ i + 1 ] );
+			if (strArg.length() > 1) throw InvalidDevice(strArg);
+
+			args.GPUdevice = *argv[ i + 1 ];
+
+			i+=2;
 		}
 		else if ( flag == "--dilation" ){
 
@@ -856,7 +869,15 @@ int detect_main( int argc, char** argv ){
 	//get the neural network model path
 	std::string pathExe = getExePath();
 	std::string modelPath = pathExe + "/dnn_models/" + "testSmall_optimised.pb";
-	std::shared_ptr<ModelSession> session = model_load(modelPath.c_str(), "input_1", "time_distributed/Reshape_1");
+	std::shared_ptr<ModelSession> session;
+
+	if (args.useGPU) {
+		session = model_load_gpu(modelPath.c_str(), "input_1", "time_distributed/Reshape_1",args.GPUdevice);
+	}
+	else{
+		session = model_load_cpu(modelPath.c_str(), "input_1", "time_distributed/Reshape_1");
+
+	}
 
 	//import fasta reference
 	std::map< std::string, std::string > reference = import_reference_pfasta( args.referenceFilename );

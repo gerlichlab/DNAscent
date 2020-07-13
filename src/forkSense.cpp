@@ -562,8 +562,7 @@ int sense_main( int argc, char** argv ){
 	//get the model
 	std::string pathExe = getExePath();
 	std::string modelPath = pathExe + "/dnn_models/" + "forkSense.pb";
-	//std::unique_ptr<ModelSession> session = std::unique_ptr<ModelSession>(model_load(modelPath.c_str(), "input_1", "time_distributed/Reshape_1"));
-	std::shared_ptr<ModelSession> session = model_load(modelPath.c_str(), "conv1d_input", "time_distributed_1/Reshape_1");
+	std::shared_ptr<ModelSession> session = model_load_cpu(modelPath.c_str(), "conv1d_input", "time_distributed_1/Reshape_1");
 
 	//get a read count
 	int readCount = 0;
