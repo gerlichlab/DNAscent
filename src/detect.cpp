@@ -886,7 +886,7 @@ int detect_main( int argc, char** argv ){
 	if ( not outFile.is_open() ) throw IOerror( args.outputFilename );
 
 	//write the outfile header
-	std::string outHeader = writeDetectHeader(args.bamFilename, args.referenceFilename, args.indexFilename, args.threads, args.useHMM, args.minQ, args.minL, args.dilation);
+	std::string outHeader = writeDetectHeader(args.bamFilename, args.referenceFilename, args.indexFilename, args.threads, args.useHMM, args.minQ, args.minL, args.dilation,args.useGPU);
 	outFile << outHeader;
 
 	htsFile* bam_fh;

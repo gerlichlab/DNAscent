@@ -248,7 +248,7 @@ inline float logProbabilityMatch(unsigned int sixMerIndex, double x, double shif
 #define move_down(curr_band) { curr_band.event_idx + 1, curr_band.kmer_idx }
 #define move_right(curr_band) { curr_band.event_idx, curr_band.kmer_idx + 1 }
 
-void adaptive_banded_simple_event_align( std::vector< double > &raw, read &r, PoreParameters &s ){
+void adaptive_banded_simple_event_align( std::vector< double > &raw, read &r, PoreParameters &s, std::vector<unsigned int> &kmer_ranks ){
 
 	//benchmarking
     //std::chrono::steady_clock::time_point tp1 = std::chrono::steady_clock::now();
@@ -300,11 +300,11 @@ void adaptive_banded_simple_event_align( std::vector< double > &raw, read &r, Po
 	// Initialize
 
 	// Precompute k-mer ranks to avoid doing this in the inner loop
-	std::vector<unsigned int> kmer_ranks(n_kmers);
-	for(size_t i = 0; i < n_kmers; i++) {
-		std::string sixMer = sequence.substr(i, k);
-		kmer_ranks[i] = sixMer2index(sixMer);
-	}
+	//std::vector<unsigned int> kmer_ranks(n_kmers);
+	//for(size_t i = 0; i < n_kmers; i++) {
+	//	std::string sixMer = sequence.substr(i, k);
+	//	kmer_ranks[i] = sixMer2index(sixMer);
+	//}
 
 	typedef std::vector<float> bandscore;
 	typedef std::vector<uint8_t> bandtrace;
@@ -575,10 +575,12 @@ void adaptive_banded_simple_event_align( std::vector< double > &raw, read &r, Po
 }
 
 
-PoreParameters roughRescale( std::vector< double > &means, std::string &basecall ){
+PoreParameters roughRescale( std::vector< double > &means, std::string &basecall, std::vector<unsigned int> &kmer_ranks ){
 
 	PoreParameters s;
-	unsigned int numOfSixMers = basecall.size() - 5;
+
+	size_t k = 6;
+	unsigned int numOfSixMers = basecall.size() - k + 1;
 
 	/*get a rough estimate for shift */
 	double event_sum = 0.0;
@@ -593,7 +595,7 @@ PoreParameters roughRescale( std::vector< double > &means, std::string &basecall
 	for ( unsigned int i = 0; i < numOfSixMers; i ++ ){
 
 		sixMer = basecall.substr(i, 6);
-		std::pair<double,double> meanStd = thymidineModel[sixMer2index(sixMer)];
+		std::pair<double,double> meanStd = thymidineModel[kmer_ranks[i]];
 		double sixMer_mean = meanStd.first;
 		sixMer_sum += sixMer_mean;
 		sixMer_sq_sum += pow( sixMer_mean, 2.0 );
@@ -617,9 +619,6 @@ PoreParameters roughRescale( std::vector< double > &means, std::string &basecall
 
 void normaliseEvents( read &r, bool bulkFast5 ){
 
-#if SHOW_PROGRESS
-std::cerr << "Normalisation: getting fast5..." << std::endl;
-#endif
 
 	float sample_rate;
 	try{
@@ -632,16 +631,10 @@ std::cerr << "Normalisation: getting fast5..." << std::endl;
 		return;
 	}
 
-#if SHOW_PROGRESS
-std::cerr << "Normalisation: getting event table..." << std::endl;
-#endif
 
 	event_table et = detect_events(&(r.raw)[0], (r.raw).size(), event_detection_defaults);
 	assert(et.n > 0);
 
-#if SHOW_PROGRESS
-std::cerr << "Normalisation: pull out means and lengths..." << std::endl;
-#endif
 
 	//get the event mean and length
 	r.normalisedEvents.reserve(et.n);
@@ -655,22 +648,20 @@ std::cerr << "Normalisation: pull out means and lengths..." << std::endl;
 	}
 	free(et.event);
 
-#if SHOW_PROGRESS
-std::cerr << "Normalisation: rough rescale..." << std::endl;
-#endif
+	// Precompute k-mer ranks for rough rescaling and banded alignment
+	size_t k = 6;
+	size_t n_kmers = r.basecall.size() - k + 1;
+	std::vector<unsigned int> kmer_ranks(n_kmers);
+	for(size_t i = 0; i < n_kmers; i++) {
+		std::string sixMer = r.basecall.substr(i, k);
+		kmer_ranks[i] = sixMer2index(sixMer);
+	}
 
 	/*rough calculation of shift and scale so that we can align events */
-	PoreParameters s = roughRescale( r.normalisedEvents, r.basecall );
-
-#if SHOW_PROGRESS
-std::cerr << "Normalisation: adaptive banded alignment..." << std::endl;
-#endif
+	PoreParameters s = roughRescale( r.normalisedEvents, r.basecall, kmer_ranks );
 
 	/*align 5mers to events using the basecall */
-	adaptive_banded_simple_event_align(r.normalisedEvents, r, s);
+	adaptive_banded_simple_event_align(r.normalisedEvents, r, s, kmer_ranks);
 	r.scalings.eventsPerBase = std::max(1.25, (double) r.eventAlignment.size() / (double) (r.basecall.size() - 5));
 
-#if SHOW_PROGRESS
-std::cerr << "Ok." << std::endl;
-#endif
 }

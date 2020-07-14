@@ -593,6 +593,10 @@ int sense_main( int argc, char** argv ){
 		if ( not originFile.is_open() ) throw IOerror( "origins_DNAscent_forkSense.bed" );
 	}
 
+	//write the outfile header
+	std::string outHeader = writeForkSenseHeader(args.detectFilename, args.threads);;
+	outFile << outHeader;
+
 	//compute trim factor
 	unsigned int trimFactor = 1;
 	unsigned int failed = 0;

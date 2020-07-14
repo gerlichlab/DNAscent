@@ -192,6 +192,16 @@ inline int lnArgMax(std::vector<double> v){
 	return maxarg;
 }
 
+//Initial transitions between modules (external transitions)
+double externalD2D = eln(0.3);
+double externalD2M1 = eln(0.7);
+double externalI2M1 = eln(0.999);
+double externalM12D = eln(0.0025);
+
+//Initial transitions within modules (internal transitions)
+double internalM12I = eln(0.001);
+double internalI2I = eln(0.001);
+
 
 std::pair< double, std::vector< std::string > > builtinViterbi( std::vector <double> &observations,
 				std::string &sequence,
@@ -199,16 +209,8 @@ std::pair< double, std::vector< std::string > > builtinViterbi( std::vector <dou
 				bool flip,
 				double signalDilation){
 
-	//Initial transitions within modules (internal transitions)
-	double internalM12I = eln(0.001);
-	double internalI2I = eln(0.001);
+	//transition probabilities that change on a per-read basis
 	double internalM12M1 = eln(1. - (1./scalings.eventsPerBase));
-
-	//Initial transitions between modules (external transitions)
-	double externalD2D = eln(0.3);
-	double externalD2M1 = eln(0.7);
-	double externalI2M1 = eln(0.999);
-	double externalM12D = eln(0.0025);
 	double externalM12M1 = eln(1.0 - externalM12D - internalM12I - internalM12M1);
 	double externalM12M1orD = lnSum( externalM12M1, externalM12D );
 	double externalOrInternalM12M1 = lnSum( externalM12M1, internalM12M1 );
@@ -441,7 +443,7 @@ std::pair< double, std::vector< std::string > > builtinViterbi( std::vector <dou
 
 	/*-----------TERMINATION----------- */
 	double viterbiScore = NAN;
-	viterbiScore = lnVecMax( {D_curr.back() + eln( 1.0 ) , //D to end
+	viterbiScore = lnVecMax( {D_curr.back() , // + eln( 1.0 ) which is 0 //D to end
 							  M_curr.back() + externalM12M1orD,//M to end
 							  I_curr.back() + externalI2M1 //I to end
 							 });
@@ -449,7 +451,7 @@ std::pair< double, std::vector< std::string > > builtinViterbi( std::vector <dou
 
 
 	//figure out where to go from the end state
-	maxindex = lnArgMax({ D_curr.back() + eln( 1.0 ) ,
+	maxindex = lnArgMax({ D_curr.back() , //+ eln( 1.0 ) which is 0
 	                   M_curr.back() + externalM12M1orD ,
 					   I_curr.back() + externalI2M1
 	                   });
@@ -728,6 +730,7 @@ std::string eventalign( read &r,
 	posOnRef = r.referenceSeqMappedTo.size() - 1;
 	unsigned int rev_readHead = (r.eventAlignment).size() - 1;
 	std::vector<std::string> lines;
+	lines.reserve((r.referenceSeqMappedTo.size()) / 2);
 	while ( posOnRef > midpoint - 5 ){
 
 		//adjust so we can get the last bit of the read if it doesn't line up with the windows nicely
@@ -893,6 +896,7 @@ std::string eventalign( read &r,
 		rev_readHead -= lastM_ev + 1;
 		posOnRef -= lastM_ref + 1;
 	}
+
 
 	std::reverse(lines.begin(), lines.end());
 	for (size_t i = 0; i < lines.size(); i++){

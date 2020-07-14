@@ -7,7 +7,7 @@
 //----------------------------------------------------------
 
 #include "tensor.h"
-//#include "../tensorflow/include/tensorflow/c/c_api_experimental.h"
+//#include "../tensorflow/include/tensorflow/c/c_api.h"
 #include <fstream>
 
 
@@ -65,7 +65,6 @@ std::shared_ptr<ModelSession> model_load_cpu(const char *filename, const char *i
 		return nullptr;
 	}
 
-
 	TF_SessionOptions *opts = TF_NewSessionOptions();
 
 	//uncomment to cap CPU threads
@@ -73,7 +72,6 @@ std::shared_ptr<ModelSession> model_load_cpu(const char *filename, const char *i
     //uint8_t inter_op_parallelism_threads = 1;
     //uint8_t buf[]={0x10,intra_op_parallelism_threads,0x28,inter_op_parallelism_threads};
     //TF_SetConfig(opts, buf,sizeof(buf),status.ptr);
-    //TF_EnableXLACompilation(opts,true);
 
 	std::shared_ptr<TF_Session*> session = std::make_shared<TF_Session*>(TF_NewSession(*(graph.get()), opts, status.ptr));
 
@@ -119,11 +117,11 @@ std::shared_ptr<ModelSession> model_load_gpu(const char *filename, const char *i
 	//the buffer that follows is equivalent to:
 	//config = tf.ConfigProto(allow_soft_placement=True,device_count = {'GPU': 1,'CPU':1},intra_op_parallelism_threads=1,inter_op_parallelism_threads=1)
 	//config.gpu_options.allow_growth=True
-	//config.gpu_options.per_process_gpu_memory_fraction = 0.1
+	//config.gpu_options.per_process_gpu_memory_fraction = 0.95
 	//config.gpu_options.visible_device_list= <device_name>
 
 	TF_SessionOptions *opts = TF_NewSessionOptions();
-    uint8_t buf[]={0xa, 0x7, 0xa, 0x3, 0x47, 0x50, 0x55, 0x10, 0x1, 0xa, 0x7, 0xa, 0x3, 0x43, 0x50, 0x55, 0x10, 0x1, 0x10, 0x1, 0x28, 0x1, 0x32, 0xe, 0x9, 0x9a, 0x99, 0x99, 0x99, 0x99, 0x99, 0xb9, 0x3f, 0x20, 0x1, 0x2a, 0x1, device, 0x38, 0x1};
+    uint8_t buf[]={0xa, 0x7, 0xa, 0x3, 0x47, 0x50, 0x55, 0x10, 0x1, 0xa, 0x7, 0xa, 0x3, 0x43, 0x50, 0x55, 0x10, 0x1, 0x10, 0x1, 0x28, 0x1, 0x32, 0xe, 0x9, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0xee, 0x3f, 0x20, 0x1, 0x2a, 0x1, device, 0x38, 0x1};
     TF_SetConfig(opts, buf,sizeof(buf),status.ptr);
     //TF_EnableXLACompilation(opts,true);
 	std::shared_ptr<TF_Session*> session = std::make_shared<TF_Session*>(TF_NewSession(*(graph.get()), opts, status.ptr));

@@ -88,9 +88,9 @@ double lnProd( double ln_x, double ln_y ){
 	}
 }
 
-
+/*
 double lnQuot( double ln_x, double ln_y ){
-/*evalutes the quotient ln_x/ln_y */
+//evalutes the quotient ln_x/ln_y
 
 	if ( std::isnan( ln_y ) ){
         	throw DivideByZero();
@@ -102,6 +102,7 @@ double lnQuot( double ln_x, double ln_y ){
 		return ln_x - ln_y;
 	}
 }
+*/
 
 
 bool lnGreaterThan( double ln_x, double ln_y ){

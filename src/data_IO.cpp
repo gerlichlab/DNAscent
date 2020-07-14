@@ -33,23 +33,29 @@ std::string writeDetectHeader(std::string alignmentFilename,
 						bool useHMM,
 						unsigned int quality,
 						unsigned int length,
-						double dilation){
+						double dilation,
+						bool useGPU){
 
 	std::string detMode;
 	if (useHMM) detMode = "HMM";
 	else detMode = "CNN";
+
+	std::string compMode;
+	if (useGPU) compMode = "GPU";
+	else compMode = "CPU";
 
 	std::string out;
 	out += "#Alignment " + alignmentFilename + "\n";
 	out += "#Genome " + refFilename + "\n";
 	out += "#Index " + indexFn + "\n";
 	out += "#Threads " + std::to_string(threads) + "\n";
+	out += "#Compute " + compMode + "\n";
 	out += "#Mode " + detMode + "\n";
 	out += "#MappingQuality " + std::to_string(quality) + "\n";
 	out += "#MappingLength " + std::to_string(length) + "\n";
+	out += "#SignalDilation " + std::to_string(dilation) + "\n";
 	out += "#Version " + std::string(VERSION) + "\n";
 	out += "#Commit " + std::string(gitcommit) + "\n";
-	out += "#SignalDilation " + std::to_string(dilation) + "\n";
 
 	return out;
 }
@@ -74,6 +80,18 @@ std::string writeRegionsHeader(std::string detectFile,
 	out += "#Resolution " + std::to_string(resolution) + "\n";
 	out += "#Probability " + std::to_string(probability) + "\n";
 	out += "#ZScore " + std::to_string(zscore) + "\n";
+	out += "#Version " + std::string(VERSION) + "\n";
+	out += "#Commit " + std::string(gitcommit) + "\n";
+
+	return out;
+}
+
+std::string writeForkSenseHeader(std::string detectFile,
+		                int threads){
+
+	std::string out;
+	out += "#DetectFile " + detectFile + "\n";
+	out += "#Threads " + std::to_string(threads) + "\n";
 	out += "#Version " + std::string(VERSION) + "\n";
 	out += "#Commit " + std::string(gitcommit) + "\n";
 
