@@ -868,7 +868,7 @@ int detect_main( int argc, char** argv ){
 
 	//get the neural network model path
 	std::string pathExe = getExePath();
-	std::string modelPath = pathExe + "/dnn_models/" + "testSmall_optimised.pb";
+	std::string modelPath = pathExe + "/dnn_models/" + "BrdU_detect.pb";
 	std::shared_ptr<ModelSession> session;
 
 	if (args.useGPU) {
@@ -886,7 +886,7 @@ int detect_main( int argc, char** argv ){
 	if ( not outFile.is_open() ) throw IOerror( args.outputFilename );
 
 	//write the outfile header
-	std::string outHeader = writeDetectHeader(args.bamFilename, args.referenceFilename, args.indexFilename, args.threads, args.methylAware, args.useHMM, args.minQ, args.minL, args.dilation);
+	std::string outHeader = writeDetectHeader(args.bamFilename, args.referenceFilename, args.indexFilename, args.threads, args.useHMM, args.minQ, args.minL, args.dilation);
 	outFile << outHeader;
 
 	htsFile* bam_fh;
@@ -996,32 +996,23 @@ int detect_main( int argc, char** argv ){
 					continue;
 				}
 
-				//if (args.useHMM){ //use old style HMM-based detection
-				//	readOut = llAcrossRead(r, windowLength_HMMdetect, failedEvents, args.methylAware);
-				//}
-				//else{ //use neural network detection
-
-				std::pair<bool,std::shared_ptr<AlignedRead>> ar = eventalign_detect( r, windowLength_align, args.dilation );
-				/*
-				if (not buffer_ar[i].first){
-
-					failed++;
-					prog++;
-					continue;
-				}
-				*/
-				//readOut = runCNN(ar.second,session);
-				//}
-
-				if (not ar.first){
-					failed++;
-					prog++;
-					continue;
-				}
-
 				std::string readOut;
-				readOut = runCNN(ar.second,session);
-				prog++;
+				if (args.useHMM){ //use old style HMM-based detection
+					readOut = llAcrossRead(r, windowLength_HMMdetect, failedEvents, args.methylAware);
+				}
+				else{ //use neural network detection
+
+					std::pair<bool,std::shared_ptr<AlignedRead>> ar = eventalign_detect( r, windowLength_align, args.dilation );
+
+					if (not ar.first){
+						failed++;
+						prog++;
+						continue;
+					}
+
+					readOut = runCNN(ar.second,session);
+					prog++;
+				}
 
 				#pragma omp critical
 				{
@@ -1030,27 +1021,6 @@ int detect_main( int argc, char** argv ){
 				}
 
 			}
-			/*
-			#pragma omp parallel for schedule(dynamic) shared(outFile,buffer_ar,prog,failed) num_threads(args.threads)
-			for (unsigned int i = 0; i < buffer_ar.size(); i++){
-
-				if (not buffer_ar[i].first){
-					failed++;
-					prog++;
-					continue;
-				}
-
-				std::string readOut;
-				readOut = runCNN(buffer_ar[i].second,session);
-				prog++;
-
-				#pragma omp critical
-				{
-					outFile << readOut;
-					pb.displayProgress( prog, failed, failedEvents );
-				}
-			}
-			*/
 
 			for ( unsigned int i = 0; i < buffer.size(); i++ ) bam_destroy1(buffer[i]);
 			buffer.clear();

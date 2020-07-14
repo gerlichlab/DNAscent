@@ -30,7 +30,6 @@ std::string writeDetectHeader(std::string alignmentFilename,
 		                std::string refFilename,
 						std::string indexFn,
 						int threads,
-						bool methylAware,
 						bool useHMM,
 						unsigned int quality,
 						unsigned int length,
@@ -40,16 +39,11 @@ std::string writeDetectHeader(std::string alignmentFilename,
 	if (useHMM) detMode = "HMM";
 	else detMode = "CNN";
 
-	std::string methylMode;
-	if (methylAware) methylMode = "true";
-	else methylMode = "false";
-
 	std::string out;
 	out += "#Alignment " + alignmentFilename + "\n";
 	out += "#Genome " + refFilename + "\n";
 	out += "#Index " + indexFn + "\n";
 	out += "#Threads " + std::to_string(threads) + "\n";
-	out += "#MethylAware " + methylMode + "\n";
 	out += "#Mode " + detMode + "\n";
 	out += "#MappingQuality " + std::to_string(quality) + "\n";
 	out += "#MappingLength " + std::to_string(length) + "\n";
