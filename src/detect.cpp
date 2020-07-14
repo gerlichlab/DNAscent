@@ -862,6 +862,14 @@ int detect_main( int argc, char** argv ){
 	Arguments args = parseDetectArguments( argc, argv );
 	bool bulkFast5;
 
+	//for CPU-only useage, the tensorflow gpu library will still print out warnings about not finding GPU/CUDA - suppress them here
+	if (not args.useGPU){
+		int env = setenv("TF_CPP_MIN_LOG_LEVEL", "3", 1);
+		if (env == -1){
+			std::cerr << "Suppression of Tensorflow logs and warnings failed." << std::endl;
+		}
+	}
+
 	//load DNAscent index
 	std::map< std::string, std::string > readID2path;
 	parseIndex( args.indexFilename, readID2path, bulkFast5 );
