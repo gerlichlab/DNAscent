@@ -35,6 +35,12 @@ std::shared_ptr<ModelSession> model_load_cpu(const char *filename, const char *i
 		std::cerr << "Suppression of GPU devices failed." << std::endl;
 	}
 
+	//for CPU-only useage, the tensorflow gpu library will still print out warnings about not finding GPU/CUDA - suppress them here
+	int env = setenv("TF_CPP_MIN_LOG_LEVEL", "3", 1);
+	if (env == -1){
+		std::cerr << "Suppression of Tensorflow logs and warnings failed." << std::endl;
+	}
+
 	CStatus status;
 	std::shared_ptr<ModelSession> ms = std::make_shared<ModelSession>();
 	std::shared_ptr<TF_Graph *> graph = std::make_shared<TF_Graph *>(TF_NewGraph());
