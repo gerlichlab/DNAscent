@@ -455,6 +455,8 @@ int train_main( int argc, char** argv ){
 
 	while ( std::getline( eventFile, line) ){
 
+		if (line.empty()) continue;
+
 		if ( line.substr(0,1) == ">" ){
 
 				readsRead++;
@@ -498,7 +500,7 @@ int train_main( int argc, char** argv ){
 	std::cout << "Fitting..." << std::endl;
 	
 	/*fit a mixture model to the events that aligned to each position in the reference */
-	outFile << "6mer" << '\t' << "ONT_mean" << '\t' << "ONT_stdv" << '\t' << "pi_1" << '\t' << "mean_1" << '\t' << "stdv_1" << '\t' << "pi_2" << '\t' << "mean_2" << '\t' << "stdv_2" << std::endl;
+	outFile << "6mer" << '\t' << "ONT_mean" << '\t' << "ONT_stdv" << '\t' << "pi_1" << '\t' << "mean_1" << '\t' << "stdv_1" << '\t' << "pi_2" << '\t' << "mean_2" << '\t' << "stdv_2" << '\t' << "imported_events" << '\t' << "filtered_events" << std::endl;
 	progressBar pb_fit( importedEvents.size(),true );
 
 	#pragma omp parallel for schedule(dynamic) shared(pb_fit, thymidineModel, prog, failed, outFile, importedEvents, trainArgs) num_threads(trainArgs.threads)
