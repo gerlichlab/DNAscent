@@ -447,7 +447,6 @@ int train_main( int argc, char** argv ){
 	*/
 	progressBar pb_read( trainArgs.maxReads, true );
 	unsigned int readsRead = 0;
-	std::string readIdx = "";
 
 	std::ifstream eventFile(trainArgs.eventalignFilename);
 	if ( not eventFile.is_open() ) throw IOerror( trainArgs.eventalignFilename );
@@ -456,6 +455,12 @@ int train_main( int argc, char** argv ){
 
 	while ( std::getline( eventFile, line) ){
 
+		if ( line.substr(0,1) == ">" ){
+
+				readsRead++;
+				pb_read.displayProgress( readsRead, 0, 0 );
+		}
+
 		std::istringstream ss( line );
 		std::string sixMer, entry;
 		double eventMean = 0.0, eventLength = 0.0;
@@ -463,25 +468,16 @@ int train_main( int argc, char** argv ){
 		int col = 0;
 		while ( std::getline( ss, entry, '\t' ) ){
 
-			if ( col == 9 ){
+			if ( col == 4 ){
 
 				sixMer = entry;
 				break;
 			}
-			else if ( col == 3 ){
-
-				if (entry != readIdx){
-
-					readsRead++;
-					pb_read.displayProgress( readsRead, 0, 0 );
-					readIdx = entry;
-				}
-			}
-			else if ( col == 6 ){
+			else if ( col == 2 ){
 
 				eventMean = atof( entry.c_str() );
 			}
-			else if ( col == 8 ){
+			else if ( col == 3 ){
 
 				eventLength = atof( entry.c_str() );
 			}
