@@ -459,6 +459,7 @@ int train_main( int argc, char** argv ){
 
 				readsRead++;
 				pb_read.displayProgress( readsRead, 0, 0 );
+				continue;
 		}
 
 		std::istringstream ss( line );
