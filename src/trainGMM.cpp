@@ -419,7 +419,7 @@ int train_main( int argc, char** argv ){
     char set1[] = {'A', 'T', 'G', 'C'};
     int k = 6;
     std::vector<std::string> allSixMers;
-    printAllKLength(set1, k, 2, allSixMers);
+    printAllKLength(set1, k, 4, allSixMers);
 	std::map< int, std::string > intToSixmer;
 	std::map< std::string, int > sixmerToInt;
 	int index = 0;
