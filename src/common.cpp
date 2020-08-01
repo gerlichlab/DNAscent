@@ -77,6 +77,14 @@ double vectorStdv( std::vector< double > &obs, double &mean ){
 }
 
 
+double vectorSum( std::vector< double > &obs ){
+
+	double total = 0.0;
+	for ( size_t i = 0; i < obs.size(); i++ ) total += obs[i];
+	return total;
+}
+
+
 int argMin( std::vector< double > vec ){
 
 	double smallest = vec[0];

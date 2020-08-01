@@ -186,5 +186,6 @@ int argMin( std::vector< double > );
 int argMax( std::vector< double > );
 double vectorMean( std::vector< double > & );
 double vectorStdv( std::vector< double > &, double & );
+double vectorSum( std::vector< double > & );
 
 #endif
