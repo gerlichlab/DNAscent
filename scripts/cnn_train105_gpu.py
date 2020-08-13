@@ -29,22 +29,19 @@ from scipy.stats import halfnorm
 
 tf.keras.backend.set_learning_phase(1)  # set inference phase
 
-#was 38
-
-folderPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/data_DNAscentTrainingData_highIns_noBrdUScaling_wellMixed_230k'
-logPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/trainingLog52pt4.csv'
-trainingReadLogPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/trainingReadsUsed52.txt'
-valReadLogPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/valReadsUsed52.txt'
-checkpointPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/checkpoints52pt4'
+folderPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/commit620d798_trainingData_8features_bc8bc12_augmentation/trainingFiles'
+logPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/trainingLog105.csv'
+trainingReadLogPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/trainingReadsUsed105.txt'
+valReadLogPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/valReadsUsed105.txt'
+checkpointPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/checkpoints105'
 validationSplit = 0.2
 
-f_checkpoint = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/checkpoints52pt3/weights.03-0.40.h5'
+f_checkpoint = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/checkpoints75/weights.05-0.35.h5'
 
-maxLen = 3000
-maxReads = 230000
+maxLen = 4000
 
 #static params
-truePositive = 0.5
+truePositive = 0.7
 trueNegative = 0.9
 falsePositive = 1. - trueNegative
 llThreshold = 1.25
@@ -192,24 +189,24 @@ def buildModel(input_shape = (64, 64, 3), classes = 6):
 
     
     # Stage 1
-    X = Conv1D(128, 4, strides = 1, padding='same', name = 'conv1', kernel_initializer = glorot_uniform(seed=0))(X_input)
+    X = Conv1D(64, 4, strides = 1, padding='same', name = 'conv1', kernel_initializer = glorot_uniform(seed=0))(X_input)
     X = BatchNormalization(name = 'bn_conv1')(X)
     X = Activation('tanh')(X)
     #X = MaxPooling1D(4, strides=1, padding='same')(X)
 
     # Stage 2
-    X = convolutional_block(X, f = 4, filters = [128, 128, 128, 128, 128, 128], stage = 2, block='a', s = 1)
+    X = convolutional_block(X, f = 4, filters = [64, 64, 64, 64, 64, 64], stage = 2, block='a', s = 1)
     #X = identity_block(X, 4, [64, 64, 256], stage=2, block='b')
     #X = identity_block(X, 4, [64, 64, 256], stage=2, block='c')
 
     # Stage 3
-    X = convolutional_block(X, f=4, filters=[128, 128, 128, 128, 128, 128], stage=3, block='a', s=2)
+    X = convolutional_block(X, f=4, filters=[64, 64, 64, 64, 64, 64], stage=3, block='a', s=2)
     #X = identity_block(X, 4, [128, 128, 512], stage=3, block='b')
     #X = identity_block(X, 4, [128, 128, 512], stage=3, block='c')
     #X = identity_block(X, 4, [128, 128, 512], stage=3, block='d')
 
     # Stage 4
-    X = convolutional_block(X, f=8, filters=[256, 256, 256, 256, 256, 256], stage=4, block='a', s=2)
+    X = convolutional_block(X, f=8, filters=[128, 128, 128, 128, 128, 128], stage=4, block='a', s=2)
     #X = identity_block(X, 4, [256, 256, 1024], stage=4, block='b')
     #X = identity_block(X, 4, [256, 256, 1024], stage=4, block='c')
     #X = identity_block(X, 4, [256, 256, 1024], stage=4, block='d')
@@ -217,22 +214,22 @@ def buildModel(input_shape = (64, 64, 3), classes = 6):
     #X = identity_block(X, 4, [256, 256, 1024], stage=4, block='f')
 
     # Stage 5
-    X = convolutional_block(X, f=8, filters=[256, 256, 256, 256, 256, 256], stage=5, block='a', s=2)
+    X = convolutional_block(X, f=8, filters=[128, 128, 128, 128, 128, 128], stage=5, block='a', s=2)
     #X = identity_block(X, 4, [512, 512, 2048], stage=5, block='b')
     #X = identity_block(X, 4, [512, 512, 2048], stage=5, block='c')
 
     # Stage 6
-    X = convolutional_block(X, f=16, filters=[512, 512, 512, 512, 512, 512], stage=6, block='a', s=2)
+    X = convolutional_block(X, f=16, filters=[256, 256, 256, 256, 256, 256], stage=6, block='a', s=2)
 
-    X = Conv1D(128, 4, strides = 1, padding='same', name = 'conv2', kernel_initializer = glorot_uniform(seed=0))(X)
+    X = Conv1D(64, 4, strides = 1, padding='same', name = 'conv2', kernel_initializer = glorot_uniform(seed=0))(X)
     X = BatchNormalization(name = 'bn_conv2')(X)
     X = Activation('tanh')(X)
 
-    X = Conv1D(128, 4, strides = 1, padding='same', name = 'conv3', kernel_initializer = glorot_uniform(seed=0))(X)
+    X = Conv1D(64, 4, strides = 1, padding='same', name = 'conv3', kernel_initializer = glorot_uniform(seed=0))(X)
     X = BatchNormalization(name = 'bn_conv3')(X)
     X = Activation('tanh')(X)
 
-    X = Conv1D(128, 4, strides = 1, padding='same', name = 'conv4', kernel_initializer = glorot_uniform(seed=0))(X)
+    X = Conv1D(64, 4, strides = 1, padding='same', name = 'conv4', kernel_initializer = glorot_uniform(seed=0))(X)
 
     # Output layer
     #X = Flatten()(X)
@@ -243,6 +240,7 @@ def buildModel(input_shape = (64, 64, 3), classes = 6):
     model = Model(inputs = X_input, outputs = X, name='BrdUDetect')
 
     return model
+
 
 
 
@@ -266,13 +264,9 @@ def trainingReadToTensor(t):
 
 		#other features
 		oneHot.append(t.eventMean[i])
-		oneHot.append(t.eventStd[i])
-		oneHot.append(t.stutter[i])
-		oneHot.append(t.lengthMean[i])
-		oneHot.append(t.lengthStd[i])
+		oneHot.append(t.eventLength[i])
 		oneHot.append(t.modelMeans[i])
 		oneHot.append(t.modelStd[i])
-		oneHot.append(t.gaps[i])
 		oneSet.append(oneHot)
 
 	return np.array(oneSet)
@@ -281,17 +275,39 @@ def trainingReadToTensor(t):
 #
 def trainingReadToLabel(t):
 	label =[]
-	for s in t.logLikelihood:
-		if s == '-':
-			label.append([1., 0.])
-		else:
-			score = float(s)
-			if score > llThreshold:
-				l = (truePositive*t.analogueConc)/(truePositive*t.analogueConc + falsePositive*(1-t.analogueConc))
-				label.append([1.-l,l])
+
+	if t.analogueConc != -1: #not a data augmented read
+		for s in t.logLikelihood:
+			if s == '-':
+				label.append([1., 0.])
 			else:
-				l = ((1-truePositive)*t.analogueConc)/((1-truePositive)*t.analogueConc + (1-falsePositive)*(1-t.analogueConc))
-				label.append([1.-l,l])
+				score = float(s)
+				if score > llThreshold:
+					l = (truePositive*t.analogueConc)/(truePositive*t.analogueConc + falsePositive*(1-t.analogueConc))
+					label.append([1.-l,l])
+				else:
+					l = ((1-truePositive)*t.analogueConc)/((1-truePositive)*t.analogueConc + (1-falsePositive)*(1-t.analogueConc))
+					label.append([1.-l,l])
+
+	else: #is a data augmented read
+		for s in t.logLikelihood:
+			if s == '-':
+				label.append([1., 0.])
+			else:
+				if s == '-X':
+					label.append([1., 0.])
+				elif s[-1] == 'X': #in a swapped 80% BrdU region
+
+					score = float(s[:-1])
+					tempAnalogueConc = 0.8
+					if score > llThreshold:
+						l = (truePositive*tempAnalogueConc)/(truePositive*tempAnalogueConc + falsePositive*(1-tempAnalogueConc))
+						label.append([1.-l,l])
+					else:
+						l = ((1-truePositive)*tempAnalogueConc)/((1-truePositive)*tempAnalogueConc + (1-falsePositive)*(1-tempAnalogueConc))
+						label.append([1.-l,l])
+				else:
+					label.append([1., 0.])
 
 	return np.array(label)
 
@@ -299,15 +315,40 @@ def trainingReadToLabel(t):
 #-------------------------------------------------         
 #
 def trainingReadToWeights(t):
+
+	weightOnBrdU = 20.
+
 	weights =[]
+
+	#weight augmented data more because we have less of it
+	scaling = 1.
+	if t.analogueConc == -1:
+		scaling = 2.
 
 	#weight thymidine positions 3x more than A,C,G positions
 	#also underweight positions where the DNAscent HMM aborted making a call
-	for s in t.logLikelihood:
-		if s in ['-', '-10000.000000', '-20000.000000']:
-			weights.append(1.)
-		else:
-			weights.append(3.)
+	if t.analogueConc != -1: #not a data augmented read
+		for s in t.logLikelihood:
+			if s in ['-', '-10000.000000', '-20000.000000']:
+				weights.append(1.*scaling)
+			else:
+				weights.append(3.*scaling)
+
+	else: #is a data augmented read
+		for s in t.logLikelihood:
+
+			if s == '-X':
+				weights.append(1.*scaling)
+			elif s[-1] == 'X': #in a swapped 80% BrdU region
+				score = float(s[:-1])
+				if score > llThreshold:
+					weights.append(3.*scaling*weightOnBrdU)
+				else:
+					weights.append(3.*scaling*weightOnBrdU)
+			elif s in ['-', '-10000.000000', '-20000.000000']:
+				weights.append(1.*scaling)
+			else:
+				weights.append(3.*scaling)
 
 	return np.array(weights)
 
@@ -359,11 +400,9 @@ class DataGenerator(Sequence):
 		#print(list_IDs_temp)
 		# Generate data
 		for i, ID in enumerate(list_IDs_temp):
-			# Store sample
-			splitID = ID.split(';')
 
 			#pull data for this 6mer from the appropriate pickled read
-			trainingRead = pickle.load(open(folderPath + '/' + ID + '.p', "rb"))
+			trainingRead = pickle.load(open(ID, "rb"))
 			tensor = trainingReadToTensor(trainingRead)
 			
 			X[i,] = tensor
@@ -381,40 +420,46 @@ class DataGenerator(Sequence):
 #MAIN
 
 #uncomment to train from scratch
-'''
-readIDs = []
-f_readIDs = open('/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/data_DNAscentTrainingData_highIns_noBrdUScaling_wellMixed_230k.IDs','r')
-for line in f_readIDs:
-	readIDs.append(line.rstrip())
-f_readIDs.close()
 
-random.shuffle(readIDs)
+filepaths = ['/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/commit620d798_trainingData_8features_bc8bc12_augmentation/trainingFiles',
+'/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/data_8features_bc08']
 
-#truncate reads
-readIDs = readIDs[0:maxReads]
-f_trainingReads = open(trainingReadLogPath,'w')
-for ri in readIDs:
-	f_trainingReads.write(ri+'\n')
-f_trainingReads.close()
+maxReads = [25000,
+50000]
 
-divideIndex = int(validationSplit*len(readIDs))
+trainPaths = []
+valPaths = []
+
+for index, directory in enumerate(filepaths):
+
+	allPaths = []
+	for fcount, fname in enumerate(os.listdir(directory)):
+		allPaths.append(directory + '/' + fname)
+		if fcount > maxReads[index]:
+			break
+
+	random.shuffle(allPaths)
+	divideIndex = int(validationSplit*len(allPaths))
+	trainPaths += allPaths[divideIndex+1:]
+	valPaths += allPaths[0:divideIndex]
+	
 
 #record the reads we're using for training and val
 f_trainingReads = open(trainingReadLogPath,'w')
-for ri in readIDs[divideIndex+1:]:
+for ri in trainPaths:
 	f_trainingReads.write(ri+'\n')
 f_trainingReads.close()
 
 f_valReads = open(valReadLogPath,'w')
-for ri in readIDs[0:divideIndex]:
+for ri in valPaths:
 	f_valReads.write(ri+'\n')
 f_valReads.close()
 
-partition = {'training':readIDs[divideIndex+1:], 'validation':readIDs[0:divideIndex]}
-'''
+partition = {'training':trainPaths, 'validation':valPaths}
+
 
 #uncommment to resume from a checkpoint
-
+'''
 val_readIDs = []
 f_readIDs = open(valReadLogPath,'r')
 for line in f_readIDs:
@@ -428,11 +473,12 @@ for line in f_readIDs:
 f_readIDs.close()
 
 partition = {'training':train_readIDs, 'validation':val_readIDs}
+'''
 
 labels = {}
 
 # Parameters
-params = {'dim': (maxLen,12),
+params = {'dim': (maxLen,8),
           'batch_size': 32,
           'n_classes': 1,
           'n_channels': 1,
@@ -445,7 +491,7 @@ validation_generator = DataGenerator(partition['validation'], labels, **params)
 #-------------------------------------------------
 #CNN architecture
 
-model = buildModel((None,12), 2)
+model = buildModel((None,8), 2)
 op = Adam(lr=0.0001, beta_1=0.9, beta_2=0.999, epsilon=None, decay=0.0, amsgrad=False)
 model.compile(optimizer=op, metrics=['accuracy'], loss='categorical_crossentropy', sample_weight_mode="temporal")
 print(model.summary())
@@ -453,7 +499,7 @@ plot_model(model, to_file='model.png')
 
 
 #uncomment to load weights from a trainign checkpoint
-model.load_weights(f_checkpoint)
+#model.load_weights(f_checkpoint)
 
 #callbacks
 es = EarlyStopping(monitor='val_loss', min_delta=0, patience=20, verbose=1, mode='auto', baseline=None, restore_best_weights=True)

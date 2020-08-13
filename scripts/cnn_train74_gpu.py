@@ -29,19 +29,17 @@ from scipy.stats import halfnorm
 
 tf.keras.backend.set_learning_phase(1)  # set inference phase
 
-#was 38
-
-folderPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/data_DNAscentTrainingData_highIns_noBrdUScaling_wellMixed_230k'
-logPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/trainingLog52pt4.csv'
-trainingReadLogPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/trainingReadsUsed52.txt'
-valReadLogPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/valReadsUsed52.txt'
-checkpointPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/checkpoints52pt4'
+folderPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/commit620d798_trainingData_8features'
+logPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/trainingLog74pt2.csv'
+trainingReadLogPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/trainingReadsUsed74.txt'
+valReadLogPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/valReadsUsed74.txt'
+checkpointPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/checkpoints74pt2'
 validationSplit = 0.2
 
-f_checkpoint = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/checkpoints52pt3/weights.03-0.40.h5'
+f_checkpoint = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/checkpoints74/weights.04-0.42.h5'
 
-maxLen = 3000
-maxReads = 230000
+maxLen = 4000
+maxReads = 200000
 
 #static params
 truePositive = 0.5
@@ -192,24 +190,24 @@ def buildModel(input_shape = (64, 64, 3), classes = 6):
 
     
     # Stage 1
-    X = Conv1D(128, 4, strides = 1, padding='same', name = 'conv1', kernel_initializer = glorot_uniform(seed=0))(X_input)
+    X = Conv1D(16, 4, strides = 1, padding='same', name = 'conv1', kernel_initializer = glorot_uniform(seed=0))(X_input)
     X = BatchNormalization(name = 'bn_conv1')(X)
     X = Activation('tanh')(X)
     #X = MaxPooling1D(4, strides=1, padding='same')(X)
 
     # Stage 2
-    X = convolutional_block(X, f = 4, filters = [128, 128, 128, 128, 128, 128], stage = 2, block='a', s = 1)
+    X = convolutional_block(X, f = 4, filters = [16, 16, 16, 16, 16, 16], stage = 2, block='a', s = 1)
     #X = identity_block(X, 4, [64, 64, 256], stage=2, block='b')
     #X = identity_block(X, 4, [64, 64, 256], stage=2, block='c')
 
     # Stage 3
-    X = convolutional_block(X, f=4, filters=[128, 128, 128, 128, 128, 128], stage=3, block='a', s=2)
+    X = convolutional_block(X, f=4, filters=[16, 16, 16, 16, 16, 16], stage=3, block='a', s=2)
     #X = identity_block(X, 4, [128, 128, 512], stage=3, block='b')
     #X = identity_block(X, 4, [128, 128, 512], stage=3, block='c')
     #X = identity_block(X, 4, [128, 128, 512], stage=3, block='d')
 
     # Stage 4
-    X = convolutional_block(X, f=8, filters=[256, 256, 256, 256, 256, 256], stage=4, block='a', s=2)
+    X = convolutional_block(X, f=8, filters=[32, 32, 32, 32, 32, 32], stage=4, block='a', s=2)
     #X = identity_block(X, 4, [256, 256, 1024], stage=4, block='b')
     #X = identity_block(X, 4, [256, 256, 1024], stage=4, block='c')
     #X = identity_block(X, 4, [256, 256, 1024], stage=4, block='d')
@@ -217,22 +215,22 @@ def buildModel(input_shape = (64, 64, 3), classes = 6):
     #X = identity_block(X, 4, [256, 256, 1024], stage=4, block='f')
 
     # Stage 5
-    X = convolutional_block(X, f=8, filters=[256, 256, 256, 256, 256, 256], stage=5, block='a', s=2)
+    X = convolutional_block(X, f=8, filters=[32, 32, 32, 32, 32, 32], stage=5, block='a', s=2)
     #X = identity_block(X, 4, [512, 512, 2048], stage=5, block='b')
     #X = identity_block(X, 4, [512, 512, 2048], stage=5, block='c')
 
     # Stage 6
-    X = convolutional_block(X, f=16, filters=[512, 512, 512, 512, 512, 512], stage=6, block='a', s=2)
+    X = convolutional_block(X, f=16, filters=[64, 64, 64, 64, 64, 64], stage=6, block='a', s=2)
 
-    X = Conv1D(128, 4, strides = 1, padding='same', name = 'conv2', kernel_initializer = glorot_uniform(seed=0))(X)
+    X = Conv1D(16, 4, strides = 1, padding='same', name = 'conv2', kernel_initializer = glorot_uniform(seed=0))(X)
     X = BatchNormalization(name = 'bn_conv2')(X)
     X = Activation('tanh')(X)
 
-    X = Conv1D(128, 4, strides = 1, padding='same', name = 'conv3', kernel_initializer = glorot_uniform(seed=0))(X)
+    X = Conv1D(16, 4, strides = 1, padding='same', name = 'conv3', kernel_initializer = glorot_uniform(seed=0))(X)
     X = BatchNormalization(name = 'bn_conv3')(X)
     X = Activation('tanh')(X)
 
-    X = Conv1D(128, 4, strides = 1, padding='same', name = 'conv4', kernel_initializer = glorot_uniform(seed=0))(X)
+    X = Conv1D(16, 4, strides = 1, padding='same', name = 'conv4', kernel_initializer = glorot_uniform(seed=0))(X)
 
     # Output layer
     #X = Flatten()(X)
@@ -266,13 +264,9 @@ def trainingReadToTensor(t):
 
 		#other features
 		oneHot.append(t.eventMean[i])
-		oneHot.append(t.eventStd[i])
-		oneHot.append(t.stutter[i])
-		oneHot.append(t.lengthMean[i])
-		oneHot.append(t.lengthStd[i])
+		oneHot.append(t.eventLength[i])
 		oneHot.append(t.modelMeans[i])
 		oneHot.append(t.modelStd[i])
-		oneHot.append(t.gaps[i])
 		oneSet.append(oneHot)
 
 	return np.array(oneSet)
@@ -383,7 +377,7 @@ class DataGenerator(Sequence):
 #uncomment to train from scratch
 '''
 readIDs = []
-f_readIDs = open('/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/data_DNAscentTrainingData_highIns_noBrdUScaling_wellMixed_230k.IDs','r')
+f_readIDs = open('/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/commit620d798_trainingData_8features.IDs','r')
 for line in f_readIDs:
 	readIDs.append(line.rstrip())
 f_readIDs.close()
@@ -432,7 +426,7 @@ partition = {'training':train_readIDs, 'validation':val_readIDs}
 labels = {}
 
 # Parameters
-params = {'dim': (maxLen,12),
+params = {'dim': (maxLen,8),
           'batch_size': 32,
           'n_classes': 1,
           'n_channels': 1,
@@ -445,7 +439,7 @@ validation_generator = DataGenerator(partition['validation'], labels, **params)
 #-------------------------------------------------
 #CNN architecture
 
-model = buildModel((None,12), 2)
+model = buildModel((None,8), 2)
 op = Adam(lr=0.0001, beta_1=0.9, beta_2=0.999, epsilon=None, decay=0.0, amsgrad=False)
 model.compile(optimizer=op, metrics=['accuracy'], loss='categorical_crossentropy', sample_weight_mode="temporal")
 print(model.summary())

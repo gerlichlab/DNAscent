@@ -38,7 +38,7 @@ Required arguments are:
   -o,--output               output prefix,
   -n,--maxReads             maximum number of reads to import from eventalign."""
 
-	print s
+	print(s)
 	exit(0)
 
 
@@ -173,14 +173,28 @@ for i, key in enumerate(sixmer2eventsBrdU):
 		#if we have enough events to train on after outlier detection
 		if len(outliers_filtered) > 50:
 
-			gmm = mixture.GMM(n_components=2, covariance_type='full')
+			gmm = mixture.GaussianMixture(n_components=2, covariance_type='full')
 			ar_filtered = np.array(outliers_filtered)
 			out = gmm.fit(ar_filtered.reshape(-1,1))
 
 			if abs(model[key][0] - out.means_[0]) < abs(model[key][0] - out.means_[1]):
-				f_out.write( key + '\t' + str(model[key][0]) + '\t' + str(model[key][1]) + '\t' + str(out.weights_[1]) + '\t' + str(out.means_[1][0]) + '\t' + str(math.sqrt(out.covars_[1])) + '\t' + str(out.weights_[0]) + '\t' + str(out.means_[0][0]) + '\t' + str(math.sqrt(out.covars_[0])) + '\t' + str(KLdivergence( out.means_[1][0], math.sqrt(out.covars_[1]), model[key][0], model[key][1] ) ) + '\n')
+				f_out.write( key + '\t' + str(model[key][0]) + '\t' + str(model[key][1]) + '\t' + str(out.weights_[1]) + '\t' + str(out.means_[1][0]) + '\t' + str(math.sqrt(out.covariances_[1])) + '\t' + str(out.weights_[0]) + '\t' + str(out.means_[0][0]) + '\t' + str(math.sqrt(out.covariances_[0])) + '\t' + str(KLdivergence( out.means_[1][0], math.sqrt(out.covariances_[1]), model[key][0], model[key][1] ) ) + '\n')
 			else:
-				f_out.write( key + '\t' + str(model[key][0]) + '\t' + str(model[key][1]) + '\t' + str(out.weights_[0]) + '\t' + str(out.means_[0][0]) + '\t' + str(math.sqrt(out.covars_[0])) + '\t' + str(out.weights_[1]) + '\t' + str(out.means_[1][0]) + '\t' + str(math.sqrt(out.covars_[1])) + '\t' + str(KLdivergence( out.means_[0][0], math.sqrt(out.covars_[0]), model[key][0], model[key][1] ) ) + '\n')
+				f_out.write( key + '\t' + str(model[key][0]) + '\t' + str(model[key][1]) + '\t' + str(out.weights_[0]) + '\t' + str(out.means_[0][0]) + '\t' + str(math.sqrt(out.covariances_[0])) + '\t' + str(out.weights_[1]) + '\t' + str(out.means_[1][0]) + '\t' + str(math.sqrt(out.covariances_[1])) + '\t' + str(KLdivergence( out.means_[0][0], math.sqrt(out.covariances_[0]), model[key][0], model[key][1] ) ) + '\n')
+
+
+		plt.figure()
+		plt.hist(outliers_filtered,50,density=True,label='events')
+		mu1 = out.means_[0][0]
+		sigma1 = out.covariances_[0]
+		mu2 = out.means_[1][0]
+		sigma2 = out.covariances_[0]
+		x = np.linspace(mu1 - 3*sigma1, mu1 + 3*sigma1, 100).reshape(100,1)
+		plt.plot(x, stats.norm.pdf(x, mu1, sigma1))
+		x = np.linspace(mu2 - 3*sigma2, mu2 + 3*sigma2, 100).reshape(100,1)
+		plt.plot(x, stats.norm.pdf(x, mu2, sigma2))
+		plt.savefig('/home/mb915/rds/rds-mb915-notbackedup/data/2020_07_09_CAM_ONT_YVL11_80EdU/model_plots/'+key+'.png')
+		plt.close()
 
 f_out.close()
 

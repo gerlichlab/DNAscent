@@ -31,23 +31,24 @@ tf.keras.backend.set_learning_phase(1)  # set inference phase
 
 #was 38
 
-folderPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/data_DNAscentTrainingData_highIns_noBrdUScaling_wellMixed_230k'
-logPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/trainingLog52pt4.csv'
-trainingReadLogPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/trainingReadsUsed52.txt'
-valReadLogPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/valReadsUsed52.txt'
-checkpointPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/checkpoints52pt4'
+folderPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/data_DNAscentTrainingData_highIns_noBrdUScaling'
+logPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/trainingLog64pt2.csv'
+trainingReadLogPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/trainingReadsUsed64.txt'
+valReadLogPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/valReadsUsed64.txt'
+checkpointPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/checkpoints64pt2'
 validationSplit = 0.2
 
-f_checkpoint = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/checkpoints52pt3/weights.03-0.40.h5'
+f_checkpoint = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/checkpoints64/weights.09-0.44.h5'
 
 maxLen = 3000
-maxReads = 230000
+maxReads = 100000
 
 #static params
 truePositive = 0.5
 trueNegative = 0.9
 falsePositive = 1. - trueNegative
 llThreshold = 1.25
+
 
 
 #-------------------------------------------------
@@ -110,12 +111,12 @@ def identity_block(X, f, filters, stage, block):
     # First component of main path
     X = SeparableConv1D(filters = F1, kernel_size = f, strides = 1, padding = 'same', name = conv_name_base + '2a', kernel_initializer = glorot_uniform(seed=0))(X)
     X = BatchNormalization(name = bn_name_base + '2a')(X)
-    X = Activation('tanh')(X)
+    X = Activation('relu')(X)
     
     # Second component of main path
     X = SeparableConv1D(filters = F2, kernel_size = f, strides = 1, padding = 'same', name = conv_name_base + '2b', kernel_initializer = glorot_uniform(seed=0))(X)
     X = BatchNormalization(name = bn_name_base + '2b')(X)
-    X = Activation('tanh')(X)
+    X = Activation('relu')(X)
 
     # Third component of main path 
     X = SeparableConv1D(filters = F3, kernel_size = f, strides = 1, padding = 'same', name = conv_name_base + '2c', kernel_initializer = glorot_uniform(seed=0))(X)
@@ -123,7 +124,7 @@ def identity_block(X, f, filters, stage, block):
 
     # Final step: Add shortcut value to main path, and pass it through a RELU activation
     X = Add()([X, X_shortcut])
-    X = Activation('tanh')(X)
+    X = Activation('relu')(X)
     
     return X
 
@@ -146,27 +147,27 @@ def convolutional_block(X, f, filters, stage, block, s=1):
     # First component of main path 
     X = SeparableConv1D(filters=F1, kernel_size=f, strides=1, padding='same', name=conv_name_base + '2a', kernel_initializer=glorot_uniform(seed=0))(X)
     X = BatchNormalization(name=bn_name_base + '2a')(X)
-    X = Activation('tanh')(X)
+    X = Activation('relu')(X)
 
     # Second component of main path
     X = SeparableConv1D(filters=F2, kernel_size=f, strides=1, padding='same', name=conv_name_base + '2b', kernel_initializer=glorot_uniform(seed=0))(X)
     X = BatchNormalization(name=bn_name_base + '2b')(X)
-    X = Activation('tanh')(X)
+    X = Activation('relu')(X)
 
     # Third component of main path
     X = SeparableConv1D(filters=F3, kernel_size=f, strides=1, padding='same', name=conv_name_base + '2c', kernel_initializer=glorot_uniform(seed=0))(X)
     X = BatchNormalization(name=bn_name_base + '2c')(X)
-    X = Activation('tanh')(X)
+    X = Activation('relu')(X)
 
     # Fourth component of main path
     X = SeparableConv1D(filters=F4, kernel_size=f, strides=1, padding='same', name=conv_name_base + '2d', kernel_initializer=glorot_uniform(seed=0))(X)
     X = BatchNormalization(name=bn_name_base + '2d')(X)
-    X = Activation('tanh')(X)
+    X = Activation('relu')(X)
 
     # Fifth component of main path
     X = SeparableConv1D(filters=F5, kernel_size=f, strides=1, padding='same', name=conv_name_base + '2e', kernel_initializer=glorot_uniform(seed=0))(X)
     X = BatchNormalization(name=bn_name_base + '2e')(X)
-    X = Activation('tanh')(X)
+    X = Activation('relu')(X)
 
     # Sixth component of main path
     X = SeparableConv1D(filters=F6, kernel_size=f, strides=1, padding='same', name=conv_name_base + '2f', kernel_initializer=glorot_uniform(seed=0))(X)
@@ -178,7 +179,7 @@ def convolutional_block(X, f, filters, stage, block, s=1):
 
     # Final step: Add shortcut value to main path, and pass it through a RELU activation
     X = Add()([X, X_shortcut])
-    X = Activation('tanh')(X)
+    X = Activation('relu')(X)
 
     return X
 
@@ -192,24 +193,24 @@ def buildModel(input_shape = (64, 64, 3), classes = 6):
 
     
     # Stage 1
-    X = Conv1D(128, 4, strides = 1, padding='same', name = 'conv1', kernel_initializer = glorot_uniform(seed=0))(X_input)
+    X = Conv1D(8, 4, strides = 1, padding='same', name = 'conv1', kernel_initializer = glorot_uniform(seed=0))(X_input)
     X = BatchNormalization(name = 'bn_conv1')(X)
-    X = Activation('tanh')(X)
+    X = Activation('relu')(X)
     #X = MaxPooling1D(4, strides=1, padding='same')(X)
 
     # Stage 2
-    X = convolutional_block(X, f = 4, filters = [128, 128, 128, 128, 128, 128], stage = 2, block='a', s = 1)
+    X = convolutional_block(X, f = 4, filters = [8, 8, 8, 8, 8, 8], stage = 2, block='a', s = 1)
     #X = identity_block(X, 4, [64, 64, 256], stage=2, block='b')
     #X = identity_block(X, 4, [64, 64, 256], stage=2, block='c')
 
     # Stage 3
-    X = convolutional_block(X, f=4, filters=[128, 128, 128, 128, 128, 128], stage=3, block='a', s=2)
+    X = convolutional_block(X, f=4, filters=[8, 8, 8, 8, 8, 8], stage=3, block='a', s=2)
     #X = identity_block(X, 4, [128, 128, 512], stage=3, block='b')
     #X = identity_block(X, 4, [128, 128, 512], stage=3, block='c')
     #X = identity_block(X, 4, [128, 128, 512], stage=3, block='d')
 
     # Stage 4
-    X = convolutional_block(X, f=8, filters=[256, 256, 256, 256, 256, 256], stage=4, block='a', s=2)
+    X = convolutional_block(X, f=8, filters=[16, 16, 16, 16, 16, 16], stage=4, block='a', s=2)
     #X = identity_block(X, 4, [256, 256, 1024], stage=4, block='b')
     #X = identity_block(X, 4, [256, 256, 1024], stage=4, block='c')
     #X = identity_block(X, 4, [256, 256, 1024], stage=4, block='d')
@@ -217,22 +218,22 @@ def buildModel(input_shape = (64, 64, 3), classes = 6):
     #X = identity_block(X, 4, [256, 256, 1024], stage=4, block='f')
 
     # Stage 5
-    X = convolutional_block(X, f=8, filters=[256, 256, 256, 256, 256, 256], stage=5, block='a', s=2)
+    X = convolutional_block(X, f=8, filters=[16, 16, 16, 16, 16, 16], stage=5, block='a', s=2)
     #X = identity_block(X, 4, [512, 512, 2048], stage=5, block='b')
     #X = identity_block(X, 4, [512, 512, 2048], stage=5, block='c')
 
     # Stage 6
-    X = convolutional_block(X, f=16, filters=[512, 512, 512, 512, 512, 512], stage=6, block='a', s=2)
+    X = convolutional_block(X, f=16, filters=[32, 32, 32, 32, 32, 32], stage=6, block='a', s=2)
 
-    X = Conv1D(128, 4, strides = 1, padding='same', name = 'conv2', kernel_initializer = glorot_uniform(seed=0))(X)
+    X = Conv1D(8, 4, strides = 1, padding='same', name = 'conv2', kernel_initializer = glorot_uniform(seed=0))(X)
     X = BatchNormalization(name = 'bn_conv2')(X)
-    X = Activation('tanh')(X)
+    X = Activation('relu')(X)
 
-    X = Conv1D(128, 4, strides = 1, padding='same', name = 'conv3', kernel_initializer = glorot_uniform(seed=0))(X)
+    X = Conv1D(8, 4, strides = 1, padding='same', name = 'conv3', kernel_initializer = glorot_uniform(seed=0))(X)
     X = BatchNormalization(name = 'bn_conv3')(X)
-    X = Activation('tanh')(X)
+    X = Activation('relu')(X)
 
-    X = Conv1D(128, 4, strides = 1, padding='same', name = 'conv4', kernel_initializer = glorot_uniform(seed=0))(X)
+    X = Conv1D(8, 4, strides = 1, padding='same', name = 'conv4', kernel_initializer = glorot_uniform(seed=0))(X)
 
     # Output layer
     #X = Flatten()(X)
@@ -243,7 +244,6 @@ def buildModel(input_shape = (64, 64, 3), classes = 6):
     model = Model(inputs = X_input, outputs = X, name='BrdUDetect')
 
     return model
-
 
 
 #-------------------------------------------------
@@ -383,7 +383,7 @@ class DataGenerator(Sequence):
 #uncomment to train from scratch
 '''
 readIDs = []
-f_readIDs = open('/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/data_DNAscentTrainingData_highIns_noBrdUScaling_wellMixed_230k.IDs','r')
+f_readIDs = open('/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/data_DNAscentTrainingData_highIns_noBrdUScaling.IDs','r')
 for line in f_readIDs:
 	readIDs.append(line.rstrip())
 f_readIDs.close()
@@ -412,9 +412,7 @@ f_valReads.close()
 
 partition = {'training':readIDs[divideIndex+1:], 'validation':readIDs[0:divideIndex]}
 '''
-
 #uncommment to resume from a checkpoint
-
 val_readIDs = []
 f_readIDs = open(valReadLogPath,'r')
 for line in f_readIDs:
