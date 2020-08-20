@@ -221,8 +221,8 @@ std::vector< double > gaussianMixtureEM_PRIOR( double pi, double mu1, double sig
 		}
 
 		/*re-estimate pi */
-		//pi1 = Nk1 / (double) data.size();
-		//pi2 = Nk2 / (double) data.size();
+		pi1 = Nk1 / (double) data.size();
+		pi2 = Nk2 / (double) data.size();
 
 		/*re-estimate mu */
 		total1 = 0;

@@ -22,7 +22,7 @@
 #include <memory>
 #include <utility>
 
-#define NFEATURES 12
+#define NFEATURES 8
 
 
 class AlignedPosition{
@@ -70,15 +70,10 @@ class AlignedPosition{
 			//events
 			double eventMean = vectorMean(events);
 			feature.push_back(eventMean);
-			feature.push_back(vectorStdv(events, eventMean));
-
-			//stutter
-			feature.push_back((double)events.size());
 
 			//event lengths
-			double lengthsMean = vectorMean(lengths);
-			feature.push_back(lengthsMean);
-			feature.push_back(vectorStdv(lengths, lengthsMean));
+			double lengthsSum = vectorSum(lengths);
+			feature.push_back(lengthsSum);
 
 			//pore model
 			std::pair<double,double> meanStd = thymidineModel[sixMer2index(sixMer)];
@@ -154,12 +149,7 @@ class AlignedRead{
 
 				for (auto p = positions.begin(); p != positions.end(); p++){
 
-					//sort out gaps
-					double gap = 0.0;
-					if (p != positions.begin()) gap = (p -> first) - (std::prev(p) -> first);
-
 					std::vector<double> feature = (p -> second) -> makeFeature();
-					feature.push_back(gap);
 					tensor.insert(tensor.end(), feature.begin(), feature.end());
 				}
 			}
@@ -167,12 +157,7 @@ class AlignedRead{
 
 				for (auto p = positions.rbegin(); p != positions.rend(); p++){
 
-					//sort out gaps
-					double gap = 0.0;
-					if (p != positions.rbegin()) gap =  (std::prev(p) -> first) - (p -> first);
-
 					std::vector<double> feature = (p -> second) -> makeFeature();
-					feature.push_back(gap);
 					tensor.insert(tensor.end(), feature.begin(), feature.end());
 				}
 			}
