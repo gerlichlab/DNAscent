@@ -30,13 +30,13 @@ from scipy.stats import halfnorm
 tf.keras.backend.set_learning_phase(1)  # set inference phase
 
 folderPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/commit620d798_trainingData_8features_bc8bc12_augmentation/trainingFiles'
-logPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/trainingLog112pt4.csv'
-trainingReadLogPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/trainingReadsUsed112.txt'
-valReadLogPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/valReadsUsed112.txt'
-checkpointPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/checkpoints112pt4'
+logPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/trainingLog120pt2.csv'
+trainingReadLogPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/trainingReadsUsed118.txt'
+valReadLogPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/valReadsUsed118.txt'
+checkpointPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/checkpoints120pt2'
 validationSplit = 0.2
 
-f_checkpoint = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/checkpoints112pt3/weights.10-0.19.h5'
+f_checkpoint = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/checkpoints120/weights.12-0.44.h5'
 
 maxLen = 4000
 
@@ -276,7 +276,14 @@ def trainingReadToTensor(t):
 def trainingReadToLabel(t):
 	label =[]
 
-	if t.analogueConc != -1: #not a data augmented read
+	if t.analogueConc == 0.:
+		for s in t.logLikelihood:
+			if s == '-':
+				label.append([1., 0.])
+			else:
+				label.append([0.99, 0.01])
+
+	elif t.analogueConc != -1: #not a data augmented read
 		for s in t.logLikelihood:
 			if s == '-':
 				label.append([1., 0.])
@@ -307,7 +314,7 @@ def trainingReadToLabel(t):
 						l = ((1-truePositive)*tempAnalogueConc)/((1-truePositive)*tempAnalogueConc + (1-falsePositive)*(1-tempAnalogueConc))
 						label.append([1.-l,l])
 				else:
-					label.append([1., 0.])
+					label.append([0.99, 0.01])
 
 	return np.array(label)
 
@@ -316,14 +323,14 @@ def trainingReadToLabel(t):
 #
 def trainingReadToWeights(t):
 
-	weightOnBrdU = 10.
+	weightOnBrdU = 20.
 
 	weights =[]
 
 	#weight augmented data more because we have less of it
 	scaling = 1.
-	#if t.analogueConc == -1:
-	#	scaling = 2.
+	if t.analogueConc == -1:
+		scaling = 2.
 
 	#weight thymidine positions 3x more than A,C,G positions
 	#also underweight positions where the DNAscent HMM aborted making a call
@@ -422,14 +429,12 @@ class DataGenerator(Sequence):
 #uncomment to train from scratch
 
 filepaths = ['/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/commit620d798_trainingData_8features_bc8bc12_augmentation/trainingFiles',
-'/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/commit620d798_trainingData_8features_bc8bc12_augmentation/trainingFiles_gap5',
-'/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/commit620d798_trainingData_8features_bc8bc12_augmentation/trainingFiles_gap15',
-'/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/data_8features_bc08']
+'/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/data_8features_bc08',
+'/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/data_8features_bc12']
 
-maxReads = [25000,
-25000,
-25000,
-50000]
+maxReads = [20000,
+40000,
+40000]
 '''
 trainPaths = []
 valPaths = []
@@ -496,7 +501,7 @@ validation_generator = DataGenerator(partition['validation'], labels, **params)
 #CNN architecture
 
 model = buildModel((None,8), 2)
-op = Adam(lr=0.0001, beta_1=0.9, beta_2=0.999, epsilon=None, decay=0.0, amsgrad=False)
+op = Adam(lr=0.001, beta_1=0.9, beta_2=0.999, epsilon=None, decay=0.0, amsgrad=False)
 model.compile(optimizer=op, metrics=['accuracy'], loss='categorical_crossentropy', sample_weight_mode="temporal")
 print(model.summary())
 plot_model(model, to_file='model.png')

@@ -6,32 +6,58 @@ import numpy as np
 np.set_printoptions(threshold=sys.maxsize)
 import sys
 
-maxReads = 5000
+maxReads = 1000
 cooldownThreshold = 0
 
 
 Tprefix = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/barcode08/'
 Bprefix = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/barcode11/'
 
+Tprefix = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/barcode08/'
+B10prefix = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/barcode10/'
+B11prefix = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/barcode11/'
+B12prefix = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/barcode12/'
+'''
+Thyrien = '/home/mb915/rds/rds-mb915-notbackedup/data/hyrienLab/BTF_AS_ONT_1_FAH58492_A_fast5/'
+B1hyrien = '/home/mb915/rds/rds-mb915-notbackedup/data/hyrienLab/BTF_BM_ONT_1_FAK06634_A_fast5/'
+B2hyrien = '/home/mb915/rds/rds-mb915-notbackedup/data/hyrienLab/BTF_BN_ONT_1_FAK06596_A_fast5/'
+B3hyrien = '/home/mb915/rds/rds-mb915-notbackedup/data/hyrienLab/BTF_BB_ONT_1_FAH58543_A_fast5/'
 
-fn_Thym = [Tprefix+'commit4cf80a7.ROC.build95_epoch13.detect',
-Tprefix+'commit4cf80a7.ROC.build95_pt2ep10.detect',
-Tprefix+'commit4cf80a7.ROC.build95_pt2ep17.detect',
-Tprefix+'commit4cf80a7.ROC.build95_pt3ep4.detect',
-Tprefix+'commit4cf80a7.ROC.build95_pt3ep7.detect']
+fn_Thym = [Tprefix+'commit4cf80a7.ROC.build121_pt2ep1.q20.detect',
+Tprefix+'commit4cf80a7.ROC.build121_pt2ep1.q20.detect',
+Tprefix+'commit4cf80a7.ROC.build121_pt2ep1.q20.detect',
+Thyrien+'commit4cf80a7.ROC.build121_pt2ep1.q20.detect',
+Thyrien+'commit4cf80a7.ROC.build121_pt2ep1.q20.detect',
+Thyrien+'commit4cf80a7.ROC.build121_pt2ep1.q20.detect']
 
-fn_BrdU = [Bprefix+'commit4cf80a7.ROC.build95_epoch13.detect',
-Bprefix+'commit4cf80a7.ROC.build95_pt2ep10.detect',
-Bprefix+'commit4cf80a7.ROC.build95_pt2ep17.detect',
-Bprefix+'commit4cf80a7.ROC.build95_pt3ep4.detect',
-Bprefix+'commit4cf80a7.ROC.build95_pt3ep7.detect']
 
-labels = ['build95 (13 epochs)',
-'build95 (pt2, 10 epochs)',
-'build95 (pt2, 17 epochs)',
-'build95 (pt3, 4 epochs)',
-'build95 (pt3, 7 epochs)']
+fn_BrdU = [B10prefix+'commit4cf80a7.ROC.build121_pt2ep1.q20.detect',
+B11prefix+'commit4cf80a7.ROC.build121_pt2ep1.q20.detect',
+B12prefix+'commit4cf80a7.ROC.build121_pt2ep1.q20.detect',
+B1hyrien+'commit4cf80a7.ROC.build121_pt2ep1.q20.detect',
+B2hyrien+'commit4cf80a7.ROC.build121_pt2ep1.q20.detect',
+B3hyrien+'commit4cf80a7.ROC.build121_pt2ep1.q20.detect']
 
+labels = ['build121 pt2,ep1 (Barcode 10)',
+'build121 pt2,ep1 (Barcode 11)',
+'build121 pt2,ep1 (Barcode 12)',
+'build121 pt2,ep1 (Hyrien 9%)',
+'build121 pt2,ep1 (Hyrien 38%)',
+'build121 pt2,ep1 (Hyrien 69%)']
+'''
+
+fn_Thym = [Tprefix+'test.detect',
+Tprefix+'test.detect',
+Tprefix+'test.detect']
+
+
+fn_BrdU = [B10prefix+'test.detect',
+B11prefix+'test.detect',
+B12prefix+'test.detect']
+
+labels = ['build121 pt2,ep1 (Barcode 10)',
+'build121 pt2,ep1 (Barcode 11)',
+'build121 pt2,ep1 (Barcode 12)']
 
 probTests = np.array(range(1,10))/10.
 
@@ -268,7 +294,6 @@ for i in range(0,len(fn_BrdU)):
 		ax.annotate(str(txt),(x[p],y[p]),fontsize=6)
 
 #CNN END
-'''
 
 #DO FOR HMM
 fn_BrdU = [Bprefix+'commit2d622cc1_HMM.detect', Bprefix+'v0.1.barcode08.detect']
@@ -365,15 +390,15 @@ for i in range(0,len(fn_BrdU)):
 	plt.plot(x[::-1], y[::-1], label=labels[i])
 	for p,txt in enumerate(probTests):
 		ax.annotate(str(txt),(x[p],y[p]),fontsize=6)
-'''
+
 plt.legend(framealpha=0.5)
 plt.xlim(0,1.0)
 plt.xlabel('False Positive Rate')
 plt.ylabel('Calls/Attempts')
 plt.ylim(0,1)
-plt.savefig('roc_curves95.pdf')
+plt.savefig('test.pdf')
 plt.xlim(0,0.2)
-plt.savefig('roc_curves_zoom95.pdf')
+plt.savefig('test_zoom.pdf')
 plt.xlim(0,0.01)
-plt.savefig('roc_curves_zoomExtreme95.pdf')
+plt.savefig('test_zoomExtreme.pdf')
 plt.close()

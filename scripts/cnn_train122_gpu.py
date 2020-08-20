@@ -30,13 +30,13 @@ from scipy.stats import halfnorm
 tf.keras.backend.set_learning_phase(1)  # set inference phase
 
 folderPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/commit620d798_trainingData_8features_bc8bc12_augmentation/trainingFiles'
-logPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/trainingLog112pt4.csv'
+logPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/trainingLog122pt3.csv'
 trainingReadLogPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/trainingReadsUsed112.txt'
 valReadLogPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/valReadsUsed112.txt'
-checkpointPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/checkpoints112pt4'
+checkpointPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/checkpoints122pt3'
 validationSplit = 0.2
 
-f_checkpoint = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/checkpoints112pt3/weights.10-0.19.h5'
+f_checkpoint = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/checkpoints122pt2/weights.08-0.33.h5'
 
 maxLen = 4000
 
@@ -276,7 +276,14 @@ def trainingReadToTensor(t):
 def trainingReadToLabel(t):
 	label =[]
 
-	if t.analogueConc != -1: #not a data augmented read
+	if t.analogueConc == 0.:
+		for s in t.logLikelihood:
+			if s == '-':
+				label.append([1., 0.])
+			else:
+				label.append([0.99, 0.01])
+
+	elif t.analogueConc != -1: #not a data augmented read
 		for s in t.logLikelihood:
 			if s == '-':
 				label.append([1., 0.])
@@ -307,7 +314,7 @@ def trainingReadToLabel(t):
 						l = ((1-truePositive)*tempAnalogueConc)/((1-truePositive)*tempAnalogueConc + (1-falsePositive)*(1-tempAnalogueConc))
 						label.append([1.-l,l])
 				else:
-					label.append([1., 0.])
+					label.append([0.99, 0.01])
 
 	return np.array(label)
 
@@ -316,7 +323,7 @@ def trainingReadToLabel(t):
 #
 def trainingReadToWeights(t):
 
-	weightOnBrdU = 10.
+	weightOnBrdU = 20.
 
 	weights =[]
 

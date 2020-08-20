@@ -10,7 +10,7 @@ import random
 
 folderPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/commit620d798_trainingData_8features_bc8bc12_augmentation'
 
-trainingFilesFolderPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/commit620d798_trainingData_8features_bc8bc12_augmentation/trainingFiles_gap5'
+trainingFilesFolderPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/commit620d798_trainingData_8features_bc8bc12_augmentation/trainingFiles_gap2'
 
 bc08dnascent = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/barcode08/commit620d798_l_4000_q_20.barcode08.trainingData'
 bc12dnascent = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/barcode12/commit620d798_l_4000_q_20.trainingData'
@@ -75,7 +75,7 @@ class trainingRead:
 		for i in range(0, len(read_positions)-12):
 
 			#look ahead			
-			if read_sixMers[i+5][0] == 'T' and random.choice(range(0,5)) == 0:
+			if read_sixMers[i+5][0] == 'T' and random.choice(range(0,2)) == 0:
 
 				#make sure all the reference positions are defined
 				noDels = True

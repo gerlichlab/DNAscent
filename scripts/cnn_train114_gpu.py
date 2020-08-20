@@ -29,13 +29,13 @@ from scipy.stats import halfnorm
 
 tf.keras.backend.set_learning_phase(1)  # set inference phase
 
-logPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/trainingLog114.csv'
+logPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/trainingLog114pt2.csv'
 trainingReadLogPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/trainingReadsUsed114.txt'
 valReadLogPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/valReadsUsed114.txt'
-checkpointPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/checkpoints114'
+checkpointPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/checkpoints114pt2'
 validationSplit = 0.2
 
-f_checkpoint = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/checkpoints95pt2/weights.17-0.23.h5'
+f_checkpoint = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/checkpoints114/weights.16-0.21.h5'
 
 maxLen = 4000
 
@@ -427,7 +427,7 @@ filepaths = ['/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA
 
 maxReads = [25000,
 50000]
-
+'''
 trainPaths = []
 valPaths = []
 
@@ -457,10 +457,10 @@ for ri in valPaths:
 f_valReads.close()
 
 partition = {'training':trainPaths, 'validation':valPaths}
-
+'''
 
 #uncommment to resume from a checkpoint
-'''
+
 val_readIDs = []
 f_readIDs = open(valReadLogPath,'r')
 for line in f_readIDs:
@@ -474,7 +474,7 @@ for line in f_readIDs:
 f_readIDs.close()
 
 partition = {'training':train_readIDs, 'validation':val_readIDs}
-'''
+
 
 labels = {}
 
@@ -500,7 +500,7 @@ plot_model(model, to_file='model.png')
 
 
 #uncomment to load weights from a trainign checkpoint
-#model.load_weights(f_checkpoint)
+model.load_weights(f_checkpoint)
 
 #callbacks
 es = EarlyStopping(monitor='val_loss', min_delta=0, patience=20, verbose=1, mode='auto', baseline=None, restore_best_weights=True)
