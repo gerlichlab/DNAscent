@@ -24,8 +24,6 @@ class DetectedRead{
 		std::string readID, chromosome, strand, header;
 		int mappingLower, mappingUpper;
 		std::vector<std::vector<float>> probabilities;
-		std::vector<float> probability_saturated;
-		std::vector<std::pair<int,int>> stalls;
 		std::vector<std::pair<int,int>> origins;
 		std::vector<std::pair<int,int>> terminations;
 		std::vector<float> tensorInput;
@@ -39,29 +37,8 @@ class DetectedRead{
 		}
 		void generateInput(void){
 
-			std::vector<std::pair<float,float>> strandPairs;
-			for (size_t i = 0; i < positions.size(); i++){
-				if (strand == "fwd"){
-					strandPairs.push_back(std::make_pair(1.0,0.0));
-				}
-				else if (strand == "rev"){
-					strandPairs.push_back(std::make_pair(0.0,1.0));
-				}
-				else throw BadStrandDirection();
-			}
-
-			std::vector<float> gaps;
-			gaps.push_back(0);
-			for (size_t i = 1; i < positions.size(); i++){
-
-				gaps.push_back(positions[i] - positions[i-1]);
-			}
-
 			for (size_t i = 0; i < positions.size(); i++){
 				tensorInput.push_back(brduCalls[i]);
-				//tensorInput.push_back(gaps[i]);
-				//tensorInput.push_back(strandPairs[i].first);
-				//tensorInput.push_back(strandPairs[i].second);
 			}
 		}
 };

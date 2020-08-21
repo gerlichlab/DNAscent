@@ -345,60 +345,28 @@ std::vector< double > gaussianMixtureEM( double mu1, double sigma1, double mu2, 
 }
 
 
-//https://stackoverflow.com/questions/843154/fastest-way-to-find-the-number-of-lines-in-a-text-c
-unsigned int FileRead( std::istream &is, std::vector<char> &buff ){
-	is.read( &buff[0], buff.size() );
-	return is.gcount();
-}
+void printAllKLengthRec(char set[], std::string prefix, int n, int k, std::vector<std::string> &out){
 
-//https://stackoverflow.com/questions/843154/fastest-way-to-find-the-number-of-lines-in-a-text-c
-unsigned int CountLines( const std::vector<char> &buff, int sz ){
-	int newlines = 0;
-	const char * p = &buff[0];
-	for ( int i = 0; i < sz; i++ ){
-		if ( p[i] == '\n' ){
-			newlines++;
-		}
+	//base case
+	if (k == 0){
+		out.push_back(prefix);
+		return;
 	}
-	return newlines;
+
+	//recursion 
+	for (int i = 0; i < n; i++){
+
+		std::string newPrefix;
+		newPrefix = prefix + set[i];
+		printAllKLengthRec(set, newPrefix, n, k - 1, out);
+	}
 }
 
 
-void printAllKLengthRec(char set[], std::string prefix,
-                                    int n, int k, std::vector<std::string> &out)
-{
-
-    // Base case: k is 0,
-    // print prefix
-    if (k == 0)
-    {
-        out.push_back(prefix);
-        return;
-    }
-
-    // One by one add all characters
-    // from set and recursively
-    // call for k equals to k-1
-    for (int i = 0; i < n; i++)
-    {
-        std::string newPrefix;
-
-        // Next character of input added
-        newPrefix = prefix + set[i];
-
-        // k is decreased, because
-        // we have added a new character
-        printAllKLengthRec(set, newPrefix, n, k - 1, out);
-    }
-
+void printAllKLength(char set[], int k,int n, std::vector<std::string> &out){
+    
+	printAllKLengthRec(set, "", n, k, out);
 }
-
-void printAllKLength(char set[], int k,int n, std::vector<std::string> &out)
-{
-    printAllKLengthRec(set, "", n, k, out);
-
-}
-
 
 
 int train_main( int argc, char** argv ){
@@ -416,10 +384,10 @@ int train_main( int argc, char** argv ){
 	int prog, failed;
 
 	/*fudge for openmp */
-    char set1[] = {'A', 'T', 'G', 'C'};
-    int k = 6;
-    std::vector<std::string> allSixMers;
-    printAllKLength(set1, k, 4, allSixMers);
+	char set1[] = {'A', 'T', 'G', 'C'};
+	int k = 6;
+	std::vector<std::string> allSixMers;
+	printAllKLength(set1, k, 4, allSixMers);
 	std::map< int, std::string > intToSixmer;
 	std::map< std::string, int > sixmerToInt;
 	int index = 0;
@@ -430,21 +398,8 @@ int train_main( int argc, char** argv ){
 		index++;
 	}
 
-
 	std::vector< std::vector< double > > importedEvents( 4096 );
 
-	/*
-	//https://stackoverflow.com/questions/843154/fastest-way-to-find-the-number-of-lines-in-a-text-c
-  	std::ifstream inFile(trainArgs.eventalignFilename); 
-	const int SZ = 1024 * 1024;
-        std::vector <char> buff( SZ );
-        int lineCount = 0;
-        while( int cc = FileRead( inFile, buff ) ) {
-            lineCount += CountLines( buff, cc );
-        }
-	inFile.close();
-	progressBar pb_read( lineCount, true );
-	*/
 	progressBar pb_read( trainArgs.maxReads, true );
 	unsigned int readsRead = 0;
 
@@ -459,9 +414,9 @@ int train_main( int argc, char** argv ){
 
 		if ( line.substr(0,1) == ">" ){
 
-				readsRead++;
-				pb_read.displayProgress( readsRead, 0, 0 );
-				continue;
+			readsRead++;
+			pb_read.displayProgress( readsRead, 0, 0 );
+			continue;
 		}
 
 		std::istringstream ss( line );

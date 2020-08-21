@@ -3,29 +3,33 @@
 Visualisation
 ===============================
 
-Development was done using gcc 5.4.0 on an Ubuntu 16.04 platform. While installation on other platforms is possible, Ubuntu is the platform that is recommended and supported.
+DNAscent supports multilevel analysis: We want users to be able to see the fork calls made by ``DNAscent forkSense`` and visualise them alongside individual base-pair resolution BrdU calls by ``DNAscent detect`` in order to see why these calls are being made.  To that end, we include a visualisation utility in ``DNAscent/utils`` that formats the output of DNAscent executables (detect, regions, and forkSense) into bedgraphs that can be visualised with IGV or the UCSC Genome Browser. You can supply this utility with the output from one, two, or all three of these executables.  If more than one is specified, the utility organises the bedgraphs so that the tracks for each read are grouped together.  
 
-Clone the DNAscent repository with the recursive flag so that the dependencies are cloned as well.
-
-.. code-block:: console
-
-   git clone --recursive https://github.com/MBoemo/DNAscent.git
-
-The DNAscent directory will appear in your current directory. Compile the software by running:
+Usage
+-----
 
 .. code-block:: console
 
-   cd DNAscent
-   make
+   dnascent2bedgraph.py: Converts the output of DNAscent detect, regions, and forkSense into bedgraphs.
+   To run dnascent2bedgraph.py, do:
+     python dnascent2bedgraph.py [arguments]
+   Example:
+     python dnascent2bedgraph.py -d /path/to/dnascentDetect.out -f /path/to/dnascentForksense.out -o /path/to/newBedgraphDir -n 1000 --minLength 10000
+   Required arguments are at least one of the following:
+     -d,--detect               path to DNAscent detect output file,
+     -f,--forkSense            path to DNAscent forkSense output file,
+     -r,--regions              path to DNAscent regions output file.
+   Required argument is:
+     -o,--output               output directory which will be created.
+   Optional arguments are:
+        --minLength            only convert reads with specified minimum read length (in base pairs) into bedgraphs (default: 1),
+        --maxLength            only convert reads with specified maximum read length (in base pairs) into bedgraphs (default: Inf),
+     -n,--maxReads             maximum number of reads to convert into bedgraphs (default: Inf),
+        --filesPerDir          maximum reads per subdirectory (default: 300).
 
-This will put the DNAscent executable into the DNAscent/bin directory. A typical compile time for DNAscent and all of its dependencies is 5-7 minutes.
+A further example of how to use ``dnascent2bedgraph`` is given in :ref:`workflows`.
 
-Cloning the repository recursively (see above) will provide all the required dependencies so you don't need to find them yourself. For completeness, however, they are listed here:
+Output
+------
 
-* pfasta (https://github.com/kloetzl/pfasta)
-* fast5 (https://github.com/mateidavid/fast5.git)
-* htslib (https://github.com/samtools/htslib.git)
-* hdf5lib (https://support.hdfgroup.org/HDF5/)
-* tinydir (https://github.com/cxong/tinydir.git)
-
-Please note that the high throughput sequencing library (htslib) requires bzlib and lzma for compression. While these are common on most systems, if you don't have these, apt-get lzma-dev, liblzma-dev, and libbz2-dev. In addition, pfasta requires libbsd on Linux.
+``dnascent2bedgraph`` will create the directory you specified using the ``-o`` flag which will contain integer-numbered subdirectories.  Each of these subdirectories will contain the bedgraphs for the number of reads specified by ``--filesPerDir`` (default is 300).  If the output of more than one DNAscent executable was specified using the ``-d``, ``-f``, and ``-r`` flags, then the bedgraphs for each read will be grouped together so that they appear in IGV as consecutive tracks.

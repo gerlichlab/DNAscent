@@ -28,7 +28,7 @@
 
 
 static const char *help=
-"trainCNN: DNAscent executable that generates HMM bootstrapped to build training data for DNAscent ResNet training.\n"
+"trainCNN: DNAscent executable that generates HMM bootstrapped calls to build training data for DNAscent ResNet training.\n"
 "Note: This executable is geared towards developers and advanced users.\n"
 "To run DNAscent trainCNN, do:\n"
 "   DNAscent trainCNN -b /path/to/alignment.bam -r /path/to/reference.fasta -i /path/to/index.dnascent -o /path/to/output.detect\n"

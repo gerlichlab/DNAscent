@@ -21,7 +21,7 @@
 #include <stdlib.h>
 
 static const char *help=
-"forkSense: DNAscent AI executable that calls replication origins, fork movement, and fork stalling.\n"
+"forkSense: DNAscent AI executable that calls replication origins, termination sites, and fork movement.\n"
 "To run DNAscent forkSense, do:\n"
 "   DNAscent forkSense -d /path/to/BrdUCalls.detect -o /path/to/output.forkSense\n"
 "Required arguments are:\n"
@@ -39,7 +39,6 @@ struct Arguments {
 	std::string detectFilename;
 	std::string outputFilename;
 	bool markOrigins = false;
-	bool markStalls = false;
 	bool markTerms = false;
 	unsigned int threads = 1;
 };
@@ -92,11 +91,6 @@ Arguments parseSenseArguments( int argc, char** argv ){
 			args.markTerms = true;
 			i+=1;
 		}
-		else if ( flag == "--markStalls" ){
-
-			args.markStalls = true;
-			i+=1;
-		}
 		else throw InvalidOption( flag );
 	}
 	if (args.outputFilename == args.detectFilename) throw OverwriteFailure();
@@ -120,12 +114,12 @@ TF_Tensor *read2tensor(DetectedRead &r, const TensorShape &shape){
 	}
 
 	auto output = tf_obj_unique_ptr(TF_NewTensor(TF_FLOAT,
-		shape.values, shape.dim,
-		(void *)output_array.get(), size*sizeof(float), cpp_array_deallocator<float>, nullptr));
-	if(output){
-		// The ownership has been successfully transferred
-		output_array.release();
-	}
+					shape.values, shape.dim,
+					(void *)output_array.get(), size*sizeof(float), 
+					cpp_array_deallocator<float>, nullptr));
+
+	if(output) output_array.release();
+
 	return output.release();
 }
 
@@ -133,72 +127,14 @@ TF_Tensor *read2tensor(DetectedRead &r, const TensorShape &shape){
 std::vector<int> pooling = {6,4,4,4};
 
 
-std::string callStalls(DetectedRead &r){
+std::string callOrigins(DetectedRead &r){
 
 	assert(r.positions.size() == r.probabilities.size());
 
 	float threshold = 0.5;
-	bool inStall = false;
-	int stallStart = -1, potentialEnd = -1;
-	std::string outBed;
-
-	for (size_t i = 1; i < r.probabilities.size(); i++){
-
-		if (r.probabilities[i][3] > threshold and not inStall){ //initilise the stall site
-
-			stallStart = r.positions[i];
-			inStall = true;
-		}
-		else if (inStall and r.probabilities[i][3] < threshold and r.probabilities[i-1][3] > threshold){
-
-			potentialEnd = r.positions[i];
-		}
-		else if (inStall and (r.probabilities[i][0] > threshold or r.probabilities[i][1] > threshold or r.probabilities[i][2] > threshold)){//close if we've confidently moved to something else
-
-			assert(stallStart != -1 and potentialEnd != -1);
-			r.stalls.push_back(std::make_pair(stallStart,potentialEnd));
-			outBed += r.chromosome + " " + std::to_string(stallStart) + " " + std::to_string(potentialEnd) + " " + r.header.substr(1) + "\n";
-			inStall = false;
-			stallStart = -1;
-			potentialEnd = -1;
-
-		}
-	}
-
-	//if we got to the end of the read without closing
-	if (inStall){
-
-		assert(stallStart != -1);
-		if (potentialEnd == -1) potentialEnd = r.positions.back();
-
-		r.stalls.push_back(std::make_pair(stallStart,potentialEnd));
-		outBed += r.chromosome + " " + std::to_string(stallStart) + " " + std::to_string(potentialEnd) + " " + r.header.substr(1) + "\n";
-	}
-
-	return outBed;
-}
-
-
-std::string callOrigins(DetectedRead &r, bool stallsMarked){
-
-	//detect stalls if we haven't already
-	//if (not stallsMarked) callStalls(r);
-
-	assert(r.positions.size() == r.probabilities.size());
-
-	float threshold = 0.8;
 
 	std::vector<std::pair<int,int>> leftForks, rightForks;
 	std::string outBed;
-
-	//check of any sections of this read were called as BrdU-saturated which could lead to origin calling artefacts
-	for (unsigned int i = 0; i < r.probability_saturated.size(); i++){
-
-		if (r.probability_saturated[i] >= 0.4){
-
-			return outBed;
-		}
-	}
 
 	bool inFork = false;
 	int forkStart = -1, potentialEnd = -1;
@@ -211,7 +147,7 @@ std::string callOrigins(DetectedRead &r, bool stallsMarked){
 			forkStart = r.positions[i];
 			inFork = true;
 		}
-		else if (inFork and r.probabilities[i][2] < threshold and r.probabilities[i-1][2] > threshold){
+		else if (inFork and r.probabilities[i][2] < threshold and r.probabilities[i-1][2] > threshold){//flag as a potential end if we dip below the threshold
 
 			potentialEnd = r.positions[i];
 		}
@@ -219,10 +155,10 @@ std::string callOrigins(DetectedRead &r, bool stallsMarked){
 
 			assert(forkStart != -1 and potentialEnd != -1);
 			rightForks.push_back(std::make_pair(forkStart,potentialEnd));
+
 			inFork = false;
 			forkStart = -1;
 			potentialEnd = -1;
-
 		}
 	}
 
@@ -251,7 +187,7 @@ std::string callOrigins(DetectedRead &r, bool stallsMarked){
 			forkStart = revPositions[i];
 			inFork = true;
 		}
-		else if (inFork and revProbabilities[i][0] < threshold and revProbabilities[i-1][0] > threshold){
+		else if (inFork and revProbabilities[i][0] < threshold and revProbabilities[i-1][0] > threshold){//flag as a potential end if we dip below the threshold
 
 			potentialEnd = revPositions[i];
 		}
@@ -259,10 +195,10 @@ std::string callOrigins(DetectedRead &r, bool stallsMarked){
 
 			assert(forkStart != -1 and potentialEnd != -1);
 			leftForks.push_back(std::make_pair(potentialEnd,forkStart));
+
 			inFork = false;
 			forkStart = -1;
 			potentialEnd = -1;
-
 		}
 	}
 
@@ -289,7 +225,6 @@ std::string callOrigins(DetectedRead &r, bool stallsMarked){
 			if (dist < minDist){
 				minDist = dist;
 				bestMatch = ri;
-
 			}
 		}
 
@@ -297,11 +232,14 @@ std::string callOrigins(DetectedRead &r, bool stallsMarked){
 		bool failed = false;
 		if (bestMatch != -1){
 
-			for (size_t l2 = li+1; l2 < leftForks.size(); l2++){
+			for (size_t l2 = 0; l2 < leftForks.size(); l2++){
+
+				if (l2 == li) continue;
 
 				if (leftForks[l2].second > rightForks[bestMatch].first ) continue;
 
 				int dist = rightForks[bestMatch].first - leftForks[l2].second;
+
 				if (dist < minDist){
 
 					failed = true;
@@ -325,19 +263,10 @@ std::string callTerminations(DetectedRead &r){
 
 	assert(r.positions.size() == r.probabilities.size());
 
-	float threshold = 0.8;
+	float threshold = 0.5;
 
 	std::vector<std::pair<int,int>> leftForks, rightForks;
 	std::string outBed;
-
-	//check of any sections of this read were called as BrdU-saturated which could lead to origin calling artefacts
-	//for (unsigned int i = 0; i < r.probability_saturated.size(); i++){
-
-	//	if (r.probability_saturated[i] >= 0.4){
-
-	//		return outBed;
-	//	}
-	//}
 
 	bool inFork = false;
 	int forkStart = -1, potentialEnd = -1;
@@ -436,7 +365,9 @@ std::string callTerminations(DetectedRead &r){
 		bool failed = false;
 		if (bestMatch != -1){
 
-			for (size_t l2 = li+1; l2 < leftForks.size(); l2++){
+			for (size_t l2 = 0; l2 < leftForks.size(); l2++){
+
+				if (li == l2) continue;
 
 				if (leftForks[l2].first < rightForks[bestMatch].second ) continue;
 
@@ -458,7 +389,6 @@ std::string callTerminations(DetectedRead &r){
 
 	return outBed;
 }
-
 
 std::string runCNN(DetectedRead &r, std::shared_ptr<ModelSession> session){
 
@@ -501,10 +431,7 @@ std::string runCNN(DetectedRead &r, std::shared_ptr<ModelSession> session){
 		for(size_t i = 0; i < output_size; i++){
 			if((i+1)%outputFields==0){
 				r.probabilities.push_back({output_array[i-2],output_array[i-1],output_array[i]});
-				//r.probabilities.push_back({output_array[i-2],output_array[i-1],output_array[i]});
-				//r.probability_saturated.push_back(output_array[i-1]);
 				str_output += "\t" + std::to_string(output_array[i-2]) + "\t" + std::to_string(output_array[i]) + "\n";
-				//str_output += "\t" + std::to_string(output_array[i-2]) + "\t" + std::to_string(output_array[i-1]) + "\t" + std::to_string(output_array[i]) + "\n";
 				pos++;
 				if (i != output_size-1) str_output += std::to_string(r.positions[pos]);
 			}
@@ -525,7 +452,7 @@ void emptyBuffer(std::vector< DetectedRead > &buffer, Arguments args, std::share
 		std::string termOutput, originOutput;
 		if (args.markOrigins){
 
-			originOutput = callOrigins(*b,args.markStalls);
+			originOutput = callOrigins(*b);
 		}
 		if (args.markTerms){
 			termOutput = callTerminations(*b);

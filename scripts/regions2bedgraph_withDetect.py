@@ -69,7 +69,7 @@ f.close()
 
 
 ####################################################################################################################################
-#FORKSENSE OUTPUT
+#REGIONS OUTPUT
 print('Parsing forkSense file...')
 f = open(sys.argv[1],'r')
 first = True
@@ -97,45 +97,30 @@ for line in f:
 			#DNAscent regions
 			if readID in readID2directory:
 
+				f_regions = open( str(readID2directory[readID]) + '/' + readID + '_regions.bedgraph','w')
+				f_regions.write( 'track type=bedGraph name="'+readID + '_' + strand + '_regions'+'" description="BedGraph format" visibility=full color=200,100,0 altColor=0,100,200 priority=20 viewLimits=-3.0:3.0'+'\n')
 
-				#leftward moving fork
-				f_forkLeft = open( str(readID2directory[readID]) + '/' + readID + '_forkLeft.bedgraph','w')
-				f_forkLeft.write( 'track type=bedGraph name="'+readID + '_' + strand + '_forkLeft'+'" description="BedGraph format" visibility=full color=200,100,0 altColor=0,100,200 priority=20 viewLimits=0.0:1.0'+'\n')
-
-				for l in buffer_forkLeft:
-					f_forkLeft.write(l)
-				f_forkLeft.close()
-
-				#rightward moving fork
-				f_forkRight = open( str(readID2directory[readID]) + '/' + readID + '_forkRight.bedgraph','w')
-				f_forkRight.write( 'track type=bedGraph name="'+readID + '_' + strand + '_forkRight'+'" description="BedGraph format" visibility=full color=0,0,255 altColor=0,100,200 priority=20 viewLimits=0.0:1.0'+'\n')
-
-				for l in buffer_forkRight:
-					f_forkRight.write(l)
-				f_forkRight.close()
+				for l in buffer_regions:
+					f_regions.write(l)
+				f_regions.close()
 				
 		#get readID and chromosome
 		splitLine = line.rstrip().split(' ')
 		readID = splitLine[0][1:]
 		chromosome = splitLine[1]
 		strand = splitLine[-1:][0]
-		prevPos = int(splitLine[2]) #set the previous position for below to where this read started mapping
 
 		first = False
-		buffer_forkLeft = []
-		buffer_forkRight = []
+		buffer_regions = []
 
 	else:
 
 		splitLine = line.rstrip().split()
-		pos = int(splitLine[0])
-		probForkLeft = float(splitLine[1])
-		probForkRight = float(splitLine[2])
+		posStart = int(splitLine[0])
+		posEnd = int(splitLine[1])
+		regionScore = float(splitLine[2])
 
 		#left and right moving forks
-		buffer_forkLeft.append( chromosome + ' ' + str(prevPos) + ' ' + str(pos) + ' ' + str(probForkLeft) + '\n' )
-		buffer_forkRight.append( chromosome + ' ' + str(prevPos) + ' ' + str(pos) + ' ' + str(probForkRight) + '\n' )
-
-		prevPos = pos
+		buffer_regions.append( chromosome + ' ' + str(posStart) + ' ' + str(posEnd) + ' ' + str(regionScore) + '\n' )
 
 f.close()

@@ -19,22 +19,22 @@ Usage
      -o,--output               path to output file that will be generated.
    Optional arguments are:
      -t,--threads              number of threads (default is 1 thread),
-     --HMM                     revert to old style HMM-based detection,
+     --GPU                      use the GPU device indicated for prediction (default is CPU),
      -q,--quality              minimum mapping quality (default is 20),
      -l,--length               minimum read length in bp (default is 100).
 
 The main input of ``DNAscent detect`` is an alignment (bam file) between the sequence fastq from Guppy and the organism's reference genome.  This bam file should be sorted using ``samtools sort`` and indexed using ``samtools index`` so that there is a .bam.bai file in the same directory as the bam file. (Please see the example in :ref:`workflows` for details on how to do this.)  The full path to the reference genome used in the alignment should be passed using the ``-r`` flag, and the index required by the ``-i`` flag is the file created using ``DNAscent index`` (see :ref:`index`).  
 
-Optional arguments include the number of threads, specified using the ``-t`` flag.  ``DNAscent detect`` multithreads quite well by analysing a separate read on each thread, so multithreading is recommended.  It is sometimes useful to only run ``DNAscent detect`` on reads that exceed a certain mapping quality or length threshold (as measured by the subsequence of the contig that the read maps to).  In order to do this without having to filter the bam file, DNAscent provides the ``-l`` and ``-q`` flags.  Any read in the bam file with a reference length lower than the value specificed with ``-l`` or a mapping quality lower than the value specified with ``-q`` will be ignored.
+The number of threads is specified using the ``-t`` flag. ``DNAscent detect`` multithreads quite well by analysing a separate read on each thread, so multithreading is recommended. By default, the signal alignments and ResNet BrdU predictions are run on CPUs.  If a CUDA-compatible GPU device is specified using the ``--GPU`` flag, then the signal alignments will be run on CPUs using the threads specified with ``-t`` and the ResNet BrdU prediction will be run on the GPU. Your GPU device number can be found with the command ``nvidia-smi``. GPU use requires that CUDA and cuDNN are set up correctly on your system and that these libraries can be accessed. If they're not, DNAscent will default back to using CPUs.
 
-DNAscent v1.0 and earlier used hidden Markov models to evaluate a log likelihood of BrdU at each thymidine position. Since v2.0, this has been migrated to a ResNet.  In v2.0, ResNet-based detection is the default and recommended approach: internal testing has indicated it is more accurate than the HMM.  However, users wishing to do the old-style HMM-based detection (perhaps as part of a legacy workflow) can do so by adding the ``--HMM`` flag, at which time ``DNAscent detect`` will use HMM detection as in v1.0.
+It is sometimes useful to only run ``DNAscent detect`` on reads that exceed a certain mapping quality or length threshold (as measured by the subsequence of the contig that the read maps to).  In order to do this without having to filter the bam file, DNAscent provides the ``-l`` and ``-q`` flags.  Any read in the bam file with a reference length lower than the value specificed with ``-l`` or a mapping quality lower than the value specified with ``-q`` will be ignored.
 
 Before calling BrdU in a read, ``DNAscent detect`` must first perform a fast event alignment (see https://www.biorxiv.org/content/10.1101/130633v2 for more details).  Quality control checks are performed on these alignments, and if they're not passed, then the read fails and is ignored.  Hence, the number of reads in the output file will be slightly lower than the number of input reads.  Typical failure rates are about 5-10%, although this will vary slightly depending on the read length, the BrdU substitution rate, and the genome sequenced.
 
 Output
 ------
 
-``DNAscent detect`` will produce a single human-readable output file with the name and location that you specified using the ``-o`` flag.  To aid organisation and reproducibility, each detect file starts with a short header.  The start of each header line is always a hash (#) character, and it specifies the input files and settings used, as well as the version and commit of DNAscent used.  An example is as follows:
+``DNAscent detect`` will produce a single human-readable output file with the name and location that you specified using the ``-o`` flag.  To aid organisation and reproducibility, each detect file starts with a short header.  The start of each header line is always a hash (#) character, and it specifies the input files and settings used, as well as the version and commit of DNAscent that produced the file.  An example is as follows:
 
 .. code-block:: console
 
@@ -42,14 +42,15 @@ Output
    #Genome /path/to/reference.fasta
    #Index /path/to/index.dnascent
    #Threads 1
+   #Compute CPU
    #Mode CNN
    #MappingQuality 20
    #MappingLength 5000
-   #Version 2.0.0
-   #Commit 90acb6c4c79fc06476a5e670101be8c1a46b40da
    #SignalDilation 1.000000
+   #Version 2.0.0
+   #Commit 4cf80a7b89bdf510a91b54572f8f94d3daf9b167
 
-You can easily access the header of any .detect file with ``head -10 /path/to/output.detect`` or, alternatively, ``grep '#' /path/to/output.detect``.
+You can easily access the header of any .detect file with ``head -11 /path/to/output.detect`` or, alternatively, ``grep '#' /path/to/output.detect``.
 
 Below the header is data for each read.  Note that everything in this output file orients to the reference genome in the 5' --> 3' direction.  Each read starts with a line in the format:
 
@@ -76,35 +77,36 @@ Below these "start of read" lines, each line corresponds to the position of a th
 * 6mer on the reference.
 
 
-Consider the following example:
+Consider the following examples:
 
 .. code-block:: console
 
-   >bce09d16-271e-49d3-a5c2-c6b56e186cf3 chrI 95420 101928 rev 
-   95422   0.080785        CTAGAA
-   95424   0.075855        AGAAGA
-   95426   0.091836        AAGACA
-   95428   0.075640        GACATA
-   95429   0.083507        ACATAA
+   >c6785e1f-10d2-49cb-8ca3-e8d48979001b chrXIII 74003 81176 rev
+   74010   0.012874        TCTCTA
+   74011   0.012428        CTCTAA
+   74014   0.016811        TAACGA
+   74017   0.013372        CGACCA
+   74018   0.013836        GACCAA
 
-Here, we're looking at the sequence CTAGAAGACATAA on the reference genome.  Because this read maps to the reverse complement, a call is made at every A (instead of T) on the reference.  If instead we looked at a read that mapped to the forward strand, an example would be:
-
-.. code-block:: console
-
-   >4a3e879c-5334-4d3e-a774-137e0434126b chrI 97325 105509 fwd
-   97325   0.051484        TCTAGC
-   97327   0.133578        TAGCTT
-   97331   0.065396        TTCTCG
-   97332   0.076378        TCTCGG
-   97334   0.078366        TCGGCT
-
-In both of these output snippets, we see from the second column that the probability of BrdU is low, so these few bases are likely from a BrdU-negative region of DNA.  In contrast, here we see the start of a read that does contain BrdU, and accordingly, the probability of BrdU is much higher:
+Here, we're looking at the sequence TCTCTAACGACCAA on the reference genome.  Because this read maps to the reverse complement, a call is made at every A (instead of T) on the reference.  If instead we looked at a read that mapped to the forward strand, an example would be:
 
 .. code-block:: console
 
-   >8607596e-2175-4e7b-b1af-86b96a9c80f2 chrI 0 10994 fwd
-   62	0.826316	TCCTAA
-   65	0.726879	TAACAC
-   71	0.858950	TACCCT
-   76	0.897366	TAACAC
-   87	0.766869	TAATCT
+   >5d10eb9a-aae1-4db8-8ec6-7ebb34d32575 chrXIII 72319 77137 fwd
+   72319   0.017496        TCGTTT
+   72322   0.029483        TTTCTG
+   72323   0.039008        TTCTGT
+   72324   0.031474        TCTGTG
+   72326   0.026997        TGTGAG
+
+In both of these output snippets, we see from the second column that the probability of BrdU is low (around a 1-3% chance of BrdU) so these few bases are likely from a BrdU-negative region of DNA.  In contrast, here we see the start of a read that does contain BrdU, and accordingly, the probability of BrdU at some positions is much higher:
+
+.. code-block:: console
+
+   >a4f36092-b4d5-47a9-813e-c22c3b477a0c chrXVI 899273 907581 fwd
+   899276  0.866907        TCAAAT
+   899281  0.947935        TCCACA
+   899300  0.014683        TGGGAG
+   899312  0.186812        TAACGG
+   899320  0.934850        TTATTG
+

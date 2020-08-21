@@ -28,13 +28,10 @@ static const char *help=
 "Required arguments are:\n"
 "  -d,--detect               path to output file from DNAscent detect,\n"
 "  -o,--output               path to output directory for bedgraph files.\n"
-"Optional arguments (if used with default ResNet-based detect) are:\n"
-"  -r,--resolution           number of thymidines in a region (default is 10).\n"
 "Optional arguments (if used with HMM-based detect) are:\n"
-"     --replication          detect fork direction and call origin firing (default: off),\n"
-"     --threshold            threshold for a positive analogue call (default: 0.7),\n"
+"     --threshold            probability above which a BrdU call is considered positive (default: 0.8),\n"
 "  -c,--cooldown             minimum gap between positive analogue calls (default: 4),\n"
-"  -r,--resolution           number of thymidines in a region (default is 2 kb),\n"
+"  -r,--resolution           number of thymidines in a region (default is 100 bp),\n"
 "  -p,--probability          override probability that a thymidine 6mer contains a BrdU (default: automatically calculated),\n"
 "  -z,--zScore               override zScore threshold for BrdU call (default: automatically calculated).\n"
 "Written by Michael Boemo, Department of Pathology, University of Cambridge.\n"
@@ -69,15 +66,13 @@ Arguments parseRegionsArguments( int argc, char** argv ){
  	Arguments args;
 
  	//defaults - we'll override these if the option was specified by the user
-	args.resolution = 10;
+	args.resolution = 100;
 	args.threshold = 0;
-	args.callReplication = false;
 	args.overrideProb = false;
 	args.overrideZ = false;
-	args.likelihood = 0.7;
+	args.likelihood = 0.8;
 	args.cooldown = 4;
 	args.overrideResolution = false;
-
 
  	/*parse the command line arguments */
 	for ( int i = 1; i < argc; ){
@@ -204,160 +199,18 @@ std::pair< double, double > twoMeans( std::vector< double > &observations ){
 }
 
 
-void callOrigins( std::vector< region > &regions, double threshold, std::string &header, std::ofstream &repFile ){
-
-	//10kb moving average filter
-	std::vector< double > out;
-	for ( unsigned int i = 2; i < regions.size() - 2; i++ ){
-
-		out.push_back( ( regions[i-2].score + regions[i-1].score + regions[i].score + regions[i+1].score + regions[i+2].score ) / 5.0 );
-	}
-	for ( unsigned int i = 0; i < out.size(); i++ ){
-
-		regions[i+2].score = out[i];
-	}
-
-	//secondary 6kb moving average filter
-	out.clear();
-	for ( unsigned int i = 1; i < regions.size() - 1; i++ ){
-
-		out.push_back( ( regions[i-1].score + regions[i].score + regions[i+1].score ) / 3.0 );
-	}
-	for ( unsigned int i = 0; i < out.size(); i++ ){
-
-		regions[i+1].score = out[i];
-		
-		//re-assess the call with the smoothed scores
-		if ( regions[i+1].score >= 0 ) regions[i+1].call = "BrdU";
-		else regions[i+1].call = "Thym";
-	}
-	out.clear();
-
-	std::vector< double > derivatives;
-	
-	//get the central derivative for all the middle regions
-	for ( unsigned int i = 1; i < regions.size() - 1; i++ ){
-
-		double former = regions[i-1].score;
-		double next = regions[i+1].score;
-
-		derivatives.push_back( ( next - former ) / 2.0 );
-	}
-
-	//error correct for derivatives that are sandwiched between two of the opposite sign
-	for ( unsigned int i = 2; i < derivatives.size() - 2; i++ ){
-
-		if ( derivatives[i-1] < 0 and derivatives[i+1] < 0 and derivatives[i] > 0 ) derivatives[i] = ( derivatives[i-1] + derivatives[i+1] ) / 2.0;
-		if ( derivatives[i-1] > 0 and derivatives[i+1] > 0 and derivatives[i] < 0 ) derivatives[i] = ( derivatives[i-1] + derivatives[i+1] ) / 2.0;
-	}
-
-	//smooth derivative calls
-	for ( unsigned int i = 1; i < derivatives.size() - 1; i++ ){
-
-		out.push_back( ( derivatives[i-1] + derivatives[i] + derivatives[i+1] ) / 3.0 );
-	}
-	for ( unsigned int i = 0; i < out.size(); i++ ){
-
-		derivatives[i+1] = out[i];
-	}
-	
-	//error correct on BrdU calls for the middle
-	for ( unsigned int i = 1; i < regions.size() - 1; i++ ){
-
-		if ( regions[i-1].call == "BrdU" and regions[i+1].call == "BrdU" and regions[i].call == "Thym" ) regions[i].call = "BrdU";
-		if ( regions[i-1].call == "Thym" and regions[i+1].call == "Thym" and regions[i].call == "BrdU" ) regions[i].call = "Thym";
-
-	}
-
-	//error correct on BrdU calls at the ends
-	if ( regions.size() > 2 ){
-	
-		if ( regions[0].call == "BrdU" and regions[1].call == "Thym" and regions[2].call == "Thym" ) regions[0].call = "Thym";
-		if ( regions[0].call == "Thym" and regions[1].call == "BrdU" and regions[2].call == "BrdU" ) regions[0].call = "BrdU";
-
-		if ( regions[regions.size()-1].call == "BrdU" and regions[regions.size()-2].call == "Thym" and regions[regions.size()-3].call == "Thym" ) regions[0].call = "Thym";
-		if ( regions[regions.size()-1].call == "Thym" and regions[regions.size()-2].call == "BrdU" and regions[regions.size()-3].call == "BrdU" ) regions[0].call = "BrdU";
-	}
-
-	//set the fork direction
-	for ( unsigned int i = 1; i < regions.size() - 1; i++ ){
-
-		if ( regions[i].call == "BrdU" and derivatives[i] < 0 ) regions[i].forkDir = "+";
-		if ( regions[i].call == "BrdU" and derivatives[i] > 0 ) regions[i].forkDir = "-";
-	}
-
-	//call origin positions
-	std::vector< int > oriPosForRead;
-	for ( unsigned int i = 1; i < regions.size()-2; i++ ){
-
-		if ( regions[i-1].forkDir == "-" and regions[i].forkDir == "-" and regions[i+1].forkDir == "+" and regions[i+2].forkDir == "+" ){
-
-			if ( regions[i].score > regions[i+1].score ) oriPosForRead.push_back( (regions[i].start + regions[i].end) / 2 );
-			else oriPosForRead.push_back( (regions[i+1].start + regions[i+1].end) / 2 );
-		}
-	}
-
-	//fix the ends
-	if (regions.size() > 3){
-
-		if (not regions[1].forkDir.empty() and regions[0].call == "BrdU") regions[0].forkDir = regions[1].forkDir;
-		if (not regions[regions.size()-2].forkDir.empty() and regions[regions.size()-1].call == "BrdU") regions[regions.size()-1].forkDir = regions[regions.size()-2].forkDir;
-	}
-
-	//write the origins to the output stream
-	if ( oriPosForRead.size() > 0 ){
-
-		repFile << header << std::endl;
-
-		for ( unsigned int i = 0; i < oriPosForRead.size(); i++ ){		
-		
-			repFile << oriPosForRead[i] << std::endl;
-		}
-	}
-}
-
-
-bool parseDetectHeader( std::string detectFilename ){
-
-	//if we don't find the header, default to use HMM to make back-compatible with old versions
-	std::string line;
-	std::ifstream inFile( detectFilename );
-	if ( not inFile.is_open() ) throw IOerror( detectFilename );
-	unsigned int lineCtr = 0;
-	while( std::getline( inFile, line ) ){
-
-		if ( line == "#Mode CNN" ){
-			std::cout << "Using detect mode: CNN" << std::endl;
-			std::cout << "Any optional arguments passed to DNAscent regions will be ignored." << std::endl;
-			inFile.close();
-			return false;
-		}
-		lineCtr++;
-		if (lineCtr > 20){
-			inFile.close();
-			std::cout << "Using detect mode: HMM" << std::endl;
-			return true;
-		}
-	}
-	inFile.close();
-	std::cout << "Using detect mode: HMM" << std::endl;
-	return true;
-}
-
-
-int parseDetectLine_HMM(std::string line,
-		                 double callThreshold,
-						 unsigned int cooldownThreshold,
-						 unsigned int &attemptCooldown,
-						 unsigned int &callCooldown,
-						 unsigned int &calls,
-						 unsigned int &attempts){
+int parseDetectLine_CNN(std::string line,
+		        double callThreshold,
+			unsigned int cooldownThreshold,
+			 unsigned int &attemptCooldown,
+			 unsigned int &callCooldown,
+			 unsigned int &calls,
+			 unsigned int &attempts){
 
 	std::string column;
 	std::stringstream ssLine(line);
 	int position = -1, cIndex = 0;
-	AnalogueScore B, BM, M;
-	int countCol = std::count(line.begin(), line.end(), '\t');
+	AnalogueScore B;
 	while ( std::getline( ssLine, column, '\t' ) ){
 
 		if ( cIndex == 0 ){
@@ -368,82 +221,22 @@ int parseDetectLine_HMM(std::string line,
 
 			B.set(std::stof(column));
 		}
-		else if ( cIndex == 2 and countCol > 3 ){ //methyl-aware detect file
-
-			BM.set(std::stof(column));
-		}
-		else if ( cIndex == 3 and countCol > 3 ){ //methyl-aware detect file
-
-			M.set(std::stof(column));
-		}
 		cIndex++;
 	}
 	assert(position != -1);
 
-	if ( countCol > 3){
 
-		if ( B.get() > callThreshold and BM.get() > 0.0 and position - callCooldown >= cooldownThreshold ){
-		//looks like BrdU against thymidine, and looks more like BrdU than methylation, count as positive call
-			attemptCooldown = position;
-			callCooldown = position;
-			calls++;
-			attempts++;
-		}
-		else if ( M.get() < 0 and B.get() < callThreshold and position - attemptCooldown >= cooldownThreshold ){
-		//not strong enough to count as either BrdU or methylation counts as an attempt
-			attempts++;
-			attemptCooldown = position;
-		}
-		//don't count methyl calls as either positive calls or attempts
+	if ( B.get() > callThreshold and position - callCooldown >= cooldownThreshold ){
+		attemptCooldown = position;
+		callCooldown = position;
+		calls++;
+		attempts++;
 	}
-	else{
-			//testing
-			//std::cout << B.get() << " " << position << " " << callCooldown << std::endl;
-			if ( B.get() > callThreshold and position - callCooldown >= cooldownThreshold ){
-				attemptCooldown = position;
-				callCooldown = position;
-				calls++;
-				attempts++;
-			}
-			else if (position - attemptCooldown >= cooldownThreshold){
-				attempts++;
-				attemptCooldown = position;
-			}
+	else if (position - attemptCooldown >= cooldownThreshold){
+		attempts++;
+		attemptCooldown = position;
 	}
 	return position;
-}
-
-
-std::pair<int,double> parseDetectLine_CNN(std::string line, std::string strand){
-
-	std::string column, sixMer;
-	std::stringstream ssLine(line);
-	int position = -1, cIndex = 0;
-	AnalogueScore B, BM, M;
-	while ( std::getline( ssLine, column, '\t' ) ){
-
-		if ( cIndex == 0 ){
-
-			position = std::stoi(column);
-		}
-		else if ( cIndex == 1 ){
-
-			B.set(std::stof(column));
-		}
-		else if ( cIndex == 2 ){
-
-			sixMer = column;
-		}
-		cIndex++;
-	}
-	assert(position != -1);
-
-	//no-op on non-T positions
-	if ((strand == "fwd" and sixMer.substr(0,1) != "T") or (strand == "rev" and sixMer.substr(sixMer.length()-1) != "A")){
-		return std::make_pair(-1,-1);
-	}
-
-	return std::make_pair(position, B.get());
 }
 
 
@@ -469,7 +262,7 @@ std::string getStrand(std::string line){
 }
 
 
-void regionsHMM(Arguments args){
+void regionsCNN(Arguments args){
 
 	//get a read count
 	int readCount = 0;
@@ -516,14 +309,14 @@ void regionsHMM(Arguments args){
 				continue;
 			}
 
-			int position = parseDetectLine_HMM(line, args.likelihood, args.cooldown, attemptCooldown, callCooldown, calls, attempts);
+			int position = parseDetectLine_CNN(line, args.likelihood, args.cooldown, attemptCooldown, callCooldown, calls, attempts);
 
 			if (position == -1) continue;
 
 			if ( startingPos == -1 ) startingPos = position;
 			gap = position - startingPos;
 
-			if ( gap > args.resolution and attempts >= args.resolution / 30 ){
+			if ( gap > args.resolution and attempts >= args.resolution / 10 ){
 
 				double frac = (double) calls / (double) attempts;
 				callFractions.push_back( frac );
@@ -567,13 +360,13 @@ void regionsHMM(Arguments args){
 			}
 			else{
 
-				int position = parseDetectLine_HMM(line, args.likelihood, args.cooldown, attemptCooldown, callCooldown, calls, attempts);
+				int position = parseDetectLine_CNN(line, args.likelihood, args.cooldown, attemptCooldown, callCooldown, calls, attempts);
 
 				if (position == -1) continue;
 				if ( startingPos == -1 ) startingPos = position;
 				gap = position - startingPos;
 
-				if ( gap > args.resolution and attempts >= args.resolution / 30 ){
+				if ( gap > args.resolution and attempts >= args.resolution / 10 ){
 
 					double score = (calls - attempts * p) / sqrt( attempts * p * ( 1 - p) );
 					allZScores.push_back(score);
@@ -647,18 +440,7 @@ void regionsHMM(Arguments args){
 			progress++;
 			pb.displayProgress( progress, 0, 0 );
 
-			if ( buffer.size() > 5 and args.callReplication and not first ){
-
-				outFile << header << std::endl;
-			
-				callOrigins(buffer,args.threshold, header, repFile);
-				
-				for ( auto r = buffer.begin(); r < buffer.end(); r++ ){
-
-					outFile << r -> start << "\t" << r -> end << "\t" << r -> score << "\t" << r -> call << "\t" << r -> forkDir <<  std::endl;
-				}
-			}
-			else if (not args.callReplication and not first){
+			if (not first){
 
 				outFile << header << std::endl;
 				
@@ -677,14 +459,14 @@ void regionsHMM(Arguments args){
 		}
 		else{
 
-			int position = parseDetectLine_HMM(line, args.likelihood, args.cooldown, attemptCooldown, callCooldown, calls, attempts);
+			int position = parseDetectLine_CNN(line, args.likelihood, args.cooldown, attemptCooldown, callCooldown, calls, attempts);
 
 			if (position == -1) continue;
 
 			if ( startingPos == -1 ) startingPos = position;
 			gap = position - startingPos;
 
-			if ( gap > args.resolution and attempts >= args.resolution / 30 ){
+			if ( gap > args.resolution and attempts >= args.resolution / 10 ){
 
 				region r;
 
@@ -708,8 +490,6 @@ void regionsHMM(Arguments args){
 	if ( buffer.size() > 5 ){
 
 		outFile << header << std::endl;
-			
-		if (args.callReplication) callOrigins(buffer,args.threshold, header, repFile);
 				
 		for ( auto r = buffer.begin(); r < buffer.end(); r++ ){
 
@@ -724,97 +504,11 @@ void regionsHMM(Arguments args){
 }
 
 
-double windowAverage(std::vector<double> &buffer){
-
-	double sum = 0.;
-	for (size_t k = 0; k < buffer.size(); k++) sum += buffer[k];
-	double avg = sum / buffer.size();
-	return avg;
-}
-
-
-void regionsCNN(Arguments args){
-
-	//get a read count
-		int readCount = 0;
-		std::string line;
-		std::ifstream inFile( args.detectFilename );
-		if ( not inFile.is_open() ) throw IOerror( args.detectFilename );
-		while( std::getline( inFile, line ) ){
-
-			if ( line.substr(0,1) == ">" ) readCount++;
-		}
-		progressBar pb(readCount,false);
-		inFile.close();
-
-	//call regions
- 	inFile.open( args.detectFilename );
-	if ( not inFile.is_open() ) throw IOerror( args.detectFilename );
- 	std::ofstream outFile( args.outputFilename );
-	if ( not outFile.is_open() ) throw IOerror( args.outputFilename );
-
-	//write the regions header
-	outFile <<  writeRegionsHeader(args.detectFilename, args.likelihood, false, args.cooldown, args.resolution, 0.0, args.threshold);
-
-	std::vector<double> buffer;
-
-	std::cout << "Calling regions..." << std::endl;
-	int startingPos = -1;
-	int progress = 0;
-	std::string strand;
-	while( std::getline( inFile, line ) ){
-
-		if (line.substr(0,1) == "#") continue; //ignore header
-		if ( line.substr(0,1) == ">" ){
-
-			strand = getStrand(line);
-			progress++;
-			pb.displayProgress( progress, 0, 0 );
-
-			//write the header
-			outFile << line << std::endl;
-
-			buffer.clear();
-			startingPos = -1;
-		}
-		else{
-
-			std::pair<int,double > cnnLine = parseDetectLine_CNN(line, strand);
-
-			if (cnnLine.first == -1) continue;
-
-			if ( startingPos == -1 ) startingPos = cnnLine.first;
-
-			if (buffer.size() < args.resolution){
-
-				buffer.push_back(cnnLine.second);
-			}
-			else{
-
-				double avg = windowAverage(buffer);
-
-				outFile << startingPos << "\t" << cnnLine.first << "\t" << avg << std::endl;
-				buffer.clear();
-				buffer.push_back(cnnLine.second);
-				startingPos = cnnLine.first;
-			}
-		}
-	}
-
-	inFile.close();
-	outFile.close();
-	std::cout << std::endl << "Done." << std::endl;
-}
-
-
 int regions_main( int argc, char** argv ){
 
 	Arguments args = parseRegionsArguments( argc, argv );
 
-	//figure out if we're running in CNN or HMM detect mode
-	bool useHMM = parseDetectHeader( args.detectFilename );
-	if (useHMM) regionsHMM(args);
-	else regionsCNN(args);
+	regionsCNN(args);
 
 	return 0;
 }

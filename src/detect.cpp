@@ -44,7 +44,6 @@ static const char *help=
 "Optional arguments are:\n"
 "  -t,--threads              number of threads (default is 1 thread),\n"
 "  --GPU                     use the GPU device indicated for prediction (default is CPU),\n"
-"  --HMM                     revert to old style HMM-based detection,\n"
 "  -q,--quality              minimum mapping quality (default is 20),\n"
 "  -l,--length               minimum read length in bp (default is 1000).\n"
 "Written by Michael Boemo, Department of Pathology, University of Cambridge.\n"
@@ -55,8 +54,6 @@ struct Arguments {
 	std::string referenceFilename;
 	std::string outputFilename;
 	std::string indexFilename;
-	bool methylAware = false;
-	bool useHMM = false;
 	bool useGPU = false;
 	unsigned char GPUdevice = '0';
 	int minQ = 20;
@@ -134,11 +131,6 @@ Arguments parseDetectArguments( int argc, char** argv ){
 			args.outputFilename = strArg;
 			i+=2;
 		}
-		else if ( flag == "--HMM" ){
-
-			args.useHMM = true;
-			i+=1;
-		}
 		else if ( flag == "--GPU" ){
 
 			args.useGPU = true;
@@ -155,19 +147,9 @@ Arguments parseDetectArguments( int argc, char** argv ){
 			args.dilation = std::stof( strArg.c_str() );
 			i+=2;
 		}
-		else if ( flag == "--methyl-aware" ){
-
-			args.methylAware = true;
-			i+=1;
-		}
 		else throw InvalidOption( flag );
 	}
 	if (args.outputFilename == args.indexFilename or args.outputFilename == args.referenceFilename or args.outputFilename == args.bamFilename) throw OverwriteFailure();
-
-	if (args.methylAware and not args.useHMM){
-		std::cout << "Neural network is currently not yet methyl-aware, use --HMM." << std::endl;
-		exit(EXIT_SUCCESS);
-	}
 
 	return args;
 }
@@ -887,7 +869,7 @@ int detect_main( int argc, char** argv ){
 	if ( not outFile.is_open() ) throw IOerror( args.outputFilename );
 
 	//write the outfile header
-	std::string outHeader = writeDetectHeader(args.bamFilename, args.referenceFilename, args.indexFilename, args.threads, args.useHMM, args.minQ, args.minL, args.dilation,args.useGPU);
+	std::string outHeader = writeDetectHeader(args.bamFilename, args.referenceFilename, args.indexFilename, args.threads, false, args.minQ, args.minL, args.dilation,args.useGPU);
 	outFile << outHeader;
 
 	htsFile* bam_fh;
@@ -917,7 +899,6 @@ int detect_main( int argc, char** argv ){
 	const char *allReads = ".";
 	itr = sam_itr_querys(bam_idx,bam_hdr,allReads);
 
-	unsigned int windowLength_HMMdetect = 10;
 	unsigned int windowLength_align = 50;
 
 	int result;
@@ -952,7 +933,7 @@ int detect_main( int argc, char** argv ){
 
 			//std::vector<std::pair<bool,std::shared_ptr<AlignedRead>>> buffer_ar(buffer.size());
 
-			#pragma omp parallel for schedule(dynamic) shared(buffer,windowLength_HMMdetect,windowLength_align,analogueModel,thymidineModel,args,prog,failed) num_threads(args.threads)
+			#pragma omp parallel for schedule(dynamic) shared(buffer,windowLength_align,analogueModel,thymidineModel,args,prog,failed) num_threads(args.threads)
 			for (unsigned int i = 0; i < buffer.size(); i++){
 
 				read r;
@@ -997,23 +978,16 @@ int detect_main( int argc, char** argv ){
 					continue;
 				}
 
-				std::string readOut;
-				if (args.useHMM){ //use old style HMM-based detection
-					readOut = llAcrossRead(r, windowLength_HMMdetect, failedEvents, args.methylAware);
-				}
-				else{ //use neural network detection
+				std::pair<bool,std::shared_ptr<AlignedRead>> ar = eventalign_detect( r, windowLength_align, args.dilation );
 
-					std::pair<bool,std::shared_ptr<AlignedRead>> ar = eventalign_detect( r, windowLength_align, args.dilation );
-
-					if (not ar.first){
-						failed++;
-						prog++;
-						continue;
-					}
-
-					readOut = runCNN(ar.second,session);
+				if (not ar.first){
+					failed++;
 					prog++;
+					continue;
 				}
+
+				std::string readOut = runCNN(ar.second,session);
+				prog++;
 
 				#pragma omp critical
 				{

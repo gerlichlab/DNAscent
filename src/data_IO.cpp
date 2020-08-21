@@ -28,17 +28,15 @@
 
 std::string writeDetectHeader(std::string alignmentFilename,
 		                std::string refFilename,
-						std::string indexFn,
-						int threads,
-						bool useHMM,
-						unsigned int quality,
-						unsigned int length,
-						double dilation,
-						bool useGPU){
+				std::string indexFn,
+				int threads,
+				bool useHMM,
+				unsigned int quality,
+				unsigned int length,
+				double dilation,
+				bool useGPU){
 
-	std::string detMode;
-	if (useHMM) detMode = "HMM";
-	else detMode = "CNN";
+	std::string detMode = "CNN";
 
 	std::string compMode;
 	if (useGPU) compMode = "GPU";
