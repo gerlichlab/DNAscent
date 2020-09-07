@@ -131,9 +131,11 @@ std::string callOrigins(DetectedRead &r){
 
 	assert(r.positions.size() == r.probabilities.size());
 
-	float threshold = 0.5;
+	float threshold = 0.7;
+	float threshold_weak = 0.5;
+	int minLength = 1000;
 
-	std::vector<std::pair<int,int>> leftForks, rightForks;
+	std::vector<std::pair<int,int>> leftForks, leftForks_weak, rightForks, rightForks_weak;
 	std::string outBed;
 
 	bool inFork = false;
@@ -147,14 +149,17 @@ std::string callOrigins(DetectedRead &r){
 			forkStart = r.positions[i];
 			inFork = true;
 		}
-		else if (inFork and r.probabilities[i][2] < threshold and r.probabilities[i-1][2] > threshold){//flag as a potential end if we dip below the threshold
+		else if (inFork and r.probabilities[i][2] <= threshold and r.probabilities[i-1][2] >= threshold){//flag as a potential end if we dip below the threshold
 
 			potentialEnd = r.positions[i];
 		}
 		else if (inFork and (r.probabilities[i][0] > threshold or r.probabilities[i][1] > threshold)){//close if we've confidently moved to something else
 
 			assert(forkStart != -1 and potentialEnd != -1);
-			rightForks.push_back(std::make_pair(forkStart,potentialEnd));
+
+			if ( abs(potentialEnd - forkStart) >= minLength ){
+				rightForks.push_back(std::make_pair(forkStart,potentialEnd));
+			}
 
 			inFork = false;
 			forkStart = -1;
@@ -168,7 +173,44 @@ std::string callOrigins(DetectedRead &r){
 		assert(forkStart != -1);
 		if (potentialEnd == -1) potentialEnd = r.positions.back();
 
-		rightForks.push_back(std::make_pair(forkStart,potentialEnd));
+		if ( abs(potentialEnd - forkStart) >= minLength ){
+			rightForks.push_back(std::make_pair(forkStart,potentialEnd));
+		}
+	}
+
+	inFork = false;
+	forkStart = -1;
+	potentialEnd = -1;
+
+	//weak call rightward-moving forks
+	for (size_t i = 1; i < r.probabilities.size(); i++){
+
+		if (r.probabilities[i][2] > threshold_weak and not inFork){ //initialise the site
+
+			forkStart = r.positions[i];
+			inFork = true;
+		}
+		else if (inFork and r.probabilities[i][2] >= threshold){//throw it out if it becomes a confident fork call
+
+			inFork = false;
+			forkStart = -1;
+			potentialEnd = -1;
+		}
+		else if (inFork and r.probabilities[i][2] <= threshold_weak and r.probabilities[i-1][2] >= threshold_weak){//flag as a potential end if we dip below the threshold
+
+			potentialEnd = r.positions[i];
+		}
+		else if (inFork and (r.probabilities[i][0] > threshold_weak or r.probabilities[i][1] > threshold_weak)){//close if we've confidently moved to something else
+
+			assert(forkStart != -1 and potentialEnd != -1);
+
+			rightForks_weak.push_back(std::make_pair(forkStart,potentialEnd));
+			//std::cout << "weak right" << forkStart << " " << potentialEnd << std::endl;
+
+			inFork = false;
+			forkStart = -1;
+			potentialEnd = -1;
+		}
 	}
 
 	inFork = false;
@@ -187,14 +229,17 @@ std::string callOrigins(DetectedRead &r){
 			forkStart = revPositions[i];
 			inFork = true;
 		}
-		else if (inFork and revProbabilities[i][0] < threshold and revProbabilities[i-1][0] > threshold){//flag as a potential end if we dip below the threshold
+		else if (inFork and revProbabilities[i][0] <= threshold and revProbabilities[i-1][0] >= threshold){//flag as a potential end if we dip below the threshold
 
 			potentialEnd = revPositions[i];
 		}
 		else if (inFork and (revProbabilities[i][1] > threshold or revProbabilities[i][2] > threshold)){//close if we've confidently moved to something else
 
 			assert(forkStart != -1 and potentialEnd != -1);
-			leftForks.push_back(std::make_pair(potentialEnd,forkStart));
+
+			if ( abs(potentialEnd - forkStart) >= minLength ){
+				leftForks.push_back(std::make_pair(potentialEnd,forkStart));
+			}
 
 			inFork = false;
 			forkStart = -1;
@@ -208,8 +253,45 @@ std::string callOrigins(DetectedRead &r){
 		assert(forkStart != -1);
 		if (potentialEnd == -1) potentialEnd = revPositions.back();
 
-		leftForks.push_back(std::make_pair(potentialEnd,forkStart));
+		if ( abs(potentialEnd - forkStart) >= minLength ){
+			leftForks.push_back(std::make_pair(potentialEnd,forkStart));
+		}
 	}
+
+	inFork = false;
+	forkStart = -1;
+	potentialEnd = -1;
+
+	//weak call leftward-moving forks
+	for (size_t i = 1; i < revProbabilities.size(); i++){
+
+		if (revProbabilities[i][0] > threshold_weak and not inFork){ //initialise the site
+
+			forkStart = revPositions[i];
+			inFork = true;
+		}
+		else if (inFork and r.probabilities[i][0] >= threshold){//throw it out if it becomes a confident fork call
+
+			inFork = false;
+			forkStart = -1;
+			potentialEnd = -1;
+		}
+		else if (inFork and revProbabilities[i][0] <= threshold_weak and revProbabilities[i-1][0] >= threshold_weak){//flag as a potential end if we dip below the threshold
+
+			potentialEnd = revPositions[i];
+		}
+		else if (inFork and (revProbabilities[i][1] > threshold_weak or revProbabilities[i][2] > threshold_weak)){//close if we've confidently moved to something else
+
+			assert(forkStart != -1 and potentialEnd != -1);
+
+			leftForks_weak.push_back(std::make_pair(potentialEnd,forkStart));
+			//std::cout << "weak left" << potentialEnd << " " << forkStart << std::endl;
+			inFork = false;
+			forkStart = -1;
+			potentialEnd = -1;
+		}
+	}
+
 
 	//match up regions
 	for ( size_t li = 0; li < leftForks.size(); li++ ){
@@ -250,8 +332,30 @@ std::string callOrigins(DetectedRead &r){
 		if (failed) continue;
 		else if (bestMatch != -1){
 
-			r.origins.push_back(std::make_pair(leftForks[li].second, rightForks[bestMatch].first));
-			outBed += r.chromosome + " " + std::to_string(leftForks[li].second) + " " + std::to_string(rightForks[bestMatch].first) + " " + r.header.substr(1) + "\n";
+			//make sure there are no weak fork calls in between matching left and right forks
+			bool abort = false;
+			for ( size_t lw = 0; lw < leftForks_weak.size(); lw++){
+				if (leftForks_weak[lw].first > leftForks[li].second and leftForks_weak[lw].second < rightForks[bestMatch].first){
+					abort = true;
+					//std::cout << leftForks_weak[lw].first << " " << leftForks_weak[lw].second << std::endl;
+					break;
+				}
+			}
+			if (not abort){
+				for ( size_t rw = 0; rw < rightForks_weak.size(); rw++){
+					if (rightForks_weak[rw].first > leftForks[li].second and rightForks_weak[rw].second < rightForks[bestMatch].first){
+						//std::cout << rightForks_weak[rw].first << " " << rightForks_weak[rw].second << std::endl;
+						abort = true;
+						break;
+					}
+				}
+			}
+
+			//if we didn't find any problematic weak fork calls between the matching left and right forks, make the call
+			if (not abort){
+				r.origins.push_back(std::make_pair(leftForks[li].second, rightForks[bestMatch].first));
+				outBed += r.chromosome + " " + std::to_string(leftForks[li].second) + " " + std::to_string(rightForks[bestMatch].first) + " " + r.header.substr(1) + "\n";
+			}
 		}
 	}
 
@@ -263,7 +367,8 @@ std::string callTerminations(DetectedRead &r){
 
 	assert(r.positions.size() == r.probabilities.size());
 
-	float threshold = 0.5;
+	float threshold = 0.8;
+	int minLength = 1000;
 
 	std::vector<std::pair<int,int>> leftForks, rightForks;
 	std::string outBed;
@@ -279,14 +384,17 @@ std::string callTerminations(DetectedRead &r){
 			forkStart = r.positions[i];
 			inFork = true;
 		}
-		else if (inFork and r.probabilities[i][2] < threshold and r.probabilities[i-1][2] > threshold){
+		else if (inFork and r.probabilities[i][2] <= threshold and r.probabilities[i-1][2] >= threshold){
 
 			potentialEnd = r.positions[i];
 		}
 		else if (inFork and (r.probabilities[i][0] > threshold or r.probabilities[i][1] > threshold)){//close if we've confidently moved to something else
 
 			assert(forkStart != -1 and potentialEnd != -1);
-			rightForks.push_back(std::make_pair(forkStart,potentialEnd));
+
+			if ( abs(potentialEnd - forkStart) >= minLength ){
+				rightForks.push_back(std::make_pair(forkStart,potentialEnd));
+			}
 			inFork = false;
 			forkStart = -1;
 			potentialEnd = -1;
@@ -300,7 +408,9 @@ std::string callTerminations(DetectedRead &r){
 		assert(forkStart != -1);
 		if (potentialEnd == -1) potentialEnd = r.positions.back();
 
-		rightForks.push_back(std::make_pair(forkStart,potentialEnd));
+		if ( abs(potentialEnd - forkStart) >= minLength ){
+			rightForks.push_back(std::make_pair(forkStart,potentialEnd));
+		}
 	}
 
 	inFork = false;
@@ -319,14 +429,18 @@ std::string callTerminations(DetectedRead &r){
 			forkStart = revPositions[i];
 			inFork = true;
 		}
-		else if (inFork and revProbabilities[i][0] < threshold and revProbabilities[i-1][0] > threshold){
+		else if (inFork and revProbabilities[i][0] <= threshold and revProbabilities[i-1][0] >= threshold){
 
 			potentialEnd = revPositions[i];
 		}
 		else if (inFork and (revProbabilities[i][1] > threshold or revProbabilities[i][2] > threshold)){//close if we've confidently moved to something else
 
 			assert(forkStart != -1 and potentialEnd != -1);
-			leftForks.push_back(std::make_pair(potentialEnd,forkStart));
+
+			if ( abs(potentialEnd - forkStart) >= minLength ){
+				leftForks.push_back(std::make_pair(potentialEnd,forkStart));
+			}
+
 			inFork = false;
 			forkStart = -1;
 			potentialEnd = -1;
@@ -340,7 +454,9 @@ std::string callTerminations(DetectedRead &r){
 		assert(forkStart != -1);
 		if (potentialEnd == -1) potentialEnd = revPositions.back();
 
-		leftForks.push_back(std::make_pair(potentialEnd,forkStart));
+		if ( abs(potentialEnd - forkStart) >= minLength ){
+			leftForks.push_back(std::make_pair(potentialEnd,forkStart));
+		}
 	}
 
 	//match up regions
@@ -569,6 +685,7 @@ int sense_main( int argc, char** argv ){
 				else throw DetectParsing();
 				cIndex++;
 			}
+
 			assert(d.mappingUpper > d.mappingLower);
 			readBuffer.push_back(d);
 		}
