@@ -30,7 +30,8 @@ static const char *help=
 "Optional arguments are:\n"
 "  -t,--threads              number of threads (default: 1 thread),\n"
 "  --markOrigins             writes replication origin locations to a bed file (default: off),\n"
-"  --markTerminations        writes replication termination locations to a bed file (default: off).\n"
+"  --markTerminations        writes replication termination locations to a bed file (default: off),\n"
+"  --markForks               writes replication fork locations to a bed file (default: off).\n"
 "Written by Michael Boemo, Department of Pathology, University of Cambridge.\n"
 "Please submit bug reports to GitHub Issues (https://github.com/MBoemo/DNAscent/issues).";
 
@@ -40,6 +41,7 @@ struct Arguments {
 	std::string outputFilename;
 	bool markOrigins = false;
 	bool markTerms = false;
+	bool markForks = false;
 	unsigned int threads = 1;
 };
 
@@ -91,6 +93,11 @@ Arguments parseSenseArguments( int argc, char** argv ){
 			args.markTerms = true;
 			i+=1;
 		}
+		else if ( flag == "--markForks" ){
+
+			args.markForks = true;
+			i+=1;
+		}
 		else throw InvalidOption( flag );
 	}
 	if (args.outputFilename == args.detectFilename) throw OverwriteFailure();
@@ -125,6 +132,185 @@ TF_Tensor *read2tensor(DetectedRead &r, const TensorShape &shape){
 
 
 std::vector<int> pooling = {6,4,4,4};
+
+
+std::pair<std::string,std::string> callForks(DetectedRead &r){
+
+	assert(r.positions.size() == r.probabilities.size());
+
+	float threshold = 0.5;
+	float threshold_weak = 0.5;
+	int minLength = 0;
+
+	std::vector<std::pair<int,int>> leftForks, leftForks_weak, rightForks, rightForks_weak;
+	std::string outBedLeft,outBedRight;
+
+	bool inFork = false;
+	int forkStart = -1, potentialEnd = -1;
+
+	//rightward-moving forks
+	for (size_t i = 1; i < r.probabilities.size(); i++){
+
+		if (r.probabilities[i][2] > threshold and not inFork){ //initialise the site
+
+			forkStart = r.positions[i];
+			inFork = true;
+		}
+		else if (inFork and r.probabilities[i][2] <= threshold and r.probabilities[i-1][2] >= threshold){//flag as a potential end if we dip below the threshold
+
+			potentialEnd = r.positions[i];
+		}
+		else if (inFork and (r.probabilities[i][0] > threshold or r.probabilities[i][1] > threshold)){//close if we've confidently moved to something else
+
+			assert(forkStart != -1 and potentialEnd != -1);
+
+			if ( abs(potentialEnd - forkStart) >= minLength ){
+				rightForks.push_back(std::make_pair(forkStart,potentialEnd));
+			}
+
+			inFork = false;
+			forkStart = -1;
+			potentialEnd = -1;
+		}
+	}
+
+	//if we got to the end of the read without closing
+	if (inFork){
+
+		assert(forkStart != -1);
+		if (potentialEnd == -1) potentialEnd = r.positions.back();
+
+		if ( abs(potentialEnd - forkStart) >= minLength ){
+			rightForks.push_back(std::make_pair(forkStart,potentialEnd));
+		}
+	}
+
+	inFork = false;
+	forkStart = -1;
+	potentialEnd = -1;
+
+	//weak call rightward-moving forks
+	for (size_t i = 1; i < r.probabilities.size(); i++){
+
+		if (r.probabilities[i][2] > threshold_weak and not inFork){ //initialise the site
+
+			forkStart = r.positions[i];
+			inFork = true;
+		}
+		else if (inFork and r.probabilities[i][2] >= threshold){//throw it out if it becomes a confident fork call
+
+			inFork = false;
+			forkStart = -1;
+			potentialEnd = -1;
+		}
+		else if (inFork and r.probabilities[i][2] <= threshold_weak and r.probabilities[i-1][2] >= threshold_weak){//flag as a potential end if we dip below the threshold
+
+			potentialEnd = r.positions[i];
+		}
+		else if (inFork and (r.probabilities[i][0] > threshold_weak or r.probabilities[i][1] > threshold_weak)){//close if we've confidently moved to something else
+
+			assert(forkStart != -1 and potentialEnd != -1);
+
+			rightForks_weak.push_back(std::make_pair(forkStart,potentialEnd));
+			//std::cout << "weak right" << forkStart << " " << potentialEnd << std::endl;
+
+			inFork = false;
+			forkStart = -1;
+			potentialEnd = -1;
+		}
+	}
+
+	inFork = false;
+	forkStart = -1;
+	potentialEnd = -1;
+
+	//reverse order for leftward-moving forks
+	std::vector<int> revPositions(r.positions.rbegin(), r.positions.rend());
+	std::vector<std::vector<float>> revProbabilities(r.probabilities.rbegin(), r.probabilities.rend());
+
+	//leftward-moving forks
+	for (size_t i = 1; i < revProbabilities.size(); i++){
+
+		if (revProbabilities[i][0] > threshold and not inFork){ //initialise the site
+
+			forkStart = revPositions[i];
+			inFork = true;
+		}
+		else if (inFork and revProbabilities[i][0] <= threshold and revProbabilities[i-1][0] >= threshold){//flag as a potential end if we dip below the threshold
+
+			potentialEnd = revPositions[i];
+		}
+		else if (inFork and (revProbabilities[i][1] > threshold or revProbabilities[i][2] > threshold)){//close if we've confidently moved to something else
+
+			assert(forkStart != -1 and potentialEnd != -1);
+
+			if ( abs(potentialEnd - forkStart) >= minLength ){
+				leftForks.push_back(std::make_pair(potentialEnd,forkStart));
+			}
+
+			inFork = false;
+			forkStart = -1;
+			potentialEnd = -1;
+		}
+	}
+
+	//if we got to the end of the read without closing
+	if (inFork){
+
+		assert(forkStart != -1);
+		if (potentialEnd == -1) potentialEnd = revPositions.back();
+
+		if ( abs(potentialEnd - forkStart) >= minLength ){
+			leftForks.push_back(std::make_pair(potentialEnd,forkStart));
+		}
+	}
+
+	inFork = false;
+	forkStart = -1;
+	potentialEnd = -1;
+
+	//weak call leftward-moving forks
+	for (size_t i = 1; i < revProbabilities.size(); i++){
+
+		if (revProbabilities[i][0] > threshold_weak and not inFork){ //initialise the site
+
+			forkStart = revPositions[i];
+			inFork = true;
+		}
+		else if (inFork and r.probabilities[i][0] >= threshold){//throw it out if it becomes a confident fork call
+
+			inFork = false;
+			forkStart = -1;
+			potentialEnd = -1;
+		}
+		else if (inFork and revProbabilities[i][0] <= threshold_weak and revProbabilities[i-1][0] >= threshold_weak){//flag as a potential end if we dip below the threshold
+
+			potentialEnd = revPositions[i];
+		}
+		else if (inFork and (revProbabilities[i][1] > threshold_weak or revProbabilities[i][2] > threshold_weak)){//close if we've confidently moved to something else
+
+			assert(forkStart != -1 and potentialEnd != -1);
+
+			leftForks_weak.push_back(std::make_pair(potentialEnd,forkStart));
+			//std::cout << "weak left" << potentialEnd << " " << forkStart << std::endl;
+			inFork = false;
+			forkStart = -1;
+			potentialEnd = -1;
+		}
+	}
+
+	for (auto lf = leftForks.begin(); lf < leftForks.end(); lf++){
+
+		outBedLeft += r.chromosome + " " + std::to_string(lf -> first) + " " + std::to_string(lf -> second) + " " + r.header.substr(1) + "\n";
+	}
+
+	for (auto rf = rightForks.begin(); rf < rightForks.end(); rf++){
+
+		outBedRight += r.chromosome + " " + std::to_string(rf -> first) + " " + std::to_string(rf -> second) + " " + r.header.substr(1) + "\n";
+	}
+
+	return std::make_pair(outBedLeft,outBedRight);
+}
 
 
 std::string callOrigins(DetectedRead &r){
@@ -557,7 +743,7 @@ std::string runCNN(DetectedRead &r, std::shared_ptr<ModelSession> session){
 }
 
 
-void emptyBuffer(std::vector< DetectedRead > &buffer, Arguments args, std::shared_ptr<ModelSession> session, std::ofstream &outFile, std::ofstream &originFile, std::ofstream &termFile, int trimFactor){
+void emptyBuffer(std::vector< DetectedRead > &buffer, Arguments args, std::shared_ptr<ModelSession> session, std::ofstream &outFile, std::ofstream &originFile, std::ofstream &termFile, std::ofstream &leftForkFile, std::ofstream &rightForkFile, int trimFactor){
 
 	#pragma omp parallel for schedule(dynamic) shared(args, outFile, session) num_threads(args.threads)
 	for ( auto b = buffer.begin(); b < buffer.end(); b++) {
@@ -565,7 +751,7 @@ void emptyBuffer(std::vector< DetectedRead > &buffer, Arguments args, std::share
 		b -> trim(trimFactor);
 		std::string readOutput = runCNN(*b, session);
 
-		std::string termOutput, originOutput;
+		std::string termOutput, originOutput, leftForkOutput, rightForkOutput;
 		if (args.markOrigins){
 
 			originOutput = callOrigins(*b);
@@ -573,12 +759,19 @@ void emptyBuffer(std::vector< DetectedRead > &buffer, Arguments args, std::share
 		if (args.markTerms){
 			termOutput = callTerminations(*b);
 		}
+		if (args.markForks){
+			std::pair<std::string,std::string> forkOutputPair = callForks(*b);
+			leftForkOutput = forkOutputPair.first;
+			rightForkOutput = forkOutputPair.second;
+		}
 
 		#pragma omp critical
 		{
 			outFile << readOutput;
 			if (args.markTerms and (*b).terminations.size() > 0) termFile << termOutput;
 			if (args.markOrigins and (*b).origins.size() > 0) originFile << originOutput;
+			if (args.markForks and leftForkOutput.size() > 0) leftForkFile << leftForkOutput;
+			if (args.markForks and rightForkOutput.size() > 0) rightForkFile << rightForkOutput;
 		}
 	}
 	buffer.clear();
@@ -624,7 +817,7 @@ int sense_main( int argc, char** argv ){
 	if ( not inFile.is_open() ) throw IOerror( args.detectFilename );
  	std::ofstream outFile( args.outputFilename );
 	if ( not outFile.is_open() ) throw IOerror( args.outputFilename );
- 	std::ofstream originFile, termFile;
+ 	std::ofstream originFile, termFile, leftForkFile, rightForkFile;
 	if (args.markTerms){
 
 		termFile.open("terminations_DNAscent_forkSense.bed");
@@ -634,6 +827,14 @@ int sense_main( int argc, char** argv ){
 
 		originFile.open("origins_DNAscent_forkSense.bed");
 		if ( not originFile.is_open() ) throw IOerror( "origins_DNAscent_forkSense.bed" );
+	}
+	if (args.markForks){
+
+		leftForkFile.open("leftForks_DNAscent_forkSense.bed");
+		if ( not leftForkFile.is_open() ) throw IOerror( "leftForks_DNAscent_forkSense.bed" );
+
+		rightForkFile.open("rightForks_DNAscent_forkSense.bed");
+		if ( not rightForkFile.is_open() ) throw IOerror( "rightForks_DNAscent_forkSense.bed" );
 	}
 
 	//write the outfile header
@@ -665,7 +866,7 @@ int sense_main( int argc, char** argv ){
 			}
 
 			//empty the buffer if it's full
-			if (readBuffer.size() >= maxBufferSize) emptyBuffer(readBuffer, args, session, outFile, originFile, termFile, trimFactor);
+			if (readBuffer.size() >= maxBufferSize) emptyBuffer(readBuffer, args, session, outFile, originFile, termFile, leftForkFile, rightForkFile, trimFactor);
 
 			progress++;
 			pb.displayProgress( progress, failed, 0 );
@@ -714,7 +915,7 @@ int sense_main( int argc, char** argv ){
 	}
 
 	//empty the buffer at the end
-	emptyBuffer(readBuffer, args, session, outFile, originFile, termFile, trimFactor);
+	emptyBuffer(readBuffer, args, session, outFile, originFile, termFile, leftForkFile, rightForkFile, trimFactor);
 
 	inFile.close();
 	outFile.close();
