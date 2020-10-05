@@ -340,13 +340,7 @@ def parseSecondaryFile(fname, readID2directory,args):
 
 	rLen = mappingEnd - mappingStart
 
-	if rLen > args.minLength and rLen < args.maxLength and count < args.maxReads:
-
-		if count % args.filesPerDir == 0:
-			directoryCount += 1
-			os.system('mkdir '+args.outDir + '/'+str(directoryCount))
-
-		readID2directory[readID] = directoryCount
+	if rLen > args.minLength and rLen < args.maxLength and count < args.maxReads and readID in readID2directory:
 
 		if fname[1] == "regions":
 			f_regions = open( args.outDir + '/' + str(readID2directory[readID]) + '/' + readID + '_regions.bedgraph','w')
