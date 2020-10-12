@@ -855,10 +855,10 @@ int detect_main( int argc, char** argv ){
 	std::shared_ptr<ModelSession> session;
 
 	if (args.useGPU) {
-		session = model_load_gpu(modelPath.c_str(), "input_1", "time_distributed/Reshape_1",args.GPUdevice);
+		session = model_load_gpu(modelPath.c_str(), "input_1", "time_distributed/Reshape_1",args.GPUdevice,args.threads);
 	}
 	else{
-		session = model_load_cpu(modelPath.c_str(), "input_1", "time_distributed/Reshape_1");
+		session = model_load_cpu(modelPath.c_str(), "input_1", "time_distributed/Reshape_1",args.threads);
 
 	}
 

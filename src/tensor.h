@@ -125,8 +125,8 @@ struct TensorShape{
 
 
 //prototypes
-std::shared_ptr<ModelSession> model_load_cpu(const char *filename, const char *input_name, const char *output_name);
-std::shared_ptr<ModelSession> model_load_gpu(const char *filename, const char *input_name, const char *output_name, unsigned char device);
+std::shared_ptr<ModelSession> model_load_cpu(const char *filename, const char *input_name, const char *output_name, unsigned int threads);
+std::shared_ptr<ModelSession> model_load_gpu(const char *filename, const char *input_name, const char *output_name, unsigned char device, unsigned int threads);
 
 
 #endif

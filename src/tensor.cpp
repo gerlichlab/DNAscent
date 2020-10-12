@@ -28,7 +28,7 @@ static TF_Buffer* read_tf_buffer_from_file(const char* file) {
 }
 
 
-std::shared_ptr<ModelSession> model_load_cpu(const char *filename, const char *input_name, const char *output_name){
+std::shared_ptr<ModelSession> model_load_cpu(const char *filename, const char *input_name, const char *output_name, unsigned int threads){
 
 	int vis = setenv("CUDA_VISIBLE_DEVICES", "", 1);
 	if (vis == -1){
@@ -67,11 +67,15 @@ std::shared_ptr<ModelSession> model_load_cpu(const char *filename, const char *i
 
 	TF_SessionOptions *opts = TF_NewSessionOptions();
 
-	//uncomment to cap CPU threads
-    //uint8_t intra_op_parallelism_threads = 1;
-    //uint8_t inter_op_parallelism_threads = 1;
-    //uint8_t buf[]={0x10,intra_op_parallelism_threads,0x28,inter_op_parallelism_threads};
-    //TF_SetConfig(opts, buf,sizeof(buf),status.ptr);
+	//set multithreading
+	//the following buffer is equivalent to
+	//config = tf.ConfigProto(allow_soft_placement=True,device_count = {'CPU':<threads>/2},intra_op_parallelism_threads=<threads>/2,inter_op_parallelism_threads=2)
+	uint8_t intra_op_parallelism_threads = threads/2;
+	uint8_t inter_op_parallelism_threads = 2;
+	uint8_t cpus = threads/2;
+	uint8_t buf[]={0xa, 0x7, 0xa, 0x3, 0x43, 0x50, 0x55, 0x10, cpus, 0x10, intra_op_parallelism_threads, 0x28, inter_op_parallelism_threads, 0x38, 0x1};
+
+ 	TF_SetConfig(opts, buf,sizeof(buf),status.ptr);
 
 	std::shared_ptr<TF_Session*> session = std::make_shared<TF_Session*>(TF_NewSession(*(graph.get()), opts, status.ptr));
 
@@ -88,7 +92,7 @@ std::shared_ptr<ModelSession> model_load_cpu(const char *filename, const char *i
 }
 
 
-std::shared_ptr<ModelSession> model_load_gpu(const char *filename, const char *input_name, const char *output_name, unsigned char device){
+std::shared_ptr<ModelSession> model_load_gpu(const char *filename, const char *input_name, const char *output_name, unsigned char device, unsigned int threads){
 
 	CStatus status;
 	std::shared_ptr<ModelSession> ms = std::make_shared<ModelSession>();
@@ -115,15 +119,17 @@ std::shared_ptr<ModelSession> model_load_gpu(const char *filename, const char *i
 	}
 
 	//the buffer that follows is equivalent to:
-	//config = tf.ConfigProto(allow_soft_placement=True,device_count = {'GPU': 1,'CPU':1},intra_op_parallelism_threads=1,inter_op_parallelism_threads=1)
+	//config = tf.ConfigProto(allow_soft_placement=True,log_device_placement=False,device_count = {'GPU': 1,'CPU':<threads>/2},intra_op_parallelism_threads=<threads>/2,inter_op_parallelism_threads=2)
 	//config.gpu_options.allow_growth=True
-	//config.gpu_options.per_process_gpu_memory_fraction = 0.95
-	//config.gpu_options.visible_device_list= <device_name>
+	//config.gpu_options.visible_device_list= <device>
+	uint8_t intra_op_parallelism_threads = 1;//threads/2;
+	uint8_t inter_op_parallelism_threads = threads;//2;
+	uint8_t cpus = threads;//threads/2;
+	uint8_t buf[]={0xa, 0x7, 0xa, 0x3, 0x43, 0x50, 0x55, 0x10, cpus, 0xa, 0x7, 0xa, 0x3, 0x47, 0x50, 0x55, 0x10, 0x1, 0x10, intra_op_parallelism_threads, 0x28, inter_op_parallelism_threads, 0x32, 0x5, 0x20, 0x1, 0x2a, 0x1, device, 0x38, 0x1};
 
 	TF_SessionOptions *opts = TF_NewSessionOptions();
-    uint8_t buf[]={0xa, 0x7, 0xa, 0x3, 0x47, 0x50, 0x55, 0x10, 0x1, 0xa, 0x7, 0xa, 0x3, 0x43, 0x50, 0x55, 0x10, 0x1, 0x10, 0x1, 0x28, 0x1, 0x32, 0xe, 0x9, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0xee, 0x3f, 0x20, 0x1, 0x2a, 0x1, device, 0x38, 0x1};
-    TF_SetConfig(opts, buf,sizeof(buf),status.ptr);
-    //TF_EnableXLACompilation(opts,true);
+	TF_SetConfig(opts, buf,sizeof(buf),status.ptr);
+	//TF_EnableXLACompilation(opts,true);
 	std::shared_ptr<TF_Session*> session = std::make_shared<TF_Session*>(TF_NewSession(*(graph.get()), opts, status.ptr));
 
 	if(status.failure()){
