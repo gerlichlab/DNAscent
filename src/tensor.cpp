@@ -9,6 +9,7 @@
 #include "tensor.h"
 //#include "../tensorflow/include/tensorflow/c/c_api.h"
 #include <fstream>
+#include <algorithm>
 
 
 static TF_Buffer* read_tf_buffer_from_file(const char* file) {
@@ -70,9 +71,9 @@ std::shared_ptr<ModelSession> model_load_cpu(const char *filename, const char *i
 	//set multithreading
 	//the following buffer is equivalent to
 	//config = tf.ConfigProto(allow_soft_placement=True,device_count = {'CPU':<threads>/2},intra_op_parallelism_threads=<threads>/2,inter_op_parallelism_threads=2)
-	uint8_t intra_op_parallelism_threads = threads/2;
+	uint8_t intra_op_parallelism_threads = std::max((unsigned int)1,threads/2);
 	uint8_t inter_op_parallelism_threads = 2;
-	uint8_t cpus = threads/2;
+	uint8_t cpus = std::max((unsigned int)1,threads/2);
 	uint8_t buf[]={0xa, 0x7, 0xa, 0x3, 0x43, 0x50, 0x55, 0x10, cpus, 0x10, intra_op_parallelism_threads, 0x28, inter_op_parallelism_threads, 0x38, 0x1};
 
  	TF_SetConfig(opts, buf,sizeof(buf),status.ptr);

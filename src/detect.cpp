@@ -753,7 +753,7 @@ TF_Tensor *read2tensor(std::shared_ptr<AlignedRead> r, const TensorShape &shape)
 }
 
 
-std::string runCNN(std::shared_ptr<AlignedRead> r,std::shared_ptr<ModelSession> session){
+std::string runCNN(std::shared_ptr<AlignedRead> r, std::shared_ptr<ModelSession> session){
 
 	std::pair<size_t, size_t> protoShape = r -> getShape();
 	TensorShape input_shape={{1, (int64_t) protoShape.first, (int64_t) protoShape.second}, 3};
@@ -767,13 +767,10 @@ std::string runCNN(std::shared_ptr<AlignedRead> r,std::shared_ptr<ModelSession> 
 	TF_Tensor* inputs[]={input_values.get()};
 	TF_Tensor* outputs[1]={};
 
-    //int tid = omp_get_thread_num();
-    //std::cout << tid << std::endl;
 	TF_SessionRun(*(session->session.get()), nullptr,
 		&session->inputs, inputs, 1,
 		&session->outputs, outputs, 1,
 		nullptr, 0, nullptr, status.ptr);
-    //std::cout << tid << std::endl;
 
 	auto _output_holder = tf_obj_unique_ptr(outputs[0]);
 
@@ -843,7 +840,6 @@ int detect_main( int argc, char** argv ){
 
 	Arguments args = parseDetectArguments( argc, argv );
 	bool bulkFast5;
-
 
 	//load DNAscent index
 	std::map< std::string, std::string > readID2path;
