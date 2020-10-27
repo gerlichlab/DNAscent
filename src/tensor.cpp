@@ -8,25 +8,7 @@
 
 #include "tensor.h"
 //#include "../tensorflow/include/tensorflow/c/c_api.h"
-#include <fstream>
 #include <algorithm>
-
-
-static TF_Buffer* read_tf_buffer_from_file(const char* file) {
-	std::ifstream t(file, std::ifstream::binary);
-	t.exceptions(std::ifstream::failbit | std::ifstream::badbit);
-	t.seekg(0, std::ios::end);
-	size_t size = t.tellg();
-	auto data = std::make_unique<char[]>(size);
-	t.seekg(0);
-	t.read(data.get(), size);
-
-	TF_Buffer *buf = TF_NewBuffer();
-	buf->data = data.release();
-	buf->length = size;
-	buf->data_deallocator = free_cpp_array<char>;
-	return buf;
-}
 
 
 std::shared_ptr<ModelSession> model_load_cpu(const char *filename, const char *input_name, const char *output_name, unsigned int threads){
@@ -120,12 +102,12 @@ std::shared_ptr<ModelSession> model_load_gpu(const char *filename, const char *i
 	}
 
 	//the buffer that follows is equivalent to:
-	//config = tf.ConfigProto(allow_soft_placement=True,log_device_placement=False,device_count = {'GPU': 1,'CPU':<threads>/2},intra_op_parallelism_threads=<threads>/2,inter_op_parallelism_threads=2)
+	//config = tf.ConfigProto(allow_soft_placement=True,log_device_placement=False,device_count = {'GPU': 1,'CPU':<threads>},intra_op_parallelism_threads=<threads>/2,inter_op_parallelism_threads=2)
 	//config.gpu_options.allow_growth=True
 	//config.gpu_options.visible_device_list= <device>
-	uint8_t intra_op_parallelism_threads = 1;//threads/2;
-	uint8_t inter_op_parallelism_threads = threads;//2;
-	uint8_t cpus = threads;//threads/2;
+	uint8_t intra_op_parallelism_threads = 1;
+	uint8_t inter_op_parallelism_threads = threads;
+	uint8_t cpus = threads;
 	uint8_t buf[]={0xa, 0x7, 0xa, 0x3, 0x43, 0x50, 0x55, 0x10, cpus, 0xa, 0x7, 0xa, 0x3, 0x47, 0x50, 0x55, 0x10, 0x1, 0x10, intra_op_parallelism_threads, 0x28, inter_op_parallelism_threads, 0x32, 0x5, 0x20, 0x1, 0x2a, 0x1, device, 0x38, 0x1};
 
 	TF_SessionOptions *opts = TF_NewSessionOptions();

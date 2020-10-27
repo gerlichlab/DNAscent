@@ -1667,6 +1667,9 @@ int align_main( int argc, char** argv ){
 	/*initialise progress */
 	int numOfRecords = 0, prog = 0, failed = 0;
 	countRecords( bam_fh, bam_idx, bam_hdr, numOfRecords, args.minQ, args.minL );
+	if (args.capReads){
+		numOfRecords = std::min(numOfRecords,args.maxReads);
+	}
 	progressBar pb(numOfRecords,true);
 
 	//build an iterator for all reads in the bam file

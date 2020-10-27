@@ -12,11 +12,13 @@
 #include <iostream>
 #include <memory>
 #include <cassert>
+#include <fstream>
 #include "../tensorflow/include/tensorflow/c/eager/c_api.h"
 
 #define MAX_DIM 16
 
-
+//start: adapted from https://github.com/aljabr0/from-keras-to-c
+//licensed under Apache 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
 class CStatus{
 	public:
 		TF_Status *ptr;
@@ -48,7 +50,7 @@ namespace detail {
 	template<>
 	struct TFObjDeallocator<TF_Graph> { static void run(TF_Graph *obj) { TF_DeleteGraph(obj); }};
 
-	    template<>
+	template<>
 	struct TFObjDeallocator<TF_Tensor> { static void run(TF_Tensor *obj) { TF_DeleteTensor(obj); }};
 
 	template<>
@@ -123,8 +125,24 @@ struct TensorShape{
     }
 };
 
+static TF_Buffer* read_tf_buffer_from_file(const char* file) {
+	std::ifstream t(file, std::ifstream::binary);
+	t.exceptions(std::ifstream::failbit | std::ifstream::badbit);
+	t.seekg(0, std::ios::end);
+	size_t size = t.tellg();
+	auto data = std::make_unique<char[]>(size);
+	t.seekg(0);
+	t.read(data.get(), size);
 
-//prototypes
+	TF_Buffer *buf = TF_NewBuffer();
+	buf->data = data.release();
+	buf->length = size;
+	buf->data_deallocator = free_cpp_array<char>;
+	return buf;
+}
+//end adapted from https://github.com/aljabr0/from-keras-to-c
+
+
 std::shared_ptr<ModelSession> model_load_cpu(const char *filename, const char *input_name, const char *output_name, unsigned int threads);
 std::shared_ptr<ModelSession> model_load_gpu(const char *filename, const char *input_name, const char *output_name, unsigned char device, unsigned int threads);
 

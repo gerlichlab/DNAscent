@@ -24,9 +24,9 @@ static const char *help=
 "trainGMM: DNAscent executable that determines the mean and standard deviation of a base analogue's current.\n"
 "Note: This executable is geared towards developers and advanced users.\n"
 "To run DNAscent trainGMM, do:\n"
-"   DNAscent trainGMM -d /path/to/eventalign.nanopolish -o output.model\n"
+"   DNAscent trainGMM -d /path/to/DNAscent.align -o output.model\n"
 "Required arguments are:\n"
-"  -d,--trainingData         path to training data from nanopolish eventalign,\n"
+"  -d,--trainingData         path to training data from DNAscent align,\n"
 "  -o,--output               path to the output trained pore model file.\n"
 "Optional arguments are:\n"
 "  -pi,                      mixing parameter for BrdU (default is 0.5),\n"
@@ -377,9 +377,6 @@ int train_main( int argc, char** argv ){
 	std::ofstream outFile( trainArgs.trainingOutputFilename );
 	if ( not outFile.is_open() ) throw IOerror( trainArgs.trainingOutputFilename );
 
-	/*get events from the work file */
-	std::cout << "Trawling through eventalign... ";
-
 	std::string line;
 	int prog, failed;
 
@@ -400,14 +397,21 @@ int train_main( int argc, char** argv ){
 
 	std::vector< std::vector< double > > importedEvents( 4096 );
 
-	progressBar pb_read( trainArgs.maxReads, true );
-	unsigned int readsRead = 0;
-
+	//get a read count
+	unsigned int readCount = 0;
 	std::ifstream eventFile(trainArgs.eventalignFilename);
 	if ( not eventFile.is_open() ) throw IOerror( trainArgs.eventalignFilename );
+	while( std::getline( eventFile, line ) ){
 
+		if ( line.substr(0,1) == ">" ) readCount++;
+	}	
+	progressBar pb_read(std::min(readCount,trainArgs.maxReads),true);
+	eventFile.close();
+
+	unsigned int readsRead = 0;
+ 	eventFile.open( trainArgs.eventalignFilename );
+	if ( not eventFile.is_open() ) throw IOerror( trainArgs.eventalignFilename );
 	std::getline( eventFile, line);//throw away the header
-
 	while ( std::getline( eventFile, line) ){
 
 		if (line.empty()) continue;
@@ -498,7 +502,7 @@ int train_main( int argc, char** argv ){
 		std::vector< double > fitParameters;
 		try{
 
-			fitParameters = gaussianMixtureEM( trainArgs.pi, mu1, stdv1, mu2, stdv2, filteredEvents, 0.01, 100 );
+			fitParameters = gaussianMixtureEM_PRIOR( trainArgs.pi, mu1, stdv1, mu2, stdv2, filteredEvents, 0.01, 100 );
 		}
 		catch ( NegativeLog &nl ){
 

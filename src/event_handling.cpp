@@ -225,7 +225,8 @@ std::vector< double > solveLinearSystem( std::vector< std::vector< double > > A,
 }
 
 
-//start: adapted from nanopolish
+//start: adapted from nanopolish (https://github.com/jts/nanopolish)
+//licensed under MIT
 
 inline float logProbabilityMatch(unsigned int sixMerIndex, double x, double shift, double scale){
 
@@ -251,8 +252,7 @@ inline float logProbabilityMatch(unsigned int sixMerIndex, double x, double shif
 void adaptive_banded_simple_event_align( std::vector< double > &raw, read &r, PoreParameters &s, std::vector<unsigned int> &kmer_ranks ){
 
 	//benchmarking
-    //std::chrono::steady_clock::time_point tp1 = std::chrono::steady_clock::now();
-
+	//std::chrono::steady_clock::time_point tp1 = std::chrono::steady_clock::now();
 
 	std::string sequence = r.basecall;
 
@@ -431,8 +431,8 @@ void adaptive_banded_simple_event_align( std::vector< double > &raw, read &r, Po
 	}
 
 	//benchmarking
-    //std::chrono::steady_clock::time_point tp2 = std::chrono::steady_clock::now();
-    //std::cout << "banded alignment: " << std::chrono::duration_cast<std::chrono::microseconds>(tp2 - tp1).count() << std::endl;
+	//std::chrono::steady_clock::time_point tp2 = std::chrono::steady_clock::now();
+	//std::cout << "banded alignment: " << std::chrono::duration_cast<std::chrono::microseconds>(tp2 - tp1).count() << std::endl;
 
 	//
 	// Backtrack to compute alignment
@@ -460,11 +460,11 @@ void adaptive_banded_simple_event_align( std::vector< double > &raw, read &r, Po
 			}
 		}
 	}
-	//end:from nanopolish
+//end adapted from nanopolish
 
 	//benchmarking
-    //std::chrono::steady_clock::time_point tp3 = std::chrono::steady_clock::now();
-    //std::cout << "calculate end index: " << std::chrono::duration_cast<std::chrono::microseconds>(tp3 - tp2).count() << std::endl;
+	//std::chrono::steady_clock::time_point tp3 = std::chrono::steady_clock::now();
+	//std::cout << "calculate end index: " << std::chrono::duration_cast<std::chrono::microseconds>(tp3 - tp2).count() << std::endl;
 
 	r.eventAlignment.reserve(raw.size());
 
@@ -519,9 +519,8 @@ void adaptive_banded_simple_event_align( std::vector< double > &raw, read &r, Po
 	std::reverse(r.eventAlignment.begin(), r.eventAlignment.end());
 
 	//benchmarking
-    //std::chrono::steady_clock::time_point tp4 = std::chrono::steady_clock::now();
-    //std::cout << "backtrace: " << std::chrono::duration_cast<std::chrono::microseconds>(tp4 - tp3).count() << std::endl;
-
+	//std::chrono::steady_clock::time_point tp4 = std::chrono::steady_clock::now();
+	//std::cout << "backtrace: " << std::chrono::duration_cast<std::chrono::microseconds>(tp4 - tp3).count() << std::endl;
 
 	// QC results
 	double avg_log_emission = sum_emission / n_aligned_events;
@@ -569,8 +568,8 @@ void adaptive_banded_simple_event_align( std::vector< double > &raw, read &r, Po
 	r.scalings = rescale;
 
 	//benchmarking
-    //std::chrono::steady_clock::time_point tp5 = std::chrono::steady_clock::now();
-    //std::cout << "calculate shift and scale: " << std::chrono::duration_cast<std::chrono::microseconds>(tp5 - tp4).count() << std::endl;
+	//std::chrono::steady_clock::time_point tp5 = std::chrono::steady_clock::now();
+	//std::cout << "calculate shift and scale: " << std::chrono::duration_cast<std::chrono::microseconds>(tp5 - tp4).count() << std::endl;
 
 }
 

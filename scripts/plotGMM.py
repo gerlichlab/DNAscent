@@ -187,10 +187,11 @@ for i, key in enumerate(sixmer2eventsBrdU):
 		plt.figure()
 		plt.hist(outliers_filtered, 50, density=True, alpha=0.3)
 
-		model_mu = model[key][0]
-		model_std = model[key][1]
-		x_model = np.linspace(model_mu - 3*model_std, model_mu + 3*model_std, 100)
-		plt.plot(x_model, stats.norm.pdf(x_model, model_mu, model_std), label='Pore Model')
+		if key in model:
+			model_mu = model[key][0]
+			model_std = model[key][1]
+			x_model = np.linspace(model_mu - 3*model_std, model_mu + 3*model_std, 100)
+			plt.plot(x_model, stats.norm.pdf(x_model, model_mu, model_std), label='Pore Model')
 
 		if key in fit1:
 			model_mu = fit1[key][0]
