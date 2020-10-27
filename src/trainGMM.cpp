@@ -261,12 +261,12 @@ std::vector< double > gaussianMixtureEM_PRIOR( double pi, double mu1, double sig
 }
 
 
-std::vector< double > gaussianMixtureEM( double mu1, double sigma1, double mu2, double sigma2, std::vector< double > &data, double tolerance, int maxIter ){
+std::vector< double > gaussianMixtureEM( double pi, double mu1, double sigma1, double mu2, double sigma2, std::vector< double > &data, double tolerance, int maxIter ){
 
 	std::vector< std::vector< double > > Z( 2, std::vector< double >( data.size(), 0 ) );
 
-	double pi1 = 0.5;
-	double pi2 = 0.5;
+	double pi1 = 1-pi;
+	double pi2 = pi;
 	double total1, total2, logLikelihood_Old, logLikelihood_New;
 
 	/*INITIALISATION - calculuate the log likelihood using the paramters initially passed */
@@ -498,7 +498,7 @@ int train_main( int argc, char** argv ){
 		std::vector< double > fitParameters;
 		try{
 
-			fitParameters = gaussianMixtureEM_PRIOR( trainArgs.pi, mu1, stdv1, mu2, stdv2, filteredEvents, 0.01, 100 );
+			fitParameters = gaussianMixtureEM( trainArgs.pi, mu1, stdv1, mu2, stdv2, filteredEvents, 0.01, 100 );
 		}
 		catch ( NegativeLog &nl ){
 

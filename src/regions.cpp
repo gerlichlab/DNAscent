@@ -377,7 +377,7 @@ void regionsCNN(Arguments args){
 		inFile.close();
 		std::cout << "Done." << std::endl;
 
-		std::vector< double > fitParams = gaussianMixtureEM(-7.0, 1.0, 0., 1.0, allZScores, 0.01, 100 );
+		std::vector< double > fitParams = gaussianMixtureEM(0.5, -7.0, 1.0, 0., 1.0, allZScores, 0.01, 100 );
 		double thym_mu, thym_mix, thym_sigma, brdu_mu, brdu_mix, brdu_sigma;
 		if (fitParams[1] < fitParams[2]){
 

@@ -1,10 +1,13 @@
 import sys
 
-threshold = 0.50
+threshold = 0.70
 
 f = open(sys.argv[1],'r')
 numCalls = 0
 numAttempts = 0
+
+maxReads = 500
+readCount = 0
 
 for line in f:
 
@@ -13,6 +16,8 @@ for line in f:
 
 	if line[0] == '>':
 
+		readCount += 1
+
 		splitLine = line.rstrip().split()
 		strand = splitLine[4]
 
@@ -20,16 +25,14 @@ for line in f:
 		attemptsCooldown = 0
 
 		continue
+
+	if readCount > maxReads:
+		break
+
 	else:
 
 		splitLine = line.split('\t')
-		sixMer = splitLine[3]
-
-		if (strand == 'rev' and not sixMer[-1:] == "A") or (strand == "fwd" and not sixMer[0] == "T"):
-			continue
-
-		splitLine = line.split('\t')
-		BrdUprob = float(splitLine[2])
+		BrdUprob = float(splitLine[1])
 		position = int(splitLine[0])
 		
 		if BrdUprob > threshold:
