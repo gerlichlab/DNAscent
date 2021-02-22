@@ -52,7 +52,7 @@ tensorflow/include/tensorflow/c/c_api.h:
 		cd ..; \
 	fi 
 	
-SUBDIRS = src src/scrappie src/pfasta
+SUBDIRS = src src/scrappie src/pfasta src/sgsmooth
 CPP_SRC := $(foreach dir, $(SUBDIRS), $(wildcard $(dir)/*.cpp))
 C_SRC := $(foreach dir, $(SUBDIRS), $(wildcard $(dir)/*.c))
 EXE_SRC = src/DNAscent.cpp
@@ -67,7 +67,7 @@ C_OBJ = $(C_SRC:.c=.o)
 
 depend: .depend
 
-.depend: $(CPP_SRC) $(C_SRC) $(EXE_SRC) $(H5_LIB) $(TENS_LIB) src/gitcommit.h
+.depend: $(CPP_SRC) $(C_SRC) $(EXE_SRC) $(H5_LIB) $(TENS_LIB) src/gitcommit.h 
 	rm -f ./.depend
 	$(CXX) $(CXXFLAGS) -MM $(CPP_SRC) $(C_SRC) > ./.depend;
 

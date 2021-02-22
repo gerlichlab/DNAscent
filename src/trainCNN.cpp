@@ -1,5 +1,5 @@
 //----------------------------------------------------------
-// Copyright 2019 University of Oxford
+// Copyright 2019-2020 University of Oxford
 // Written by Michael A. Boemo (mb915@cam.ac.uk)
 // This software is licensed under GPL-3.0.  You should have
 // received a copy of the license with this software.  If
@@ -41,7 +41,9 @@ static const char *help=
 "  -t,--threads              number of threads (default is 1 thread),\n"
 "  -m,--maxReads             maximum number of reads to consider,\n"
 "  -q,--quality              minimum mapping quality (default is 20),\n"
-"  -l,--length               minimum read length in bp (default is 100).\n"
+"  -l,--length               minimum read length in bp (default is 100),\n"
+"     --useRaw               write raw signal instead of events.\n"
+
 "Written by Michael Boemo, Department of Pathology, University of Cambridge.\n"
 "Please submit bug reports to GitHub Issues (https://github.com/MBoemo/DNAscent/issues).";
 
@@ -50,7 +52,7 @@ struct Arguments {
 	std::string referenceFilename;
 	std::string outputFilename;
 	std::string indexFilename;
-	bool methylAware, capReads;
+	bool methylAware, capReads, useRaw;
 	double divergence;
 	int minQ, maxReads;
 	int minL;
@@ -86,6 +88,7 @@ Arguments parseDataArguments( int argc, char** argv ){
 	args.methylAware = false;
 	args.divergence = 0;
 	args.capReads = false;
+	args.useRaw = false;
 	args.maxReads = 0;
 	args.dilation = 1.0;
 
@@ -159,6 +162,11 @@ Arguments parseDataArguments( int argc, char** argv ){
 		else if ( flag == "--methyl-aware" ){
 
 			args.methylAware = true;
+			i+=1;
+		}
+		else if ( flag == "--useRaw" ){
+
+			args.useRaw = true;
 			i+=1;
 		}
 		else throw InvalidOption( flag );
@@ -288,7 +296,7 @@ int data_main( int argc, char** argv ){
 				}
 
 				std::map<unsigned int, double> BrdUCalls = llAcrossRead_forTraining( r, windowLength);
-				std::string readOut = eventalign_train( r, 100, BrdUCalls, args.dilation);
+				std::string readOut = eventalign_train( r, 100, BrdUCalls, args.dilation, args.useRaw);
 
 				#pragma omp critical
 				{

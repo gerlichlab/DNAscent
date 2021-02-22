@@ -420,6 +420,11 @@ if args.useTargets:
 	for line in f:
 		splitLine = line.rstrip().split()
 		readID = splitLine[3]
+		
+		#only short
+		if abs(int(splitLine[2]) - int(splitLine[1])) > 4000:
+			continue
+
 		targetIDs.append(readID)
 	f.close()
 

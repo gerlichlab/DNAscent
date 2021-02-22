@@ -108,10 +108,7 @@ Arguments parseSenseArguments( int argc, char** argv ){
 
 TF_Tensor *read2tensor(DetectedRead &r, const TensorShape &shape){
 
-	size_t size = r.brduCalls.size();
-	//put a check in here for size
-
-	r.generateInput();
+	size_t size = r.tensorInput.size();
 
 	auto output_array = std::make_unique<float[]>(size);
 	{
@@ -131,16 +128,16 @@ TF_Tensor *read2tensor(DetectedRead &r, const TensorShape &shape){
 }
 
 
-std::vector<int> pooling = {6,4,4,4};
+std::vector<int> pooling = {6,4,4,4,2};
 
 
 std::pair<std::string,std::string> callForks(DetectedRead &r){
 
 	assert(r.positions.size() == r.probabilities.size());
 
-	float threshold = 0.5;
+	float threshold = 0.7;
 	float threshold_weak = 0.5;
-	int minLength = 0;
+	int minLength = 1000;
 
 	std::vector<std::pair<int,int>> leftForks, leftForks_weak, rightForks, rightForks_weak;
 	std::string outBedLeft,outBedRight;
@@ -315,6 +312,13 @@ std::pair<std::string,std::string> callForks(DetectedRead &r){
 
 std::string callOrigins(DetectedRead &r){
 
+	if (r.positions.size() != r.probabilities.size()){
+
+		std::cerr << r.positions.size() << std::endl;
+		std::cerr << r.probabilities.size() << std::endl;
+		std::cerr << r.readID << std::endl;
+	}
+
 	assert(r.positions.size() == r.probabilities.size());
 
 	float threshold = 0.7;
@@ -369,6 +373,7 @@ std::string callOrigins(DetectedRead &r){
 	potentialEnd = -1;
 
 	//weak call rightward-moving forks
+	/*
 	for (size_t i = 1; i < r.probabilities.size(); i++){
 
 		if (r.probabilities[i][2] > threshold_weak and not inFork){ //initialise the site
@@ -398,6 +403,7 @@ std::string callOrigins(DetectedRead &r){
 			potentialEnd = -1;
 		}
 	}
+	*/
 
 	inFork = false;
 	forkStart = -1;
@@ -449,6 +455,7 @@ std::string callOrigins(DetectedRead &r){
 	potentialEnd = -1;
 
 	//weak call leftward-moving forks
+	/*
 	for (size_t i = 1; i < revProbabilities.size(); i++){
 
 		if (revProbabilities[i][0] > threshold_weak and not inFork){ //initialise the site
@@ -477,6 +484,7 @@ std::string callOrigins(DetectedRead &r){
 			potentialEnd = -1;
 		}
 	}
+	*/
 
 
 	//match up regions
@@ -553,7 +561,8 @@ std::string callTerminations(DetectedRead &r){
 
 	assert(r.positions.size() == r.probabilities.size());
 
-	float threshold = 0.8;
+	float threshold = 0.7;
+	float threshold_weak = 0.5;
 	int minLength = 1000;
 
 	std::vector<std::pair<int,int>> leftForks, rightForks;
@@ -692,9 +701,13 @@ std::string callTerminations(DetectedRead &r){
 	return outBed;
 }
 
-std::string runCNN(DetectedRead &r, std::shared_ptr<ModelSession> session){
+std::string runCNN(DetectedRead &r, std::shared_ptr<ModelSession> session, unsigned int trimFactor){
 
-	TensorShape input_shape={{1, (int64_t)r.brduCalls.size(), 1}, 3};
+	r.generateInput();
+	r.trim(trimFactor);
+
+	TensorShape input_shape={{1, r.inputSize, 2, 1}, 3};
+	//TensorShape input_shape={{1, (int64_t)r.tensorInput.size(), 1}, 3};
 	auto input_values = tf_obj_unique_ptr(read2tensor(r, input_shape));
 	if(!input_values){
 		std::cerr << "Tensor creation failure." << std::endl;
@@ -722,6 +735,8 @@ std::string runCNN(DetectedRead &r, std::shared_ptr<ModelSession> session){
 	}
 
 	std::string str_output;
+	
+	/*
 	unsigned int outputFields = 3;
 	{
 		str_output += r.readID + " " + r.chromosome + " " + std::to_string(r.mappingLower) + " " + std::to_string(r.mappingUpper) + " " + r.strand + "\n"; //header
@@ -739,17 +754,62 @@ std::string runCNN(DetectedRead &r, std::shared_ptr<ModelSession> session){
 			}
 		}
 	}
+	*/
+
+	unsigned int outputFields = 3;
+	{
+		str_output += r.readID + " " + r.chromosome + " " + std::to_string(r.mappingLower) + " " + std::to_string(r.mappingUpper) + " " + r.strand + "\n"; //header
+		size_t output_size = TF_TensorByteSize(&output) / sizeof(float);
+		assert(output_size == (r.tensorInput.size())/2 * outputFields);
+		auto output_array = (const float *)TF_TensorData(&output);
+		unsigned int pos = 0;
+		unsigned int posIdx = 0;
+		str_output += std::to_string(r.positions[posIdx]);
+		for(size_t i = 0; i < output_size; i++){
+			if((i+1)%outputFields==0 and r.mappedPositions[pos] == r.positions[posIdx]){
+				r.probabilities.push_back({output_array[i-2],output_array[i-1],output_array[i]});
+				str_output += "\t" + std::to_string(output_array[i-2]) + "\t" + std::to_string(output_array[i]) + "\n";
+				posIdx++;
+				if (r.positions.back() != r.positions[posIdx-1]){
+					str_output += std::to_string(r.positions[posIdx]);
+				}
+				else{
+					break;
+				}
+			}
+			if ((i+1)%outputFields==0) pos++;
+		}
+	}
+	
+	/*
+	unsigned int outputFields = 4;
+	{
+		str_output += r.readID + " " + r.chromosome + " " + std::to_string(r.mappingLower) + " " + std::to_string(r.mappingUpper) + " " + r.strand + "\n"; //header
+		size_t output_size = TF_TensorByteSize(&output) / sizeof(float);
+		assert(output_size == r.brduCalls.size() * outputFields);
+		auto output_array = (const float *)TF_TensorData(&output);
+		unsigned int pos = 0;
+		str_output += std::to_string(r.positions[0]);
+		for(size_t i = 0; i < output_size; i++){
+			if((i+1)%outputFields==0){
+				r.probabilities.push_back({output_array[i-3],output_array[i-2],output_array[i-1],output_array[i]});
+				str_output += "\t" + std::to_string(output_array[i-3]) + "\t" + std::to_string(output_array[i-1]) + "\n";
+				pos++;
+				if (i != output_size-1) str_output += std::to_string(r.positions[pos]);
+			}
+		}
+	}
+	*/
 	return str_output;
 }
 
 
 void emptyBuffer(std::vector< DetectedRead > &buffer, Arguments args, std::shared_ptr<ModelSession> session, std::ofstream &outFile, std::ofstream &originFile, std::ofstream &termFile, std::ofstream &leftForkFile, std::ofstream &rightForkFile, int trimFactor){
 
-	#pragma omp parallel for schedule(dynamic) shared(args, outFile, session) num_threads(args.threads)
+	#pragma omp parallel for schedule(dynamic) shared(args, outFile, session,trimFactor) num_threads(args.threads)
 	for ( auto b = buffer.begin(); b < buffer.end(); b++) {
 
-		b -> trim(trimFactor);
-		std::string readOutput = runCNN(*b, session);
+		std::string readOutput = runCNN(*b, session, trimFactor);
 
 		std::string termOutput, originOutput, leftForkOutput, rightForkOutput;
 		if (args.markOrigins){
@@ -789,6 +849,52 @@ bool checkReadLength( int length ){
 }
 
 
+std::vector< unsigned int > parseCigar(std::string cigar, int mappingLower, int mappingUpper){
+
+	std::string cigarInt;
+	std::string cigarOp;
+	std::vector<std::pair<int,int>> cigarTuples;
+
+	for (unsigned int i = 0; i < cigar.length(); i++){
+
+		if (std::isalpha(cigar[i]) == 0){ //not a match or deletion 
+
+			cigarInt += cigar[i];
+		}
+		else{
+
+			cigarOp = cigar[i];
+			assert(cigarOp == "M" or cigarOp == "D");
+			if (cigarOp == "M"){
+
+				cigarTuples.push_back(std::make_pair(1,std::stoi(cigarInt)));
+			}
+			else{
+
+				cigarTuples.push_back(std::make_pair(0,std::stoi(cigarInt)));
+			}
+			cigarInt.clear();
+			cigarOp.clear();
+		}
+	}
+
+	std::vector< unsigned int > mappedPositions;
+
+	int readHead = mappingLower;
+	for (auto c = cigarTuples.begin(); c < cigarTuples.end(); c++){
+
+		if (c -> first == 1){
+			for (size_t j = readHead; j < readHead + (c -> second); j++){
+				mappedPositions.push_back(j);
+			}
+			readHead += (c -> second);
+		}
+		else readHead += (c -> second);
+	}
+	return mappedPositions;
+}
+
+
 int sense_main( int argc, char** argv ){
 
 	Arguments args = parseSenseArguments( argc, argv );
@@ -797,9 +903,10 @@ int sense_main( int argc, char** argv ){
 
 	//get the model
 	std::string pathExe = getExePath();
-	std::string modelPath = pathExe + "/dnn_models/" + "forkSense.pb";
-	std::shared_ptr<ModelSession> session = model_load_cpu(modelPath.c_str(), "conv1d_input", "time_distributed_1/Reshape_1", args.threads);
-
+	std::string modelPath = pathExe + "/dnn_models/" + "forkSense_segNet_synthetic.pb";
+	//std::shared_ptr<ModelSession> session = model_load_cpu(modelPath.c_str(), "conv1d_input", "time_distributed_1/Reshape_1", args.threads);
+	//std::shared_ptr<ModelSession> session = model_load_cpu(modelPath.c_str(), "conv1d_input", "time_distributed/Reshape_1", args.threads);
+	std::shared_ptr<ModelSession> session = model_load_cpu(modelPath.c_str(), "input_1", "time_distributed/Reshape_1", args.threads);
 	//get a read count
 	int readCount = 0;
 	std::string line;
@@ -890,6 +997,10 @@ int sense_main( int argc, char** argv ){
 			assert(d.mappingUpper > d.mappingLower);
 			readBuffer.push_back(d);
 		}
+		else if ( line.substr(0,1) == "%" ){
+
+			readBuffer.back().mappedPositions = parseCigar(line.substr(1), readBuffer.back().mappingLower, readBuffer.back().mappingUpper);
+		}
 		else{
 
 			std::string column;
@@ -915,6 +1026,10 @@ int sense_main( int argc, char** argv ){
 	}
 
 	//empty the buffer at the end
+	bool longEnough = checkReadLength( readBuffer.back().positions.size() );
+	if (not longEnough){
+		readBuffer.pop_back();
+	}
 	emptyBuffer(readBuffer, args, session, outFile, originFile, termFile, leftForkFile, rightForkFile, trimFactor);
 
 	inFile.close();

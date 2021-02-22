@@ -196,6 +196,8 @@ def parseBaseFile(fname, args):
 			first = False
 			buff = []
 
+		elif line[0] == '%':
+			continue
 		else:
 
 			if fname[1] == "detect":
@@ -326,7 +328,8 @@ def parseSecondaryFile(fname, readID2directory,args):
 
 			first = False
 			buff = []
-
+		elif line[0] == '%':
+			continue
 		else:
 
 			if fname[1] == "sense":
@@ -377,7 +380,8 @@ def parseSecondaryFile(fname, readID2directory,args):
 args = parseArguments(sys.argv[1:])
 
 #check the output 
-args.outDir = args.outDir.strip("/")
+if args.outDir[-1:] == "/":
+	args.outDir = args.outDir[:-1]
 if os.path.isdir(args.outDir):
 	print('Output directory '+args.outDir+' already exists.  Exiting.')
 	exit(0)

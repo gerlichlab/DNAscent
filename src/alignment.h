@@ -1,5 +1,5 @@
 //----------------------------------------------------------
-// Copyright 2020 University of Cambridge
+// Copyright 2019-2020 University of Oxford
 // Written by Michael A. Boemo (mb915@cam.ac.uk)
 // This software is licensed under GPL-3.0.  You should have
 // received a copy of the license with this software.  If
@@ -181,6 +181,62 @@ class AlignedRead{
 			}
 			return out;
 		}
+		std::string getCigar(void){
+
+			std::vector<std::pair<int,int>> cigarTuples;
+			if (strand == "fwd"){
+
+				int matchRun = 0;
+
+				for (auto p = std::next(positions.begin()); p != positions.end(); p++){
+
+					//deletion
+					if ((p -> first) - (std::prev(p) -> first) != 1){
+
+						if (matchRun > 0) cigarTuples.push_back(std::make_pair(1,matchRun));
+						matchRun = 0;
+						cigarTuples.push_back(std::make_pair(0,(p -> first) - (std::prev(p) -> first)-1));
+					}
+					else{
+						matchRun++;
+					}
+				}
+				if (matchRun > 0) cigarTuples.push_back(std::make_pair(1,matchRun));
+
+			}
+			else{
+
+				int matchRun = 0;
+
+				for (auto p = std::next(positions.rbegin()); p != positions.rend(); p++){
+
+					//deletion
+					if ((p -> first) - (std::prev(p) -> first) != 1){
+
+						if (matchRun > 0) cigarTuples.push_back(std::make_pair(1,matchRun));
+						matchRun = 0;
+						cigarTuples.push_back(std::make_pair(0,(p -> first) - (std::prev(p) -> first)-1));
+					}
+					else{
+						matchRun++;
+					}
+				}
+				if (matchRun > 0) cigarTuples.push_back(std::make_pair(1,matchRun));
+			}
+
+			//convert to string
+			std::string cigarString;
+			for (auto c = cigarTuples.begin(); c < cigarTuples.end(); c++){
+
+				//deletion
+				if (c -> first == 0) cigarString += std::to_string(c -> second) + "D";
+
+				//match
+				if (c -> first == 1) cigarString +=  std::to_string(c -> second) + "M";
+			}
+
+			return cigarString;
+		}
 		std::vector<std::string> getSixMers(void){
 
 			std::vector<std::string> out;
@@ -208,7 +264,7 @@ class AlignedRead{
 
 /*function prototypes */
 int align_main( int argc, char** argv );
-std::string eventalign_train( read &, unsigned int , std::map<unsigned int, double> &, double);
+std::string eventalign_train( read &, unsigned int , std::map<unsigned int, double> &, double, bool);
 std::pair<bool,std::shared_ptr<AlignedRead>> eventalign_detect( read &, unsigned int, double );
 
 #endif

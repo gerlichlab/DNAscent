@@ -1,5 +1,5 @@
 //----------------------------------------------------------
-// Copyright 2020 University of Cambridge
+// Copyright 2019-2020 University of Oxford
 // Written by Michael A. Boemo (mb915@cam.ac.uk)
 // This software is licensed under GPL-3.0.  You should have
 // received a copy of the license with this software.  If
@@ -38,7 +38,8 @@ static const char *help=
 "  -t,--threads              number of threads (default is 1 thread),\n"
 "  -m,--maxReads             maximum number of reads to consider,\n"
 "  -q,--quality              minimum mapping quality (default is 20),\n"
-"  -l,--length               minimum read length in bp (default is 100).\n"
+"  -l,--length               minimum read length in bp (default is 100),\n"
+"     --useRaw               write raw signal instead of events.\n"
 "Written by Michael Boemo, Department of Pathology, University of Cambridge.\n"
 "Please submit bug reports to GitHub Issues (https://github.com/MBoemo/DNAscent/issues).";
 
@@ -47,7 +48,7 @@ struct Arguments {
 	std::string referenceFilename;
 	std::string outputFilename;
 	std::string indexFilename;
-	bool methylAware, capReads;
+	bool methylAware, capReads, useRaw;
 	double divergence;
 	int minQ, maxReads;
 	int minL;
@@ -83,6 +84,7 @@ Arguments parseAlignArguments( int argc, char** argv ){
 	args.methylAware = false;
 	args.divergence = 0;
 	args.capReads = false;
+	args.useRaw = false;
 	args.maxReads = 0;
 	args.dilation = 1.0;
 
@@ -156,6 +158,11 @@ Arguments parseAlignArguments( int argc, char** argv ){
 		else if ( flag == "--methyl-aware" ){
 
 			args.methylAware = true;
+			i+=1;
+		}
+		else if ( flag == "--useRaw" ){
+
+			args.useRaw = true;
 			i+=1;
 		}
 		else throw InvalidOption( flag );
@@ -545,7 +552,8 @@ bool referenceDefined(std::string &readSnippet){
 
 std::string eventalign( read &r,
             unsigned int totalWindowLength,
-			double signalDilation){
+			double signalDilation,
+			bool useRaw){
 
 	std::string out;
 	//get the positions on the reference subsequence where we could attempt to make a call
@@ -614,6 +622,7 @@ std::string eventalign( read &r,
 		}
 
 		std::vector< double > eventSnippet;
+		std::vector< unsigned int > eventIndices;
 		std::vector< double > eventLengthsSnippet;
 
 		/*get the events that correspond to the read snippet */
@@ -632,6 +641,7 @@ std::string eventalign( read &r,
 				double ev = (r.normalisedEvents)[(r.eventAlignment)[j].first];
 				if (ev > r.scalings.shift + 1.0 and ev < 250.0){
 					eventSnippet.push_back( ev );
+					eventIndices.push_back( (r.eventAlignment)[j].first );
 					eventLengthsSnippet.push_back( (r.eventLengths)[(r.eventAlignment)[j].first] );
 				}
 			}
@@ -702,12 +712,30 @@ std::string eventalign( read &r,
 				sixMerRef = sixMerStrand;
 			}
 
-			if (label == "M"){
+			if (useRaw){
+
+				unsigned int globalEvIdx = eventIndices[evIdx];
 				std::pair<double,double> meanStd = thymidineModel[sixMer2index(sixMerStrand)];
-				out += std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(eventLength) + "\t" + sixMerStrand + "\t" + std::to_string(meanStd.first) + "\t" + std::to_string(meanStd.second) + "\n";
+				for (unsigned int raw_i = r.eventIdx2rawIdx[globalEvIdx].first; raw_i <= r.eventIdx2rawIdx[globalEvIdx].second; raw_i++){
+
+
+					if (label == "M"){
+						out += std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string(r.raw[raw_i]) + "\t" + std::to_string(0) + "\t" + sixMerStrand + "\t" + std::to_string(meanStd.first) + "\t" + std::to_string(meanStd.second) + "\n";
+					}
+					else if (label == "I" and evIdx < lastM_ev){ //don't print insertions after the last match because we're going to align these in the next segment
+						out += std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string(r.raw[raw_i]) + "\t" + std::to_string(0) + "\t" + "NNNNNN" + "\t" + "0" + "\t" + "0" + "\n";
+					}
+				}
 			}
-			else if (label == "I" and evIdx < lastM_ev){ //don't print insertions after the last match because we're going to align these in the next segment
-				out += std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(eventLength) + "\t" + "NNNNNN" + "\t" + "0" + "\t" + "0" + "\n";
+			else{
+
+				if (label == "M"){
+					std::pair<double,double> meanStd = thymidineModel[sixMer2index(sixMerStrand)];
+					out += std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(eventLength) + "\t" + sixMerStrand + "\t" + std::to_string(meanStd.first) + "\t" + std::to_string(meanStd.second) + "\n";
+				}
+				else if (label == "I" and evIdx < lastM_ev){ //don't print insertions after the last match because we're going to align these in the next segment
+					out += std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(eventLength) + "\t" + "NNNNNN" + "\t" + "0" + "\t" + "0" + "\n";
+				}
 			}
 
 	        evIdx ++;
@@ -787,6 +815,7 @@ std::string eventalign( read &r,
 		}
 
 		std::vector< double > eventSnippet;
+		std::vector< unsigned int > eventIndices;
 		std::vector< double > eventLengthsSnippet;
 
 		/*get the events that correspond to the read snippet */
@@ -807,6 +836,7 @@ std::string eventalign( read &r,
 				double ev = (r.normalisedEvents)[(r.eventAlignment)[j].first];
 				if (ev > r.scalings.shift + 1.0 and ev < 250.0){
 					eventSnippet.push_back( ev );
+					eventIndices.push_back( (r.eventAlignment)[j].first );
 					eventLengthsSnippet.push_back( (r.eventLengths)[(r.eventAlignment)[j].first] );
 				}
 			}
@@ -877,12 +907,30 @@ std::string eventalign( read &r,
 				sixMerRef = sixMerStrand;
 			}
 
-			if (label == "M"){
+			if (useRaw){
+
+				unsigned int globalEvIdx = eventIndices[evIdx];
 				std::pair<double,double> meanStd = thymidineModel[sixMer2index(sixMerStrand)];
-				lines.push_back(std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(eventLength) + "\t" + sixMerStrand + "\t" + std::to_string(meanStd.first) + "\t" + std::to_string(meanStd.second) + "\n");
+				for (unsigned int raw_i = r.eventIdx2rawIdx[globalEvIdx].first; raw_i <= r.eventIdx2rawIdx[globalEvIdx].second; raw_i++){
+
+
+					if (label == "M"){
+						out += std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string((r.raw[raw_i]- r.scalings.shift) / r.scalings.scale) + "\t" + std::to_string(0) + "\t" + sixMerStrand + "\t" + std::to_string(meanStd.first) + "\t" + std::to_string(meanStd.second) + "\n";
+					}
+					else if (label == "I" and evIdx < lastM_ev){ //don't print insertions after the last match because we're going to align these in the next segment
+						out += std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string((r.raw[raw_i]- r.scalings.shift) / r.scalings.scale) + "\t" + std::to_string(0) + "\t" + "NNNNNN" + "\t" + "0" + "\t" + "0" + "\n";
+					}
+				}
 			}
-			else if (label == "I" and evIdx < lastM_ev){ //don't print insertions after the last match because we're going to align these in the next segment
-				lines.push_back(std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(eventLength) + "\t" + "NNNNNN" + "\t" + "0" + "\t" + "0" + "\n");
+			else{
+
+				if (label == "M"){
+					std::pair<double,double> meanStd = thymidineModel[sixMer2index(sixMerStrand)];
+					lines.push_back(std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(eventLength) + "\t" + sixMerStrand + "\t" + std::to_string(meanStd.first) + "\t" + std::to_string(meanStd.second) + "\n");
+				}
+				else if (label == "I" and evIdx < lastM_ev){ //don't print insertions after the last match because we're going to align these in the next segment
+					lines.push_back(std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(eventLength) + "\t" + "NNNNNN" + "\t" + "0" + "\t" + "0" + "\n");
+				}
 			}
 
 	        evIdx ++;
@@ -910,7 +958,8 @@ std::string eventalign( read &r,
 std::string eventalign_train( read &r,
             unsigned int totalWindowLength,
 			std::map<unsigned int, double> &BrdULikelihood,
-			double signalDilation){
+			double signalDilation,
+			bool useRaw){
 
 	std::string out;
 	//get the positions on the reference subsequence where we could attempt to make a call
@@ -979,6 +1028,7 @@ std::string eventalign_train( read &r,
 		}
 
 		std::vector< double > eventSnippet;
+		std::vector< unsigned int > eventIndices;
 		std::vector< double > eventLengthsSnippet;
 
 		/*get the events that correspond to the read snippet */
@@ -997,6 +1047,7 @@ std::string eventalign_train( read &r,
 				double ev = (r.normalisedEvents)[(r.eventAlignment)[j].first];
 				if (ev > r.scalings.shift + 1.0 and ev < 250.0){
 					eventSnippet.push_back( ev );
+					eventIndices.push_back( (r.eventAlignment)[j].first );
 					eventLengthsSnippet.push_back( (r.eventLengths)[(r.eventAlignment)[j].first] );
 				}
 			}
@@ -1068,14 +1119,34 @@ std::string eventalign_train( read &r,
 			}
 
 			std::pair<double,double> meanStd = thymidineModel[sixMer2index(sixMerStrand)];
-			if (label == "M" and BrdULikelihood.count(evPos) > 0){
-				out += std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(eventLength) + "\t" + sixMerStrand + "\t" + std::to_string(meanStd.first) + "\t" + std::to_string(meanStd.second) + "\t" + std::to_string(BrdULikelihood[evPos]) + "\n";
+
+			if (useRaw){
+
+				unsigned int globalEvIdx = eventIndices[evIdx];
+				for (unsigned int raw_i = r.eventIdx2rawIdx[globalEvIdx].first; raw_i <= r.eventIdx2rawIdx[globalEvIdx].second; raw_i++){
+
+					if (label == "M" and BrdULikelihood.count(evPos) > 0){
+						out += std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string((r.raw[raw_i]- r.scalings.shift) / r.scalings.scale) + "\t" + std::to_string(0) + "\t" + sixMerStrand + "\t" + std::to_string(meanStd.first) + "\t" + std::to_string(meanStd.second) + "\t" + std::to_string(BrdULikelihood[evPos]) + "\n";
+					}
+					else if (label == "M"){
+						out += std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string((r.raw[raw_i]- r.scalings.shift) / r.scalings.scale) + "\t" + std::to_string(0) + "\t" + sixMerStrand + "\t" + std::to_string(meanStd.first) + "\t" + std::to_string(meanStd.second) + "\n";
+					}
+					else if (label == "I" and evIdx < lastM_ev){ //don't print insertions after the last match because we're going to align these in the next segment
+						out += std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string((r.raw[raw_i]- r.scalings.shift) / r.scalings.scale) + "\t" + std::to_string(0) + "\t" + "NNNNNN" + "\t" + "0" + "\t" + "0" + "\n";
+					}
+				}
 			}
-			else if (label == "M"){
-				out += std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(eventLength) + "\t" + sixMerStrand + "\t" + std::to_string(meanStd.first) + "\t" + std::to_string(meanStd.second) + "\n";
-			}
-			else if (label == "I" and evIdx < lastM_ev){ //don't print insertions after the last match because we're going to align these in the next segment
-				out += std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(eventLength) + "\t" + "NNNNNN" + "\t" + "0" + "\t" + "0" + "\n";
+			else{
+
+				if (label == "M" and BrdULikelihood.count(evPos) > 0){
+					out += std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(eventLength) + "\t" + sixMerStrand + "\t" + std::to_string(meanStd.first) + "\t" + std::to_string(meanStd.second) + "\t" + std::to_string(BrdULikelihood[evPos]) + "\n";
+				}
+				else if (label == "M"){
+					out += std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(eventLength) + "\t" + sixMerStrand + "\t" + std::to_string(meanStd.first) + "\t" + std::to_string(meanStd.second) + "\n";
+				}
+				else if (label == "I" and evIdx < lastM_ev){ //don't print insertions after the last match because we're going to align these in the next segment
+					out += std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(eventLength) + "\t" + "NNNNNN" + "\t" + "0" + "\t" + "0" + "\n";
+				}
 			}
 
 	        evIdx ++;
@@ -1145,6 +1216,7 @@ std::string eventalign_train( read &r,
 		}
 
 		std::vector< double > eventSnippet;
+		std::vector< unsigned int > eventIndices;
 		std::vector< double > eventLengthsSnippet;
 
 		/*get the events that correspond to the read snippet */
@@ -1165,6 +1237,7 @@ std::string eventalign_train( read &r,
 				double ev = (r.normalisedEvents)[(r.eventAlignment)[j].first];
 				if (ev > r.scalings.shift + 1.0 and ev < 250.0){
 					eventSnippet.push_back( ev );
+					eventIndices.push_back( (r.eventAlignment)[j].first );
 					eventLengthsSnippet.push_back( (r.eventLengths)[(r.eventAlignment)[j].first] );
 				}
 			}
@@ -1236,14 +1309,34 @@ std::string eventalign_train( read &r,
 			}
 
 			std::pair<double,double> meanStd = thymidineModel[sixMer2index(sixMerStrand)];
-			if (label == "M" and BrdULikelihood.count(evPos) > 0){
-				lines.push_back(std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(eventLength) + "\t" + sixMerStrand + "\t" + std::to_string(meanStd.first) + "\t" + std::to_string(meanStd.second) + "\t" + std::to_string(BrdULikelihood[evPos]) + "\n");
+
+			if (useRaw){
+
+				unsigned int globalEvIdx = eventIndices[evIdx];
+				for (unsigned int raw_i = r.eventIdx2rawIdx[globalEvIdx].first; raw_i <= r.eventIdx2rawIdx[globalEvIdx].second; raw_i++){
+
+					if (label == "M" and BrdULikelihood.count(evPos) > 0){
+						out += std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string((r.raw[raw_i]- r.scalings.shift) / r.scalings.scale) + "\t" + std::to_string(0) + "\t" + sixMerStrand + "\t" + std::to_string(meanStd.first) + "\t" + std::to_string(meanStd.second) + "\t" + std::to_string(BrdULikelihood[evPos]) + "\n";
+					}
+					else if (label == "M"){
+						out += std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string((r.raw[raw_i]- r.scalings.shift) / r.scalings.scale) + "\t" + std::to_string(0) + "\t" + sixMerStrand + "\t" + std::to_string(meanStd.first) + "\t" + std::to_string(meanStd.second) + "\n";
+					}
+					else if (label == "I" and evIdx < lastM_ev){ //don't print insertions after the last match because we're going to align these in the next segment
+						out += std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string((r.raw[raw_i]- r.scalings.shift) / r.scalings.scale) + "\t" + std::to_string(0) + "\t" + "NNNNNN" + "\t" + "0" + "\t" + "0" + "\n";
+					}
+				}
 			}
-			else if (label == "M"){
-				lines.push_back(std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(eventLength) + "\t" + sixMerStrand + "\t" + std::to_string(meanStd.first) + "\t" + std::to_string(meanStd.second) + "\n");
-			}
-			else if (label == "I" and evIdx < lastM_ev){ //don't print insertions after the last match because we're going to align these in the next segment
-				lines.push_back(std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(eventLength) + "\t" + "NNNNNN" + "\t" + "0" + "\t" + "0" + "\n");
+			else{
+
+				if (label == "M" and BrdULikelihood.count(evPos) > 0){
+					out += std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(eventLength) + "\t" + sixMerStrand + "\t" + std::to_string(meanStd.first) + "\t" + std::to_string(meanStd.second) + "\t" + std::to_string(BrdULikelihood[evPos]) + "\n";
+				}
+				else if (label == "M"){
+					out += std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(eventLength) + "\t" + sixMerStrand + "\t" + std::to_string(meanStd.first) + "\t" + std::to_string(meanStd.second) + "\n";
+				}
+				else if (label == "I" and evIdx < lastM_ev){ //don't print insertions after the last match because we're going to align these in the next segment
+					out += std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(eventLength) + "\t" + "NNNNNN" + "\t" + "0" + "\t" + "0" + "\n";
+				}
 			}
 
 	        evIdx ++;
@@ -1751,7 +1844,7 @@ int align_main( int argc, char** argv ){
 					continue;
 				}
 
-				std::string out = eventalign( r, windowLength, args.dilation);
+				std::string out = eventalign( r, windowLength, args.dilation, args.useRaw);
 
 				#pragma omp critical
 				{

@@ -6,12 +6,12 @@ f = open(sys.argv[1],'r')
 numCalls = 0
 numAttempts = 0
 
-maxReads = 500
+maxReads = 5000
 readCount = 0
 
 for line in f:
 
-	if line[0] == '#':
+	if line[0] == '#' or line[0] == '%':
 		continue
 
 	if line[0] == '>':

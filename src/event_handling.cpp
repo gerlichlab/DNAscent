@@ -1,10 +1,10 @@
 //----------------------------------------------------------
-// Copyright 2019 University of Oxford
+// Copyright 2019-2020 University of Oxford
 // Written by Michael A. Boemo (mb915@cam.ac.uk)
 // This software is licensed under GPL-3.0.  You should have
 // received a copy of the license with this software.  If
 // not, please Email the author.
-//-----------------------------------------------------------
+//----------------------------------------------------------
 
 //#define EVENT_LENGTHS 1
 //#define SHOW_PROGRESS 1
@@ -557,7 +557,6 @@ void adaptive_banded_simple_event_align( std::vector< double > &raw, read &r, Po
 
 			double yi = (event - rescale.shift - rescale.scale*mu);
 			rescale.var += yi * yi / (stdv * stdv);
-			//nNormalised++;
 		}
 		rescale.var /= raw.size();//(double) nNormalised;
 		rescale.var = sqrt(rescale.var);
@@ -638,14 +637,32 @@ void normaliseEvents( read &r, bool bulkFast5 ){
 	//get the event mean and length
 	r.normalisedEvents.reserve(et.n);
 	r.eventLengths.reserve(et.n);
+	unsigned int rawStart = 0;
 	for ( unsigned int i = 0; i < et.n; i++ ){
 
 		if (et.event[i].mean > 1.0) {
+
+			if (i > 0) r.eventIdx2rawIdx[i-1] = std::make_pair(rawStart,et.event[i].start-1);
+
 			r.normalisedEvents.push_back( et.event[i].mean );
 			r.eventLengths.push_back(et.event[i].length / sample_rate);
+
+			rawStart = et.event[i].start;
 		}
 	}
+	r.eventIdx2rawIdx[et.n-1] = std::make_pair(rawStart,r.raw.size()-1);
 	free(et.event);
+
+	//testing - print the event and the raw signals that were used to make it
+	/*
+	for (auto e = r.eventIdx2rawIdx.begin(); e != r.eventIdx2rawIdx.end(); e++ ){
+
+		std::cout << r.normalisedEvents[e -> first] << std::endl;
+		for (unsigned int e1 = (e->second).first; e1 <= (e->second).second; e1++){
+			std::cout << "<" << r.raw[e1] << std::endl;
+		}
+	}
+	*/
 
 	// Precompute k-mer ranks for rough rescaling and banded alignment
 	size_t k = 6;

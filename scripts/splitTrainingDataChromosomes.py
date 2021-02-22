@@ -1,13 +1,18 @@
 import sys
 import math
 
-baseDir = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/commit620d798_trainingData_8features_bc8bc12_augmentation/'
+baseDir = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/CldU_BrdU/'
 
 f = open(sys.argv[1],'r')
 
-
+readCount = 0
 for line in f:
 	if line[0] == '>':
+
+		readCount += 1
+		if readCount % 100 == 0:
+			print(readCount)
+
 		splitLine = line.rstrip().split()
 		readID = splitLine[0][1:]
 		chromosome = splitLine[1]
