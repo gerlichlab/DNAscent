@@ -16,7 +16,7 @@ for line in f:
 	readStart = int(splitLine[5])
 	readEnd = int(splitLine[6])
 
-	#if readEnd - readStart < 30000:
+	#if readEnd - readStart < 40000:
 	#	continue
 
 	forkStart = int(splitLine[1])
@@ -30,8 +30,8 @@ for line in f:
 	if abs(forkEnd - readStart) < 1000 or abs(forkEnd - readEnd) < 1000:
 		continue
 	'''
-	if forkEnd - forkStart < 1000:
-		continue
+	#if forkEnd - forkStart < 1000:
+	#	continue
 	
 	if readID in readID2left:
 		readID2left[readID].append((forkStart,forkEnd))
@@ -50,7 +50,7 @@ for line in f:
 	readStart = int(splitLine[5])
 	readEnd = int(splitLine[6])
 
-	#if readEnd - readStart < 30000:
+	#if readEnd - readStart < 40000:
 	#	continue
 
 	forkStart = int(splitLine[1])
@@ -64,8 +64,8 @@ for line in f:
 	if abs(forkEnd - readStart) < 1000 or abs(forkEnd - readEnd) < 1000:
 		continue
 	'''
-	if forkEnd - forkStart < 1000:
-		continue
+	#if forkEnd - forkStart < 1000:
+	#	continue
 	
 	if readID in readID2right:
 		readID2right[readID].append((forkStart,forkEnd))

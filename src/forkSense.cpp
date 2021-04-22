@@ -135,7 +135,7 @@ std::pair<std::string,std::string> callForks(DetectedRead &r){
 
 	assert(r.positions.size() == r.probabilities.size());
 
-	float threshold = 0.7;
+	float threshold = 0.8;
 	float threshold_weak = 0.5;
 	int minLength = 1000;
 
@@ -321,7 +321,7 @@ std::string callOrigins(DetectedRead &r){
 
 	assert(r.positions.size() == r.probabilities.size());
 
-	float threshold = 0.7;
+	float threshold = 0.8;
 	float threshold_weak = 0.5;
 	int minLength = 1000;
 
@@ -561,7 +561,7 @@ std::string callTerminations(DetectedRead &r){
 
 	assert(r.positions.size() == r.probabilities.size());
 
-	float threshold = 0.7;
+	float threshold = 0.8;
 	float threshold_weak = 0.5;
 	int minLength = 1000;
 
@@ -904,9 +904,8 @@ int sense_main( int argc, char** argv ){
 	//get the model
 	std::string pathExe = getExePath();
 	std::string modelPath = pathExe + "/dnn_models/" + "forkSense_segNet_synthetic.pb";
-	//std::shared_ptr<ModelSession> session = model_load_cpu(modelPath.c_str(), "conv1d_input", "time_distributed_1/Reshape_1", args.threads);
-	//std::shared_ptr<ModelSession> session = model_load_cpu(modelPath.c_str(), "conv1d_input", "time_distributed/Reshape_1", args.threads);
 	std::shared_ptr<ModelSession> session = model_load_cpu(modelPath.c_str(), "input_1", "time_distributed/Reshape_1", args.threads);
+
 	//get a read count
 	int readCount = 0;
 	std::string line;
