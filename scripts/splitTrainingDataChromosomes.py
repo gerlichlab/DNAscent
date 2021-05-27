@@ -1,7 +1,7 @@
 import sys
 import math
 
-baseDir = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/CldU_BrdU/'
+baseDir = '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/Thym_trainingData/splitData/'
 
 f = open(sys.argv[1],'r')
 
@@ -22,7 +22,7 @@ for line in f:
 		strand = splitLine[4]
 		group = int(math.floor(mappingStart/100000.0)*100000.0)
 
-		g = open(baseDir + 'bc12_' + chromosome + '_' + strand + '_' + str(group) + '.detect','a+')
+		g = open(baseDir + 'Thym_' + chromosome + '_' + strand + '_' + str(group) + '.trainingData','a+')
 		g.write(line)
 	else:
 		g.write(line)

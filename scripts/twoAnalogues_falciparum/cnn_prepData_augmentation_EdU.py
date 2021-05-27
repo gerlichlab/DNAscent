@@ -8,52 +8,54 @@ import os
 import pickle
 import random
 
-folderPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/CldU_BrdU'
+folderPathEdU = '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/EdU_trainingData/splitData'
+folderPathThym = '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/Thym_trainingData/splitData'
 
-trainingFilesFolderPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/cnn_training/CldU_BrdU/trainingFiles_gap5'
+trainingFilesFolderPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/EdU_trainingData/EdU_augmentedTrainingData'
 
-bc08dnascent = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/barcode08/commit620d798_l_4000_q_20.barcode08.trainingData'
-bc12dnascent = '/home/mb915/rds/rds-mb915-notbackedup/data/2020_08_10_CAM_ONT_CldU_100/DNAscentv2.trainingData'
+f_analoguePositiveIDs = '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/EdU_trainingData/analogueIDs.txt'
 
 maxLen = 4000
 llThreshold = 1.25
+
+analoguePositiveIDs = []
+f = open(f_analoguePositiveIDs,'r')
+for line in f:
+	analoguePositiveIDs.append(line.rstrip())
+f.close()
 
 
 def getChromosomeLength( chromosome ):
 #get chromosome length by number in kb
 	
-	if chromosome == "chrI":
-		return 230000
-	elif chromosome == "chrII":
-		return 813000
-	elif chromosome == "chrIII":
-		return 317000
-	elif chromosome == "chrIV":
-		return 1532000
-	elif chromosome == "chrV":
-		return 577000
-	elif chromosome == "chrVI":
-		return 270000
-	elif chromosome == "chrVII":
-		return 1091000
-	elif chromosome == "chrVIII":
-		return 563000
-	elif chromosome == "chrIX":
-		return 440000
-	elif chromosome == "chrX":
-		return 746000
-	elif chromosome == "chrXI":
-		return 667000
-	elif chromosome == "chrXII":
-		return 1078000
-	elif chromosome == "chrXIII":
-		return 924000
-	elif chromosome == "chrXIV":
-		return 784000
-	elif chromosome == "chrXV":
-		return 1091000
-	elif chromosome == "chrXVI":
-		return 948000
+	if chromosome == "1":
+		return 640851
+	elif chromosome == "2":
+		return 947102
+	elif chromosome == "3":
+		return 1067971
+	elif chromosome == "4":
+		return 1200490
+	elif chromosome == "5":
+		return 1343557
+	elif chromosome == "6":
+		return 1418242
+	elif chromosome == "7":
+		return 1445207
+	elif chromosome == "8":
+		return 1472805
+	elif chromosome == "9":
+		return 1541735
+	elif chromosome == "10":
+		return 1687656
+	elif chromosome == "11":
+		return 2038340
+	elif chromosome == "12":
+		return 2271494
+	elif chromosome == "13":
+		return 2925236
+	elif chromosome == "14":
+		return 3291936
 
 
 #-------------------------------------------------
@@ -71,11 +73,11 @@ class trainingRead:
 		self.logLikelihood = []
 
 		#mix
-		BrdUwindow = []
+		ThymWindow = []
 		for i in range(0, len(read_positions)-12):
 
 			#look ahead			
-			if read_sixMers[i+5][0] == 'T' and random.choice(range(0,5)) == 0:
+			if read_sixMers[i+5][0] == 'T' and random.choice(range(0,20)) == 0:
 
 				#make sure all the reference positions are defined
 				noDels = True
@@ -85,18 +87,18 @@ class trainingRead:
 						break
 
 				#make sure we have a positive BrdU call from the HMM
-				positiveCall = False
-				if noDels:
-					if matchingReadDic[read_positions[i+5]][5] != '-':
-						if float(matchingReadDic[read_positions[i+5]][5]) > llThreshold:
-							positiveCall = True
+				#positiveCall = False
+				#if noDels:
+				#	if matchingReadDic[read_positions[i+5]][5] != '-':
+				#		if float(matchingReadDic[read_positions[i+5]][5]) > llThreshold:
+				#			positiveCall = True
 
 
 				#for the next 12 bases, pull from the BrdU read
-				if noDels and positiveCall:
-					BrdUwindow = range(i,i+12)
+				if noDels:# and positiveCall:
+					ThymWindow = range(i,i+12)
 
-			if i in BrdUwindow:
+			if i in ThymWindow:
 
 				#testing
 				'''
@@ -246,7 +248,6 @@ def fetchMatchingRead(fname, baseChromosome, baseStart, baseEnd, baseStrand,used
 			prevPos = -1
 
 			if chromosome != 'chrM' and baseChromosome == chromosome and baseStrand == strand and min(mappingStart,mappingEnd) <= baseStart and max(mappingStart,mappingEnd) >= baseEnd and readID not in usedIDs:
-				#print(baseChromosome,chromosome,baseStrand,strand,min(mappingStart,mappingEnd),baseStart,max(mappingStart,mappingEnd),baseEnd)
 				switch = True
 			else:
 				switch = False
@@ -308,9 +309,9 @@ def fetchMatchingRead(fname, baseChromosome, baseStart, baseEnd, baseStrand,used
 
 print('Parsing training data file...')
 
-allChromosomes = ["chrI","chrII","chrIII","chrIV","chrV","chrVI","chrVII","chrVIII","chrIX","chrX","chrXI","chrXII","chrXIII","chrXIV","chrXV","chrXVI"]
+allChromosomes = ["1","2","3","4","5","6","7","8","9","10","11","12","13","14"]
 
-set2Chromosomes = {0:["chrI","chrII"], 1:["chrIII","chrIV"],2:["chrV","chrVI"],3:["chrVII","chrVIII"],4:["chrIX","chrX"],5:["chrXI","chrXII"],6:["chrXIII","chrXIV"],7:["chrXV","chrXVI"]}
+set2Chromosomes = {0:["1","2"], 1:["3","4"],2:["5","6"],3:["7","8"],4:["9","10"],5:["11","12"],6:["13","14"]}
 
 #for matchChr in allChromosomes:
 for matchChr in set2Chromosomes[int(sys.argv[1])]:
@@ -320,8 +321,8 @@ for matchChr in set2Chromosomes[int(sys.argv[1])]:
 		for m in marks:
 
 			#set filenames
-			bc08dnascent = folderPath+'/bc08_'+matchChr+'_'+strand+'_'+str(m)+'.detect'
-			bc12dnascent = folderPath+'/bc12_'+matchChr+'_'+strand+'_'+str(m)+'.detect'
+			bc08dnascent = folderPathThym+'/Thym_'+matchChr+'_'+strand+'_'+str(m)+'.trainingData'
+			bc12dnascent = folderPathEdU+'/EdU_'+matchChr+'_'+strand+'_'+str(m)+'.trainingData'
 
 			if not os.path.isfile(bc08dnascent) or not os.path.isfile(bc12dnascent):
 				print(bc08dnascent,bc12dnascent)
@@ -347,7 +348,7 @@ for matchChr in set2Chromosomes[int(sys.argv[1])]:
 
 			readsLoaded = 0
 			switch = False
-			f = open(bc08dnascent,'r')
+			f = open(bc12dnascent,'r')
 			for line in f:
 
 				if line[0] == '#':
@@ -363,7 +364,7 @@ for matchChr in set2Chromosomes[int(sys.argv[1])]:
 
 						if switch:
 
-							matchID, usedIDs, matchingReadDic = fetchMatchingRead(bc12dnascent,chromosome, read_positions[0], read_positions[maxLen], strand, usedIDs)
+							matchID, usedIDs, matchingReadDic = fetchMatchingRead(bc08dnascent,chromosome, read_positions[0], read_positions[maxLen], strand, usedIDs)
 
 							if len(matchingReadDic) > 0:
 								tr = trainingRead(read_sixMers, read_eventMeans, read_eventStd, read_eventLength, read_modelMeans, read_modelStd, read_positions, prevReadID+'.'+matchID, -2, read_BrdUcalls, matchingReadDic)
@@ -392,7 +393,7 @@ for matchChr in set2Chromosomes[int(sys.argv[1])]:
 					strand = splitLine[4]
 					prevPos = -1
 
-					if chromosome != 'chrM':
+					if chromosome != 'chrM' and readID in analoguePositiveIDs:
 						switch = True
 					else:
 						switch = False

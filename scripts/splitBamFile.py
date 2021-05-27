@@ -1,7 +1,7 @@
 import pysam
 import sys
 
-recordsPerBam = 100000
+recordsPerBam = 250000
 
 f = pysam.Samfile(sys.argv[1],'r')
 bamFileCtr = 0
