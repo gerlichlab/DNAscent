@@ -7,11 +7,12 @@ import sys
 import os
 import pickle
 import random
+import math
 
 folderPathEdU = '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/EdU_trainingData/splitData'
 folderPathThym = '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/Thym_trainingData/splitData'
 
-trainingFilesFolderPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/EdU_trainingData/EdU_augmentedTrainingData'
+trainingFilesFolderPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/EdU_trainingData/EdU_augmentedTrainingData_slices_gap40'
 
 f_analoguePositiveIDs = '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/EdU_trainingData/analogueIDs.txt'
 
@@ -62,107 +63,20 @@ def getChromosomeLength( chromosome ):
 #
 class trainingRead:
 
-	def __init__(self, read_sixMers, read_eventMeans, read_eventStd, read_eventLength, read_modelMeans, read_modelStd, read_positions, readID, analogueConc, logLikelihood, matchingReadDic):
-
-		self.sixMers = []
-		self.eventMean = []
-		self.eventStd = []
-		self.eventLength = []
-		self.modelMeans = []
-		self.modelStd =[]
-		self.logLikelihood = []
-
-		#mix
-		ThymWindow = []
-		for i in range(0, len(read_positions)-12):
-
-			#look ahead			
-			if read_sixMers[i+5][0] == 'T' and random.choice(range(0,20)) == 0:
-
-				#make sure all the reference positions are defined
-				noDels = True
-				for j in range(i+1,i+13):
-					if abs(read_positions[j] - read_positions[j-1]) > 1 or read_positions[j-1] not in matchingReadDic:
-						noDels = False
-						break
-
-				#make sure we have a positive BrdU call from the HMM
-				#positiveCall = False
-				#if noDels:
-				#	if matchingReadDic[read_positions[i+5]][5] != '-':
-				#		if float(matchingReadDic[read_positions[i+5]][5]) > llThreshold:
-				#			positiveCall = True
+	def __init__(self, augmented_sixMers, augmented_eventMean, augmented_eventStd, augmented_eventLength, augmented_modelMeans, augmented_modelStd, logLikelihood, readID, analogueConc):
 
 
-				#for the next 12 bases, pull from the BrdU read
-				if noDels:# and positiveCall:
-					ThymWindow = range(i,i+12)
-
-			if i in ThymWindow:
-
-				#testing
-				'''
-				print('----------------------------',i, readID)
-				print(read_sixMers[i], matchingReadDic[read_positions[i]][0])
-				print(read_eventMeans[i], matchingReadDic[read_positions[i]][1])
-				print(read_eventLength[i], matchingReadDic[read_positions[i]][2])
-				print(read_modelMeans[i], matchingReadDic[read_positions[i]][3])
-				print(read_modelStd[i], matchingReadDic[read_positions[i]][4])
-				print(matchingReadDic[read_positions[i]][5]+'X')
-				'''
-
-				self.sixMers.append(matchingReadDic[read_positions[i]][0])
-				self.eventMean.append(matchingReadDic[read_positions[i]][1])
-				self.eventStd.append(0)
-				self.eventLength.append(matchingReadDic[read_positions[i]][2])
-				self.modelMeans.append(matchingReadDic[read_positions[i]][3])
-				self.modelStd.append(matchingReadDic[read_positions[i]][4])
-				self.logLikelihood.append(matchingReadDic[read_positions[i]][5]+'X')
-
-			else:
-				
-				self.sixMers.append(read_sixMers[i])
-				self.eventMean.append(read_eventMeans[i])
-				self.eventStd.append(0)
-				self.eventLength.append(read_eventLength[i])
-				self.modelMeans.append(read_modelMeans[i])
-				self.modelStd.append(read_modelStd[i])
-				self.logLikelihood.append(logLikelihood[i])
-
-
-
-
-		self.sixMers = self.sixMers[0:maxLen]
-		self.eventMean = self.eventMean[0:maxLen]
-		self.eventStd = self.eventStd[0:maxLen]
-		self.eventLength = self.eventLength[0:maxLen]
-		self.modelMeans = self.modelMeans[0:maxLen]
-		self.modelStd = self.modelStd[0:maxLen]
-		self.logLikelihood = self.logLikelihood[0:maxLen]
-
+		self.sixMers = augmented_sixMers
+		self.eventMean = augmented_eventMean
+		self.eventStd = augmented_eventStd
+		self.eventLength = augmented_eventLength
+		self.modelMeans = augmented_modelMeans
+		self.modelStd = augmented_modelStd
+		self.logLikelihood = logLikelihood
 		self.readID = readID
-		self.analogueConc = -1
+		self.analogueConc = analogueConc
 
-		gaps = [1]
-		for i in range(1, maxLen):
-			gaps.append( abs(read_positions[i] - read_positions[i-1]) )
-		self.gaps = gaps
-
-		'''
-		print(self.sixMers[0:5])
-		print(self.eventMean[0:5])
-		print(self.eventStd[0:5])
-		print(self.stutter[0:5])
-		print(self.eventLength[0:5])
-		print(self.modelMeans[0:5])
-		print(self.modelStd[0:5])
-		print(self.gaps[0:5])
-		print(read_positions[0:5])
-		print(logLikelihood[0:5])
-		print('-----------------------')
-		'''
-
-		if not len(self.sixMers) == len(self.eventMean) == len(self.eventStd) == len(self.eventLength) == len(self.modelMeans) == len(self.modelStd) == len(self.gaps) == len(self.logLikelihood):
+		if not len(self.sixMers) == len(self.eventMean) == len(self.eventStd) == len(self.eventLength) == len(self.modelMeans) == len(self.modelStd):
 			print(len(self.sixMers), len(self.logLikelihood))
 			print("Length Mismatch")
 			sys.exit()
@@ -198,7 +112,7 @@ def fetchMatchingRead(fname, baseChromosome, baseStart, baseEnd, baseStrand,used
 	read_modelMeans = []
 	read_modelStd = []
 	read_positions = []
-	read_BrdUcalls = []
+	read_EdUcalls = []
 
 	pos_eventMeans = []
 	pos_lengths = []
@@ -231,7 +145,7 @@ def fetchMatchingRead(fname, baseChromosome, baseStart, baseEnd, baseStrand,used
 			read_modelMeans = []
 			read_modelStd = []
 			read_positions = []
-			read_BrdUcalls = []
+			read_EdUcalls = []
 			refPos2feature = {}
 
 			#reset for position
@@ -276,9 +190,9 @@ def fetchMatchingRead(fname, baseChromosome, baseStart, baseEnd, baseStrand,used
 				read_modelMeans.append(modelMean)
 				read_modelStd.append(modelStd)
 				read_positions.append(prevPos)
-				read_BrdUcalls.append(BrdUcall)
+				read_EdUcalls.append(EdUcall)
 
-				refPos2feature[prevPos] = (sixMer,np.mean(pos_eventMeans),sum(pos_lengths),modelMean,modelStd,BrdUcall)
+				refPos2feature[prevPos] = (sixMer,np.mean(pos_eventMeans),sum(pos_lengths),modelMean,modelStd,EdUcall)
 
 				#reset for position
 				pos_eventMeans = []
@@ -293,10 +207,10 @@ def fetchMatchingRead(fname, baseChromosome, baseStart, baseEnd, baseStrand,used
 			prevReadID = readID
 			prevPos = pos
 
-			#sort out BrdU calls
-			BrdUcall = '-'
+			#sort out EdU calls
+			EdUcall = '-'
 			if len(splitLine) == 8:
-				BrdUcall = splitLine[7]
+				EdUcall = splitLine[7]
 						
 			pos_eventMeans.append(eventMean)
 			pos_lengths.append(eventLength)
@@ -337,7 +251,7 @@ for matchChr in set2Chromosomes[int(sys.argv[1])]:
 			read_modelMeans = []
 			read_modelStd = []
 			read_positions = []
-			read_BrdUcalls = []
+			read_EdUcalls = []
 
 			pos_eventMeans = []
 			pos_lengths = []
@@ -364,11 +278,81 @@ for matchChr in set2Chromosomes[int(sys.argv[1])]:
 
 						if switch:
 
-							matchID, usedIDs, matchingReadDic = fetchMatchingRead(bc08dnascent,chromosome, read_positions[0], read_positions[maxLen], strand, usedIDs)
+							matchID, usedIDs, matchingReadDic = fetchMatchingRead(bc08dnascent,chromosome, read_positions[0], read_positions[-1], strand, usedIDs)
 
 							if len(matchingReadDic) > 0:
-								tr = trainingRead(read_sixMers, read_eventMeans, read_eventStd, read_eventLength, read_modelMeans, read_modelStd, read_positions, prevReadID+'.'+matchID, -2, read_BrdUcalls, matchingReadDic)
-								saveRead(tr, prevReadID+'.'+matchID)
+
+								augmented_sixMers = []
+								augmented_eventMean = []
+								augmented_eventStd = []
+								augmented_eventLength = []
+								augmented_modelMeans = []
+								augmented_modelStd =[]
+								augmented_logLikelihood = []
+
+								#mix
+								ThymWindow = []
+								for i in range(0, len(read_positions)-12):
+
+									#look ahead			
+									if read_sixMers[i+5][0] == 'T' and random.choice(range(0,40)) == 0:
+
+										#make sure all the reference positions are defined
+										noDels = True
+										for j in range(i+1,i+13):
+											if abs(read_positions[j] - read_positions[j-1]) > 1 or read_positions[j-1] not in matchingReadDic:
+												noDels = False
+												break
+
+										#make sure we have a positive EdU call from the HMM
+										#positiveCall = False
+										#if noDels:
+										#	if matchingReadDic[read_positions[i+5]][5] != '-':
+										#		if float(matchingReadDic[read_positions[i+5]][5]) > llThreshold:
+										#			positiveCall = True
+
+
+										#for the next 12 bases, pull from the EdU read
+										if noDels:# and positiveCall:
+											ThymWindow = range(i,i+12)
+
+									if i in ThymWindow:
+
+										#testing
+										'''
+										print('----------------------------',i, readID)
+										print(read_sixMers[i], matchingReadDic[read_positions[i]][0])
+										print(read_eventMeans[i], matchingReadDic[read_positions[i]][1])
+										print(read_eventLength[i], matchingReadDic[read_positions[i]][2])
+										print(read_modelMeans[i], matchingReadDic[read_positions[i]][3])
+										print(read_modelStd[i], matchingReadDic[read_positions[i]][4])
+										print(matchingReadDic[read_positions[i]][5]+'X')
+										'''
+
+										augmented_sixMers.append(matchingReadDic[read_positions[i]][0])
+										augmented_eventMean.append(matchingReadDic[read_positions[i]][1])
+										augmented_eventStd.append(0)
+										augmented_eventLength.append(matchingReadDic[read_positions[i]][2])
+										augmented_modelMeans.append(matchingReadDic[read_positions[i]][3])
+										augmented_modelStd.append(matchingReadDic[read_positions[i]][4])
+										augmented_logLikelihood.append(matchingReadDic[read_positions[i]][5]+'X')
+
+									else:
+										
+										augmented_sixMers.append(read_sixMers[i])
+										augmented_eventMean.append(read_eventMeans[i])
+										augmented_eventStd.append(0)
+										augmented_eventLength.append(read_eventLength[i])
+										augmented_modelMeans.append(read_modelMeans[i])
+										augmented_modelStd.append(read_modelStd[i])
+										augmented_logLikelihood.append(read_EdUcalls[i])
+
+								numReadSlices = math.floor(float(len(augmented_sixMers))/float(maxLen))
+
+								for s in range(numReadSlices):
+
+									tr = trainingRead(augmented_sixMers[maxLen*s:maxLen*(s+1)], augmented_eventMean[maxLen*s:maxLen*(s+1)], augmented_eventStd[maxLen*s:maxLen*(s+1)], augmented_eventLength[maxLen*s:maxLen*(s+1)], augmented_modelMeans[maxLen*s:maxLen*(s+1)], augmented_modelStd[maxLen*s:maxLen*(s+1)], augmented_logLikelihood[maxLen*s:maxLen*(s+1)], prevReadID+'.'+matchID+'_slice'+str(s), -1)
+									saveRead(tr, prevReadID+'.'+matchID+'_slice'+str(s))
 
 					#reset for read
 					read_sixMers = []
@@ -378,7 +362,7 @@ for matchChr in set2Chromosomes[int(sys.argv[1])]:
 					read_modelMeans = []
 					read_modelStd = []
 					read_positions = []
-					read_BrdUcalls = []
+					read_EdUcalls = []
 
 					#reset for position
 					pos_eventMeans = []
@@ -422,7 +406,7 @@ for matchChr in set2Chromosomes[int(sys.argv[1])]:
 						read_modelMeans.append(modelMean)
 						read_modelStd.append(modelStd)
 						read_positions.append(prevPos)
-						read_BrdUcalls.append(BrdUcall)
+						read_EdUcalls.append(EdUcall)
 
 						#reset for position
 						pos_eventMeans = []
@@ -437,10 +421,10 @@ for matchChr in set2Chromosomes[int(sys.argv[1])]:
 					prevReadID = readID
 					prevPos = pos
 
-					#sort out BrdU calls
-					BrdUcall = '-'
+					#sort out EdU calls
+					EdUcall = '-'
 					if len(splitLine) == 8:
-						BrdUcall = splitLine[7]
+						EdUcall = splitLine[7]
 							
 					pos_eventMeans.append(eventMean)
 					pos_lengths.append(eventLength)
