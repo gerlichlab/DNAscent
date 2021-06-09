@@ -29,21 +29,22 @@ from scipy.stats import halfnorm
 
 tf.keras.backend.set_learning_phase(1)  # set inference phase
 
-logPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/modelTraining/trainingLog11pt2.csv'
-trainingReadLogPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/modelTraining/trainingReads11.txt'
-valReadLogPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/modelTraining/validationReads11.txt'
-checkpointPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/modelTraining/checkpoints11pt2'
+logPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/modelTraining/trainingLog38pt2.csv'
+trainingReadLogPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/modelTraining/trainingReads38.txt'
+valReadLogPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/modelTraining/validationReads38.txt'
+checkpointPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/modelTraining/checkpoints38pt2'
 validationSplit = 0.2
 
-f_checkpoint = '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/modelTraining/checkpoints11/weights.18-0.42.h5'
+f_checkpoint = '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/modelTraining/checkpoints38/weights.23-0.38.h5'
 
 maxLen = 4000
 
 #static params
-truePositive = 0.5
-trueNegative = 0.9
+truePositive = 0.9
+trueNegative = 0.95
 falsePositive = 1. - trueNegative
-llThreshold = 1.25
+llThreshold = 0.5
+incorporationEstimate = 0.8
 
 
 #-------------------------------------------------
@@ -287,12 +288,11 @@ def trainingReadToLabel(t,whichSet):
 					label.append([0.98, 0.01, 0.01])
 				else:
 					score = float(s[:-1])
-					tempAnalogueConc = 0.7
 					if score > llThreshold:
-						l = (truePositive*tempAnalogueConc)/(truePositive*tempAnalogueConc + falsePositive*(1-tempAnalogueConc))
+						l = (truePositive*incorporationEstimate)/(truePositive*incorporationEstimate + falsePositive*(1-incorporationEstimate))
 						label.append([(1.-l)/2., l, (1.-l)/2.])
 					else:
-						l = ((1-truePositive)*tempAnalogueConc)/((1-truePositive)*tempAnalogueConc + (1-falsePositive)*(1-tempAnalogueConc))
+						l = ((1-truePositive)*incorporationEstimate)/((1-truePositive)*incorporationEstimate + (1-falsePositive)*(1-incorporationEstimate))
 						label.append([(1.-l)/2., l, (1.-l)/2.])
 
 	elif whichSet == 2: #is a EdU data augmented read
@@ -306,12 +306,11 @@ def trainingReadToLabel(t,whichSet):
 					label.append([0.98, 0.01, 0.01])
 				else:
 					score = float(s[:-1])
-					tempAnalogueConc = 0.7
 					if score > llThreshold:
-						l = (truePositive*tempAnalogueConc)/(truePositive*tempAnalogueConc + falsePositive*(1-tempAnalogueConc))
+						l = (truePositive*incorporationEstimate)/(truePositive*incorporationEstimate + falsePositive*(1-incorporationEstimate))
 						label.append([(1.-l)/2., (1.-l)/2., l])
 					else:
-						l = ((1-truePositive)*tempAnalogueConc)/((1-truePositive)*tempAnalogueConc + (1-falsePositive)*(1-tempAnalogueConc))
+						l = ((1-truePositive)*incorporationEstimate)/((1-truePositive)*incorporationEstimate + (1-falsePositive)*(1-incorporationEstimate))
 						label.append([(1.-l)/2., (1.-l)/2., l])
 
 	return np.array(label)	
@@ -400,12 +399,12 @@ class DataGenerator(Sequence):
 
 #uncomment to train from scratch
 
-filepaths = ['/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/EdU_trainingData/EdU_augmentedTrainingData_slices_gap20',
-'/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/EdU_trainingData/EdU_augmentedTrainingData_slices_gap30',
-'/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/EdU_trainingData/EdU_augmentedTrainingData_slices_gap40',
-'/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/BrdU_trainingData/BrdU_augmentedTrainingData_slices_gap20',
-'/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/BrdU_trainingData/BrdU_augmentedTrainingData_slices_gap30',
-'/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/BrdU_trainingData/BrdU_augmentedTrainingData_slices_gap40',
+filepaths = ['/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/EdU_trainingData/EdU_augmentedTrainingData_slices_CNN_gap20',
+'/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/EdU_trainingData/EdU_augmentedTrainingData_slices_CNN_gap30',
+'/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/EdU_trainingData/EdU_augmentedTrainingData_slices_CNN_gap40',
+'/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/BrdU_trainingData/BrdU_augmentedTrainingData_slices_CNN_gap20',
+'/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/BrdU_trainingData/BrdU_augmentedTrainingData_slices_CNN_gap30',
+'/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/BrdU_trainingData/BrdU_augmentedTrainingData_slices_CNN_gap40',
 '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/Thym_trainingData/trainingFiles']
 
 maxReads = [7500,
@@ -415,10 +414,10 @@ maxReads = [7500,
 7500,
 7500,
 45000]
-'''
+
 trainPaths = []
 valPaths = []
-
+'''
 for index, directory in enumerate(filepaths):
 
 	count = 0

@@ -32,15 +32,13 @@ tf.keras.backend.set_learning_phase(0)  # set inference phase
 
 checkpointDirectory = os.path.dirname(sys.argv[1])
 DNAscentExecutable = '/home/mb915/rds/hpc-work/development/twoAnalogues/DNAscent_dev'+str(sys.argv[2])
-referenceGenome = '/home/mb915/rds/rds-mb915-notbackedup/genomes/Plasmodium_falciparum.ASM276v2.fasta'
-testBamEdU = '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/EdU_trainingData/test.bam'
-testBamBrdU = '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/BrdU_trainingData/test.bam'
-testBamThym = '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/Thym_trainingData/test.bam'
-EdUIndex = '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/index.dnascent'
-BrdUIndex = '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/index.dnascent'
-ThymIndex = '/home/mb915/rds/rds-mb915-notbackedup/data/2019_11_29_FT_ONT_Plasmodium_Barcoded/index.dnascent'
-analogueSets = [('Thymidine',testBamThym,ThymIndex),('BrdU',testBamBrdU,BrdUIndex),('EdU',testBamEdU,EdUIndex)]
-threads = 112 #number of threads to use for DNAscent detect
+referenceGenome = '/home/mb915/rds/rds-mb915-notbackedup/genomes/SacCer3.fasta'
+testBamBrdU = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/barcode11/EdUTrainingTest.bam'
+testBamThym = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/barcode08/EdUTrainingTest.bam'
+BrdUIndex = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/index.dnascent'
+ThymIndex = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/index.dnascent'
+analogueSets = [('Thymidine',testBamThym,ThymIndex),('BrdU',testBamBrdU,BrdUIndex)]
+threads = 56 #number of threads to use for DNAscent detect
 
 
 ##############################################################################################################
@@ -212,7 +210,7 @@ base2DetectFiles = {'Thymidine':'','BrdU':'','EdU':''}
 
 for aSet in analogueSets:
 
-	detectOutputFilename = detectOutputDir + '/' + aSet[0] + '_' + os.path.splitext(fname)[0] + '.detect'
+	detectOutputFilename = detectOutputDir + '/' + aSet[0] + '_' + os.path.splitext(fname)[0] + '_cerevisiae.detect'
 	base2DetectFiles[aSet[0]] = detectOutputFilename
 
 	#use the model we built to run DNAscent detect
@@ -297,38 +295,6 @@ for line in f:
 			brdu_attempts[j] += 1.
 f.close()
 
-#edu
-f = open(base2DetectFiles['EdU'],'r')
-readCtr = 0
-for line in f:
-
-	if line[0] == '#' or line[0] == '%':
-		continue
-
-	if line[0] == '>':
-		splitLine = line.rstrip().split()
-
-		readCtr += 1
-		if readCtr > maxReads:
-			break
-
-		continue
-	else:
-		splitLine = line.split('\t')
-		position = int(splitLine[0])
-
-		BrdUprob = float(splitLine[2])
-		EdUprob = float(splitLine[1])
-
-		for j in range(0,len(probTests)):
-
-			if BrdUprob >= probTests[j]:
-				BrdU_in_EdU_calls[j] += 1.
-			if EdUprob >= probTests[j]:
-				EdU_in_EdU_calls[j] += 1.
-			edu_attempts[j] += 1.
-f.close()
-
 plotOutputDir =  checkpointDirectory + '/ROC_curves'
 os.system('mkdir ' + plotOutputDir)
 
@@ -336,36 +302,28 @@ fig, ax = plt.subplots()
 
 #brdu
 x1 = BrdU_in_Thym_calls/thym_attempts
-x2 = BrdU_in_EdU_calls/edu_attempts
+x2 = EdU_in_Thym_calls/thym_attempts
+x3 = EdU_in_BrdU_calls/brdu_attempts
 y = BrdU_in_BrdU_calls/brdu_attempts
 
 plt.plot(x1[::-1], y[::-1],'r-', label='BrdU Calls in Thym',alpha=0.5)
 for p,txt in enumerate(probTests):
 	ax.annotate(str(txt),(x1[p],y[p]),fontsize=6)
 
-plt.plot(x2[::-1], y[::-1],'r--', label='BrdU Calls in EdU',alpha=0.5)
+plt.plot(x2[::-1], y[::-1],'k--', label='EdU Calls in Thym',alpha=0.5)
 for p,txt in enumerate(probTests):
 	ax.annotate(str(txt),(x2[p],y[p]),fontsize=6)
 
-#edu
-x1 = EdU_in_Thym_calls/thym_attempts
-x2 = EdU_in_BrdU_calls/brdu_attempts
-y = EdU_in_EdU_calls/edu_attempts
-
-plt.plot(x1[::-1], y[::-1],'b-', label='EdU Calls in Thym',alpha=0.5)
+plt.plot(x3[::-1], y[::-1],'b--', label='EdU Calls in BrdU',alpha=0.5)
 for p,txt in enumerate(probTests):
-	ax.annotate(str(txt),(x1[p],y[p]),fontsize=6)
-
-plt.plot(x2[::-1], y[::-1],'b--', label='EdU Calls in BrdU',alpha=0.5)
-for p,txt in enumerate(probTests):
-	ax.annotate(str(txt),(x2[p],y[p]),fontsize=6)
+	ax.annotate(str(txt),(x3[p],y[p]),fontsize=6)
 
 plt.legend(framealpha=0.5)
 plt.xlim(0,1.0)
 plt.xlabel('False Positive Rate')
 plt.ylabel('Calls/Attempts')
 plt.ylim(0,1)
-plt.savefig(plotOutputDir + '/' + os.path.splitext(fname)[0] + '.pdf')
+plt.savefig(plotOutputDir + '/' + os.path.splitext(fname)[0] + '_cerevisiae.pdf')
 plt.xlim(0,0.2)
-plt.savefig(plotOutputDir + '/' + os.path.splitext(fname)[0] + '_zoom.pdf')
+plt.savefig(plotOutputDir + '/' + os.path.splitext(fname)[0] + '_zoom_cerevisiae.pdf')
 plt.close()

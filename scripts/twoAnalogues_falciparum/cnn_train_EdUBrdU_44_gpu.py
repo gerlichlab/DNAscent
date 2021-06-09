@@ -6,18 +6,17 @@ import tensorflow as tf
 from tensorflow.python.keras.models import Sequential, model_from_json, Model
 from tensorflow.python.keras.layers import Dense, Dropout, ZeroPadding1D
 from tensorflow.python.keras.layers import Embedding, Flatten, MaxPooling1D,AveragePooling1D, Input, GlobalMaxPooling1D
-from tensorflow.python.keras.layers import Conv1D, MaxPooling1D, Activation, LSTM, SeparableConv1D, Add
-from tensorflow.python.keras.layers import TimeDistributed, Bidirectional, Reshape, BatchNormalization
+from tensorflow.python.keras.layers import Conv1D, MaxPooling1D, Activation, SeparableConv1D, Add
+from tensorflow.python.keras.layers import LSTM, GRU
+from tensorflow.python.keras.layers import TimeDistributed, Bidirectional, Reshape, BatchNormalization,Masking
 from tensorflow.python.keras.callbacks import EarlyStopping, ModelCheckpoint, CSVLogger
 from tensorflow.python.keras import Input
 from tensorflow.python.keras.regularizers import l2
 from tensorflow.python.keras.optimizers import Adam
-from tensorflow.python.keras.utils import normalize, to_categorical
 from tensorflow.python.keras.preprocessing.sequence import pad_sequences
-from tensorflow.python.keras.utils import Sequence
+from tensorflow.keras.utils import Sequence
 from tensorflow.python.keras.initializers import glorot_uniform
 from tensorflow.python.keras import backend
-from tensorflow.python.keras.utils import plot_model
 import itertools
 import random
 import numpy as np
@@ -29,21 +28,24 @@ from scipy.stats import halfnorm
 
 tf.keras.backend.set_learning_phase(1)  # set inference phase
 
-logPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/modelTraining/trainingLog11pt2.csv'
-trainingReadLogPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/modelTraining/trainingReads11.txt'
-valReadLogPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/modelTraining/validationReads11.txt'
-checkpointPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/modelTraining/checkpoints11pt2'
+logPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/modelTraining/trainingLog44.csv'
+trainingReadLogPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/modelTraining/trainingReads44.txt'
+valReadLogPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/modelTraining/validationReads44.txt'
+checkpointPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/modelTraining/checkpoints44'
 validationSplit = 0.2
 
-f_checkpoint = '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/modelTraining/checkpoints11/weights.18-0.42.h5'
+f_checkpoint = '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/modelTraining/checkpoints41/weights.19-0.39.h5'
 
 maxLen = 4000
 
 #static params
-truePositive = 0.5
-trueNegative = 0.9
+truePositive = 0.9
+trueNegative = 0.95
 falsePositive = 1. - trueNegative
-llThreshold = 1.25
+llThreshold = 0.5
+incorporationEstimate = 0.5
+
+maxEvents = 5
 
 
 #-------------------------------------------------
@@ -65,58 +67,9 @@ class trainingRead:
 			gaps.append( abs(read_positions[i] - read_positions[i-1]) )
 		self.gaps = gaps
 
-		'''
-		print(self.sixMers[0:5])
-		print(self.eventMean[0:5])
-		print(self.eventStd[0:5])
-		print(self.stutter[0:5])
-		print(self.eventLength[0:5])
-		print(self.modelMeans[0:5])
-		print(self.modelStd[0:5])
-		print(self.gaps[0:5])
-		print(read_positions[0:5])
-		print(logLikelihood[0:5])
-		print('-----------------------')
-		'''
-
 		if not len(self.sixMers) == len(self.eventMean) == len(self.eventStd) == len(self.eventLength) == len(self.modelMeans) == len(self.modelStd) == len(self.gaps):
 			print("Length Mismatch")
 			sys.exit()
-
-
-#-------------------------------------------------
-#
-def identity_block(X, f, filters, stage, block):
-    
-    # Defining name basis
-    conv_name_base = 'res' + str(stage) + block + '_branch'
-    bn_name_base = 'bn' + str(stage) + block + '_branch'
-    
-    # Retrieve Filters
-    F1, F2, F3 = filters
-    
-    # Save the input value
-    X_shortcut = X
-    
-    # First component of main path
-    X = SeparableConv1D(filters = F1, kernel_size = f, strides = 1, padding = 'same', name = conv_name_base + '2a', kernel_initializer = glorot_uniform(seed=0))(X)
-    X = BatchNormalization(name = bn_name_base + '2a')(X)
-    X = Activation('tanh')(X)
-    
-    # Second component of main path
-    X = SeparableConv1D(filters = F2, kernel_size = f, strides = 1, padding = 'same', name = conv_name_base + '2b', kernel_initializer = glorot_uniform(seed=0))(X)
-    X = BatchNormalization(name = bn_name_base + '2b')(X)
-    X = Activation('tanh')(X)
-
-    # Third component of main path 
-    X = SeparableConv1D(filters = F3, kernel_size = f, strides = 1, padding = 'same', name = conv_name_base + '2c', kernel_initializer = glorot_uniform(seed=0))(X)
-    X = BatchNormalization(name = bn_name_base + '2c')(X)
-
-    # Final step: Add shortcut value to main path, and pass it through a RELU activation
-    X = Add()([X, X_shortcut])
-    X = Activation('tanh')(X)
-    
-    return X
 
 
 #-------------------------------------------------
@@ -180,37 +133,27 @@ def buildModel(input_shape = (64, 64, 3), classes = 6):
     
     # Define the input as a tensor with shape input_shape
     X_input = Input(input_shape)
+    X = Masking(mask_value=0)(X_input)
 
+    X = TimeDistributed(GRU(4))(X_input)
     
     # Stage 1
-    X = Conv1D(64, 4, strides = 1, padding='same', name = 'conv1', kernel_initializer = glorot_uniform(seed=0))(X_input)
+    X = Conv1D(64, 4, strides = 1, padding='same', name = 'conv1', kernel_initializer = glorot_uniform(seed=0))(X)
     X = BatchNormalization(name = 'bn_conv1')(X)
     X = Activation('tanh')(X)
     #X = MaxPooling1D(4, strides=1, padding='same')(X)
 
     # Stage 2
     X = convolutional_block(X, f = 4, filters = [64, 64, 64, 64, 64, 64], stage = 2, block='a', s = 1)
-    #X = identity_block(X, 4, [64, 64, 256], stage=2, block='b')
-    #X = identity_block(X, 4, [64, 64, 256], stage=2, block='c')
 
     # Stage 3
     X = convolutional_block(X, f=4, filters=[64, 64, 64, 64, 64, 64], stage=3, block='a', s=2)
-    #X = identity_block(X, 4, [128, 128, 512], stage=3, block='b')
-    #X = identity_block(X, 4, [128, 128, 512], stage=3, block='c')
-    #X = identity_block(X, 4, [128, 128, 512], stage=3, block='d')
 
     # Stage 4
     X = convolutional_block(X, f=8, filters=[128, 128, 128, 128, 128, 128], stage=4, block='a', s=2)
-    #X = identity_block(X, 4, [256, 256, 1024], stage=4, block='b')
-    #X = identity_block(X, 4, [256, 256, 1024], stage=4, block='c')
-    #X = identity_block(X, 4, [256, 256, 1024], stage=4, block='d')
-    #X = identity_block(X, 4, [256, 256, 1024], stage=4, block='e')
-    #X = identity_block(X, 4, [256, 256, 1024], stage=4, block='f')
 
     # Stage 5
     X = convolutional_block(X, f=8, filters=[128, 128, 128, 128, 128, 128], stage=5, block='a', s=2)
-    #X = identity_block(X, 4, [512, 512, 2048], stage=5, block='b')
-    #X = identity_block(X, 4, [512, 512, 2048], stage=5, block='c')
 
     # Stage 6
     X = convolutional_block(X, f=16, filters=[256, 256, 256, 256, 256, 256], stage=6, block='a', s=2)
@@ -247,22 +190,30 @@ intToBase = {0:'A', 1:'T', 2:'G', 3:'C'}
 #
 def trainingReadToTensor(t):
 
-	oneSet = []
+	allPositions = []
 	for i, s in enumerate(t.sixMers):
 
-		#base
-		oneHot = [0]*4
-		index = baseToInt[s[0]]
-		oneHot[index] = 1
+		oneSet = []
+		for j in range(len(t.eventMean[i])):
 
-		#other features
-		oneHot.append(t.eventMean[i])
-		oneHot.append(t.eventLength[i])
-		oneHot.append(t.modelMeans[i])
-		oneHot.append(t.modelStd[i])
-		oneSet.append(oneHot)
+			#base
+			oneHot = [0]*4
+			index = baseToInt[s[0]]
+			oneHot[index] = 1
 
-	return np.array(oneSet)
+			#other features
+			oneHot.append(t.eventMean[i][j])
+			oneHot.append(t.eventLength[i][j])
+			oneHot.append(t.modelMeans[i])
+			oneHot.append(t.modelStd[i])
+			oneSet.append(oneHot)
+
+		if len(oneSet) < maxEvents:
+			for b in range(maxEvents - len(oneSet)):
+				oneSet.append([0.]*8)
+
+		allPositions.append(np.array(oneSet[0:maxEvents]))
+	return np.array((allPositions))
 
 #-------------------------------------------------
 #
@@ -287,12 +238,11 @@ def trainingReadToLabel(t,whichSet):
 					label.append([0.98, 0.01, 0.01])
 				else:
 					score = float(s[:-1])
-					tempAnalogueConc = 0.7
 					if score > llThreshold:
-						l = (truePositive*tempAnalogueConc)/(truePositive*tempAnalogueConc + falsePositive*(1-tempAnalogueConc))
+						l = (truePositive*incorporationEstimate)/(truePositive*incorporationEstimate + falsePositive*(1-incorporationEstimate))
 						label.append([(1.-l)/2., l, (1.-l)/2.])
 					else:
-						l = ((1-truePositive)*tempAnalogueConc)/((1-truePositive)*tempAnalogueConc + (1-falsePositive)*(1-tempAnalogueConc))
+						l = ((1-truePositive)*incorporationEstimate)/((1-truePositive)*incorporationEstimate + (1-falsePositive)*(1-incorporationEstimate))
 						label.append([(1.-l)/2., l, (1.-l)/2.])
 
 	elif whichSet == 2: #is a EdU data augmented read
@@ -306,12 +256,35 @@ def trainingReadToLabel(t,whichSet):
 					label.append([0.98, 0.01, 0.01])
 				else:
 					score = float(s[:-1])
-					tempAnalogueConc = 0.7
 					if score > llThreshold:
-						l = (truePositive*tempAnalogueConc)/(truePositive*tempAnalogueConc + falsePositive*(1-tempAnalogueConc))
+						l = (truePositive*incorporationEstimate)/(truePositive*incorporationEstimate + falsePositive*(1-incorporationEstimate))
 						label.append([(1.-l)/2., (1.-l)/2., l])
 					else:
-						l = ((1-truePositive)*tempAnalogueConc)/((1-truePositive)*tempAnalogueConc + (1-falsePositive)*(1-tempAnalogueConc))
+						l = ((1-truePositive)*incorporationEstimate)/((1-truePositive)*incorporationEstimate + (1-falsePositive)*(1-incorporationEstimate))
+						label.append([(1.-l)/2., (1.-l)/2., l])
+
+	elif whichSet == 3: #is EdU augmented into BrdU
+		for s in t.logLikelihood: #not thymidine
+			if s == '-':
+				label.append([0.98, 0.01, 0.01])
+			else:
+				if s == '-X': #not thymidine
+					label.append([0.98, 0.01, 0.01])
+				elif s[-1] == 'X': #in a swapped BrdU region
+					score = float(s[:-1])
+					if score > llThreshold:
+						l = (truePositive*incorporationEstimate)/(truePositive*incorporationEstimate + falsePositive*(1-incorporationEstimate))
+						label.append([(1.-l)/2., l, (1.-l)/2.])
+					else:
+						l = ((1-truePositive)*incorporationEstimate)/((1-truePositive)*incorporationEstimate + (1-falsePositive)*(1-incorporationEstimate))
+						label.append([(1.-l)/2., l, (1.-l)/2.])
+				else: #in an EdU region
+					score = float(s[:-1])
+					if score > llThreshold:
+						l = (truePositive*incorporationEstimate)/(truePositive*incorporationEstimate + falsePositive*(1-incorporationEstimate))
+						label.append([(1.-l)/2., (1.-l)/2., l])
+					else:
+						l = ((1-truePositive)*incorporationEstimate)/((1-truePositive)*incorporationEstimate + (1-falsePositive)*(1-incorporationEstimate))
 						label.append([(1.-l)/2., (1.-l)/2., l])
 
 	return np.array(label)	
@@ -378,6 +351,8 @@ class DataGenerator(Sequence):
 				whichSet = 1
 			elif 'EdU_augmentedTrainingData' in ID:
 				whichSet = 2
+			elif 'EdUinBrdU_trainingData' in ID:
+				whichSet = 3
 			if whichSet == -1:
 				print('setting analogue failed')
 				sys.exit()
@@ -385,12 +360,11 @@ class DataGenerator(Sequence):
 			#pull data for this 6mer from the appropriate pickled read
 			trainingRead = pickle.load(open(ID, "rb"))
 			tensor = trainingReadToTensor(trainingRead)
-			
 			X[i,] = tensor
 
 			# Store class
 			y[i] = trainingReadToLabel(trainingRead,whichSet)
-			
+
 		y = y.reshape(y.shape[0],y.shape[1],3)
 		return X, y
 
@@ -400,22 +374,29 @@ class DataGenerator(Sequence):
 
 #uncomment to train from scratch
 
-filepaths = ['/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/EdU_trainingData/EdU_augmentedTrainingData_slices_gap20',
-'/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/EdU_trainingData/EdU_augmentedTrainingData_slices_gap30',
-'/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/EdU_trainingData/EdU_augmentedTrainingData_slices_gap40',
-'/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/BrdU_trainingData/BrdU_augmentedTrainingData_slices_gap20',
-'/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/BrdU_trainingData/BrdU_augmentedTrainingData_slices_gap30',
-'/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/BrdU_trainingData/BrdU_augmentedTrainingData_slices_gap40',
-'/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/Thym_trainingData/trainingFiles']
+filepaths = ['/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/EdU_trainingData/EdU_augmentedTrainingData_slices_CNN_LSTMevents_gap20',
+'/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/EdU_trainingData/EdU_augmentedTrainingData_slices_CNN_LSTMevents_gap30',
+'/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/EdU_trainingData/EdU_augmentedTrainingData_slices_CNN_LSTMevents_gap40',
+'/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/BrdU_trainingData/BrdU_augmentedTrainingData_slices_CNN_LSTMevents_gap20',
+'/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/BrdU_trainingData/BrdU_augmentedTrainingData_slices_CNN_LSTMevents_gap30',
+'/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/BrdU_trainingData/BrdU_augmentedTrainingData_slices_CNN_LSTMevents_gap40',
+'/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/EdUinBrdU_trainingData_LSTMevents/gap20',
+'/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/EdUinBrdU_trainingData_LSTMevents/gap30', 
+'/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/EdUinBrdU_trainingData_LSTMevents/gap40',  
+'/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/Thym_trainingData/trainingFiles_LSTMevents']
 
-maxReads = [7500,
-7500,
-7500,
-7500,
-7500,
-7500,
-45000]
-'''
+maxReads = [500,
+500,
+500,
+500,
+500,
+500,
+500,
+500,
+500,
+4500]
+
+
 trainPaths = []
 valPaths = []
 
@@ -447,10 +428,10 @@ for ri in valPaths:
 f_valReads.close()
 
 partition = {'training':trainPaths, 'validation':valPaths}
-'''
+
 
 #uncommment to resume from a checkpoint
-
+'''
 val_readIDs = []
 f_readIDs = open(valReadLogPath,'r')
 for line in f_readIDs:
@@ -464,12 +445,12 @@ for line in f_readIDs:
 f_readIDs.close()
 
 partition = {'training':train_readIDs, 'validation':val_readIDs}
-
+'''
 
 labels = {}
 
 # Parameters
-params = {'dim': (maxLen,8),
+params = {'dim': (maxLen,maxEvents,8),
           'batch_size': 32,
           'n_classes': 1,
           'n_channels': 1,
@@ -482,15 +463,13 @@ validation_generator = DataGenerator(partition['validation'], labels, **params)
 #-------------------------------------------------
 #CNN architecture
 
-model = buildModel((None,8), 3)
+model = buildModel((None,maxEvents,8), 3)
 op = Adam(lr=0.0001, beta_1=0.9, beta_2=0.999, epsilon=None, decay=0.0, amsgrad=False)
 model.compile(optimizer=op, metrics=['accuracy'], loss='categorical_crossentropy', sample_weight_mode="temporal")
 print(model.summary())
-plot_model(model, to_file='model.png')
-
 
 #uncomment to load weights from a trainign checkpoint
-model.load_weights(f_checkpoint)
+#model.load_weights(f_checkpoint)
 
 #callbacks
 es = EarlyStopping(monitor='val_loss', min_delta=0, patience=20, verbose=1, mode='auto', baseline=None, restore_best_weights=True)

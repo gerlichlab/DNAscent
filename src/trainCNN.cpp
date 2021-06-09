@@ -25,10 +25,11 @@
 #include "alignment.h"
 #include "htsInterface.h"
 #include "error_handling.h"
+#include "tensor.h"
 
 
 static const char *help=
-"trainCNN: DNAscent executable that generates HMM bootstrapped calls to build training data for DNAscent ResNet training.\n"
+"trainCNN: DNAscent executable that generates HMM or CNN bootstrapped calls to build training data for DNAscent ResNet training.\n"
 "Note: This executable is geared towards developers and advanced users.\n"
 "To run DNAscent trainCNN, do:\n"
 "   DNAscent trainCNN -b /path/to/alignment.bam -r /path/to/reference.fasta -i /path/to/index.dnascent -o /path/to/output.detect\n"
@@ -42,6 +43,7 @@ static const char *help=
 "  -m,--maxReads             maximum number of reads to consider,\n"
 "  -q,--quality              minimum mapping quality (default is 20),\n"
 "  -l,--length               minimum read length in bp (default is 100),\n"
+"     --HMM                  use HMM bootstrapping (default is CNN),\n"
 "     --useRaw               write raw signal instead of events.\n"
 
 "Written by Michael Boemo, Department of Pathology, University of Cambridge.\n"
@@ -52,7 +54,7 @@ struct Arguments {
 	std::string referenceFilename;
 	std::string outputFilename;
 	std::string indexFilename;
-	bool methylAware, capReads, useRaw;
+	bool methylAware, capReads, useRaw, useHMM;
 	double divergence;
 	int minQ, maxReads;
 	int minL;
@@ -91,6 +93,7 @@ Arguments parseDataArguments( int argc, char** argv ){
 	args.useRaw = false;
 	args.maxReads = 0;
 	args.dilation = 1.0;
+	args.useHMM = false;
 
 	/*parse the command line arguments */
 
@@ -164,6 +167,11 @@ Arguments parseDataArguments( int argc, char** argv ){
 			args.methylAware = true;
 			i+=1;
 		}
+		else if ( flag == "--HMM" ){
+
+			args.useHMM = true;
+			i+=1;
+		}
 		else if ( flag == "--useRaw" ){
 
 			args.useRaw = true;
@@ -182,6 +190,11 @@ int data_main( int argc, char** argv ){
 
 	Arguments args = parseDataArguments( argc, argv );
 	bool bulkFast5;
+
+	//get the neural network model path
+	std::string pathExe = getExePath();
+	std::string modelPath = pathExe + "/dnn_models/" + "BrdU_detect.pb";
+	std::shared_ptr<ModelSession> session = model_load_cpu(modelPath.c_str(), "input_1", "time_distributed/Reshape_1",args.threads);
 
 	//load DNAscent index
 	std::map< std::string, std::string > readID2path;
@@ -295,7 +308,22 @@ int data_main( int argc, char** argv ){
 					continue;
 				}
 
-				std::map<unsigned int, double> BrdUCalls = llAcrossRead_forTraining( r, windowLength);
+				std::map<unsigned int, double> BrdUCalls;
+				if (args.useHMM){
+					BrdUCalls = llAcrossRead_forTraining( r, windowLength);
+				}
+				else{
+					unsigned int windowLength_align = 50;
+					std::pair<bool,std::shared_ptr<AlignedRead>> ar = eventalign_detect( r, windowLength_align, 1.0 );
+					if (not ar.first){
+						failed++;
+						prog++;
+						continue;
+					}
+					BrdUCalls = runCNN_training(ar.second,session);
+				}
+
+
 				std::string readOut = eventalign_train( r, 100, BrdUCalls, args.dilation, args.useRaw);
 
 				#pragma omp critical

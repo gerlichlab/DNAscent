@@ -1,7 +1,7 @@
 import sys
 import math
 
-baseDir = '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/Thym_trainingData/splitData/'
+baseDir = sys.argv[2]
 
 f = open(sys.argv[1],'r')
 

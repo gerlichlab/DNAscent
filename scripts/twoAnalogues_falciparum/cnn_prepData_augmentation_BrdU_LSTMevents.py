@@ -12,7 +12,7 @@ import math
 folderPathBrdU = '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/BrdU_trainingData/splitData_CNNbootstrap'
 folderPathThym = '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/Thym_trainingData/splitData'
 
-trainingFilesFolderPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/BrdU_trainingData/BrdU_augmentedTrainingData_slices_CNN_gap20'
+trainingFilesFolderPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/BrdU_trainingData/BrdU_augmentedTrainingData_slices_CNN_LSTMevents_gap40'
 
 f_analoguePositiveIDs = '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/BrdU_trainingData/analogueIDs.txt'
 
@@ -63,12 +63,11 @@ def getChromosomeLength( chromosome ):
 #
 class trainingRead:
 
-	def __init__(self, augmented_sixMers, augmented_eventMean, augmented_eventStd, augmented_eventLength, augmented_modelMeans, augmented_modelStd, logLikelihood, readID, analogueConc):
+	def __init__(self, augmented_sixMers, augmented_eventMean, augmented_eventLength, augmented_modelMeans, augmented_modelStd, logLikelihood, readID, analogueConc):
 
 
 		self.sixMers = augmented_sixMers
 		self.eventMean = augmented_eventMean
-		self.eventStd = augmented_eventStd
 		self.eventLength = augmented_eventLength
 		self.modelMeans = augmented_modelMeans
 		self.modelStd = augmented_modelStd
@@ -76,7 +75,7 @@ class trainingRead:
 		self.readID = readID
 		self.analogueConc = analogueConc
 
-		if not len(self.sixMers) == len(self.eventMean) == len(self.eventStd) == len(self.eventLength) == len(self.modelMeans) == len(self.modelStd):
+		if not len(self.sixMers) == len(self.eventMean) == len(self.eventLength) == len(self.modelMeans) == len(self.modelStd):
 			print(len(self.sixMers), len(self.logLikelihood))
 			print("Length Mismatch")
 			sys.exit()
@@ -105,7 +104,6 @@ def fetchMatchingRead(fname, baseChromosome, baseStart, baseEnd, baseStrand,used
 
 	read_sixMers = []
 	read_eventMeans = []
-	read_eventStd = []
 	read_stutter = []
 	read_lengthMeans = []
 	read_lengthStd = []
@@ -140,7 +138,6 @@ def fetchMatchingRead(fname, baseChromosome, baseStart, baseEnd, baseStrand,used
 			#reset for read
 			read_sixMers = []
 			read_eventMeans = []
-			read_eventStd = []
 			read_eventLength = []
 			read_modelMeans = []
 			read_modelStd = []
@@ -184,15 +181,14 @@ def fetchMatchingRead(fname, baseChromosome, baseStart, baseEnd, baseStrand,used
 			if pos != prevPos and prevPos != -1:
 
 				read_sixMers.append(sixMer)
-				read_eventMeans.append(np.mean(pos_eventMeans))
-				read_eventStd.append(np.std(pos_eventMeans))
-				read_eventLength.append(sum(pos_lengths))
+				read_eventMeans.append(pos_eventMeans)
+				read_eventLength.append(pos_lengths)
 				read_modelMeans.append(modelMean)
 				read_modelStd.append(modelStd)
 				read_positions.append(prevPos)
 				read_BrdUcalls.append(BrdUcall)
 
-				refPos2feature[prevPos] = (sixMer,np.mean(pos_eventMeans),sum(pos_lengths),modelMean,modelStd,BrdUcall)
+				refPos2feature[prevPos] = (sixMer,pos_eventMeans,pos_lengths,modelMean,modelStd,BrdUcall)
 
 				#reset for position
 				pos_eventMeans = []
@@ -244,7 +240,6 @@ for matchChr in set2Chromosomes[int(sys.argv[1])]:
 
 			read_sixMers = []
 			read_eventMeans = []
-			read_eventStd = []
 			read_stutter = []
 			read_lengthMeans = []
 			read_lengthStd = []
@@ -284,7 +279,6 @@ for matchChr in set2Chromosomes[int(sys.argv[1])]:
 
 								augmented_sixMers = []
 								augmented_eventMean = []
-								augmented_eventStd = []
 								augmented_eventLength = []
 								augmented_modelMeans = []
 								augmented_modelStd =[]
@@ -295,7 +289,7 @@ for matchChr in set2Chromosomes[int(sys.argv[1])]:
 								for i in range(0, len(read_positions)-12):
 
 									#look ahead			
-									if read_sixMers[i+5][0] == 'T' and random.choice(range(0,20)) == 0:
+									if read_sixMers[i+5][0] == 'T' and random.choice(range(0,40)) == 0:
 
 										#make sure all the reference positions are defined
 										noDels = True
@@ -331,7 +325,6 @@ for matchChr in set2Chromosomes[int(sys.argv[1])]:
 
 										augmented_sixMers.append(matchingReadDic[read_positions[i]][0])
 										augmented_eventMean.append(matchingReadDic[read_positions[i]][1])
-										augmented_eventStd.append(0)
 										augmented_eventLength.append(matchingReadDic[read_positions[i]][2])
 										augmented_modelMeans.append(matchingReadDic[read_positions[i]][3])
 										augmented_modelStd.append(matchingReadDic[read_positions[i]][4])
@@ -341,7 +334,6 @@ for matchChr in set2Chromosomes[int(sys.argv[1])]:
 										
 										augmented_sixMers.append(read_sixMers[i])
 										augmented_eventMean.append(read_eventMeans[i])
-										augmented_eventStd.append(0)
 										augmented_eventLength.append(read_eventLength[i])
 										augmented_modelMeans.append(read_modelMeans[i])
 										augmented_modelStd.append(read_modelStd[i])
@@ -351,13 +343,12 @@ for matchChr in set2Chromosomes[int(sys.argv[1])]:
 
 								for s in range(numReadSlices):
 
-									tr = trainingRead(augmented_sixMers[maxLen*s:maxLen*(s+1)], augmented_eventMean[maxLen*s:maxLen*(s+1)], augmented_eventStd[maxLen*s:maxLen*(s+1)], augmented_eventLength[maxLen*s:maxLen*(s+1)], augmented_modelMeans[maxLen*s:maxLen*(s+1)], augmented_modelStd[maxLen*s:maxLen*(s+1)], augmented_logLikelihood[maxLen*s:maxLen*(s+1)], prevReadID+'.'+matchID+'_slice'+str(s), -1)
+									tr = trainingRead(augmented_sixMers[maxLen*s:maxLen*(s+1)], augmented_eventMean[maxLen*s:maxLen*(s+1)],  augmented_eventLength[maxLen*s:maxLen*(s+1)], augmented_modelMeans[maxLen*s:maxLen*(s+1)], augmented_modelStd[maxLen*s:maxLen*(s+1)], augmented_logLikelihood[maxLen*s:maxLen*(s+1)], prevReadID+'.'+matchID+'_slice'+str(s), -1)
 									saveRead(tr, prevReadID+'.'+matchID+'_slice'+str(s))
 
 					#reset for read
 					read_sixMers = []
 					read_eventMeans = []
-					read_eventStd = []
 					read_eventLength = []
 					read_modelMeans = []
 					read_modelStd = []
@@ -400,9 +391,8 @@ for matchChr in set2Chromosomes[int(sys.argv[1])]:
 					if pos != prevPos and prevPos != -1:
 
 						read_sixMers.append(sixMer)
-						read_eventMeans.append(np.mean(pos_eventMeans))
-						read_eventStd.append(np.std(pos_eventMeans))
-						read_eventLength.append(sum(pos_lengths))
+						read_eventMeans.append(pos_eventMeans)
+						read_eventLength.append(pos_lengths)
 						read_modelMeans.append(modelMean)
 						read_modelStd.append(modelStd)
 						read_positions.append(prevPos)

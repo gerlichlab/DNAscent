@@ -26,8 +26,8 @@
 #include "../htslib/htslib/sam.h"
 #include "../tensorflow/include/tensorflow/c/eager/c_api.h"
 #include "htsInterface.h"
-#include "tensor.h"
-#include "alignment.h"
+//#include "tensor.h"
+//#include "alignment.h"
 #include "error_handling.h"
 #include <omp.h>
 
@@ -834,6 +834,73 @@ std::string runCNN(std::shared_ptr<AlignedRead> r, std::shared_ptr<ModelSession>
 	}
 
 	return str_output;
+}
+
+
+std::map<unsigned int, double> runCNN_training(std::shared_ptr<AlignedRead> r, std::shared_ptr<ModelSession> session){
+
+	std::map<unsigned int, double> BrdUCalls;
+
+	std::pair<size_t, size_t> protoShape = r -> getShape();
+	TensorShape input_shape={{1, (int64_t) protoShape.first, (int64_t) protoShape.second}, 3};
+	auto input_values = tf_obj_unique_ptr(read2tensor(r, input_shape));
+	if(!input_values){
+		std::cerr << "Tensor creation failure." << std::endl;
+		exit (EXIT_FAILURE);
+	}
+
+	CStatus status;
+	TF_Tensor* inputs[]={input_values.get()};
+	TF_Tensor* outputs[1]={};
+
+	TF_SessionRun(*(session->session.get()), nullptr,
+		&session->inputs, inputs, 1,
+		&session->outputs, outputs, 1,
+		nullptr, 0, nullptr, status.ptr);
+
+	auto _output_holder = tf_obj_unique_ptr(outputs[0]);
+
+	if(status.failure()){
+		status.dump_error();
+		exit (EXIT_FAILURE);
+	}
+
+	TF_Tensor &output = *outputs[0];
+	if(TF_TensorType(&output) != TF_FLOAT){
+		std::cerr << "Error, unexpected output tensor type." << std::endl;
+		exit (EXIT_FAILURE);
+	}
+
+	unsigned int outputFields = 2;
+
+	//get positions on the read reference to write the output
+	std::vector<unsigned int> positions = r -> getPositions();
+	std::vector<std::string> sixMers = r -> getSixMers();
+
+	size_t output_size = TF_TensorByteSize(&output) / sizeof(float);
+	assert(output_size == protoShape.first * outputFields);
+	auto output_array = (const float *)TF_TensorData(&output);
+
+	//write the output
+	unsigned int pos = 0;
+	unsigned int thisPosition = positions[0];
+	for(size_t i = 0; i < output_size; i++){
+		if((i+1)%outputFields==0){
+
+			//only output T positions
+			if (sixMers[pos].substr(0,1) != "T"){
+				pos++;
+				continue;
+			}
+
+			BrdUCalls[thisPosition] = output_array[i];
+			pos++;
+		}
+		else{
+			if (i != output_size-1) thisPosition = positions[pos];
+		}
+	}
+	return BrdUCalls;
 }
 
 

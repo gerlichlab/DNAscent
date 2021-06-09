@@ -13,6 +13,8 @@
 #include <string>
 #include <vector>
 #include "data_IO.h"
+#include "alignment.h"
+#include "tensor.h"
 
 
 /*function prototypes */
@@ -22,5 +24,6 @@ std::vector< unsigned int > getPOIs( std::string &, int );
 void parseIndex( std::string, std::map< std::string, std::string > &, bool & );
 double sequenceProbability( std::vector <double> &, std::string &, size_t, bool, PoreParameters, size_t, size_t );
 std::map<unsigned int, double> llAcrossRead_forTraining( read &, unsigned int);
+std::map<unsigned int, double> runCNN_training(std::shared_ptr<AlignedRead> r, std::shared_ptr<ModelSession> session);
 
 #endif

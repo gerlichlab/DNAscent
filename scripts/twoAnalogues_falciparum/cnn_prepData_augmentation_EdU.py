@@ -9,10 +9,10 @@ import pickle
 import random
 import math
 
-folderPathEdU = '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/EdU_trainingData/splitData'
+folderPathEdU = '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/EdU_trainingData/splitData_CNNbootstrap'
 folderPathThym = '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/Thym_trainingData/splitData'
 
-trainingFilesFolderPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/EdU_trainingData/EdU_augmentedTrainingData_slices_gap40'
+trainingFilesFolderPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/EdU_trainingData/EdU_augmentedTrainingData_slices_CNN_gap20'
 
 f_analoguePositiveIDs = '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/EdU_trainingData/analogueIDs.txt'
 
@@ -295,7 +295,7 @@ for matchChr in set2Chromosomes[int(sys.argv[1])]:
 								for i in range(0, len(read_positions)-12):
 
 									#look ahead			
-									if read_sixMers[i+5][0] == 'T' and random.choice(range(0,40)) == 0:
+									if read_sixMers[i+5][0] == 'T' and random.choice(range(0,20)) == 0:
 
 										#make sure all the reference positions are defined
 										noDels = True

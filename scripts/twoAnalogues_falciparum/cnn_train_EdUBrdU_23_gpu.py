@@ -29,18 +29,18 @@ from scipy.stats import halfnorm
 
 tf.keras.backend.set_learning_phase(1)  # set inference phase
 
-logPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/modelTraining/trainingLog11pt2.csv'
-trainingReadLogPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/modelTraining/trainingReads11.txt'
-valReadLogPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/modelTraining/validationReads11.txt'
-checkpointPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/modelTraining/checkpoints11pt2'
+logPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/modelTraining/trainingLog23pt2.csv'
+trainingReadLogPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/modelTraining/trainingReads23.txt'
+valReadLogPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/modelTraining/validationReads23.txt'
+checkpointPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/modelTraining/checkpoints23pt2'
 validationSplit = 0.2
 
-f_checkpoint = '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/modelTraining/checkpoints11/weights.18-0.42.h5'
+f_checkpoint = '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/modelTraining/checkpoints23/weights.25-0.43.h5'
 
 maxLen = 4000
 
 #static params
-truePositive = 0.5
+truePositive = 0.8
 trueNegative = 0.9
 falsePositive = 1. - trueNegative
 llThreshold = 1.25
@@ -287,7 +287,7 @@ def trainingReadToLabel(t,whichSet):
 					label.append([0.98, 0.01, 0.01])
 				else:
 					score = float(s[:-1])
-					tempAnalogueConc = 0.7
+					tempAnalogueConc = 0.6
 					if score > llThreshold:
 						l = (truePositive*tempAnalogueConc)/(truePositive*tempAnalogueConc + falsePositive*(1-tempAnalogueConc))
 						label.append([(1.-l)/2., l, (1.-l)/2.])
@@ -306,7 +306,7 @@ def trainingReadToLabel(t,whichSet):
 					label.append([0.98, 0.01, 0.01])
 				else:
 					score = float(s[:-1])
-					tempAnalogueConc = 0.7
+					tempAnalogueConc = 0.6
 					if score > llThreshold:
 						l = (truePositive*tempAnalogueConc)/(truePositive*tempAnalogueConc + falsePositive*(1-tempAnalogueConc))
 						label.append([(1.-l)/2., (1.-l)/2., l])
@@ -415,10 +415,10 @@ maxReads = [7500,
 7500,
 7500,
 45000]
-'''
+
 trainPaths = []
 valPaths = []
-
+'''
 for index, directory in enumerate(filepaths):
 
 	count = 0

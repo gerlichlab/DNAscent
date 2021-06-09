@@ -9,20 +9,27 @@ import pickle
 import random
 import math
 
+folderPathEdU = '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/EdU_trainingData/splitData_CNNbootstrap'
 folderPathBrdU = '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/BrdU_trainingData/splitData_CNNbootstrap'
-folderPathThym = '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/Thym_trainingData/splitData'
 
-trainingFilesFolderPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/BrdU_trainingData/BrdU_augmentedTrainingData_slices_CNN_gap20'
+trainingFilesFolderPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/EdUinBrdU_trainingData_LSTMevents/gap40'
 
-f_analoguePositiveIDs = '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/BrdU_trainingData/analogueIDs.txt'
+f_analoguePositiveIDs_EdU = '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/EdU_trainingData/analogueIDs.txt'
+f_analoguePositiveIDs_BrdU = '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/BrdU_trainingData/analogueIDs.txt'
 
 maxLen = 4000
 llThreshold = 1.25
 
-analoguePositiveIDs = []
-f = open(f_analoguePositiveIDs,'r')
+analoguePositiveIDs_EdU = []
+f = open(f_analoguePositiveIDs_EdU,'r')
 for line in f:
-	analoguePositiveIDs.append(line.rstrip())
+	analoguePositiveIDs_EdU.append(line.rstrip())
+f.close()
+
+analoguePositiveIDs_BrdU = []
+f = open(f_analoguePositiveIDs_BrdU,'r')
+for line in f:
+	analoguePositiveIDs_BrdU.append(line.rstrip())
 f.close()
 
 
@@ -63,12 +70,11 @@ def getChromosomeLength( chromosome ):
 #
 class trainingRead:
 
-	def __init__(self, augmented_sixMers, augmented_eventMean, augmented_eventStd, augmented_eventLength, augmented_modelMeans, augmented_modelStd, logLikelihood, readID, analogueConc):
+	def __init__(self, augmented_sixMers, augmented_eventMean, augmented_eventLength, augmented_modelMeans, augmented_modelStd, logLikelihood, readID, analogueConc):
 
 
 		self.sixMers = augmented_sixMers
 		self.eventMean = augmented_eventMean
-		self.eventStd = augmented_eventStd
 		self.eventLength = augmented_eventLength
 		self.modelMeans = augmented_modelMeans
 		self.modelStd = augmented_modelStd
@@ -76,7 +82,7 @@ class trainingRead:
 		self.readID = readID
 		self.analogueConc = analogueConc
 
-		if not len(self.sixMers) == len(self.eventMean) == len(self.eventStd) == len(self.eventLength) == len(self.modelMeans) == len(self.modelStd):
+		if not len(self.sixMers) == len(self.eventMean) == len(self.eventLength) == len(self.modelMeans) == len(self.modelStd):
 			print(len(self.sixMers), len(self.logLikelihood))
 			print("Length Mismatch")
 			sys.exit()
@@ -105,14 +111,13 @@ def fetchMatchingRead(fname, baseChromosome, baseStart, baseEnd, baseStrand,used
 
 	read_sixMers = []
 	read_eventMeans = []
-	read_eventStd = []
 	read_stutter = []
 	read_lengthMeans = []
 	read_lengthStd = []
 	read_modelMeans = []
 	read_modelStd = []
 	read_positions = []
-	read_BrdUcalls = []
+	read_EdUcalls = []
 
 	pos_eventMeans = []
 	pos_lengths = []
@@ -140,12 +145,11 @@ def fetchMatchingRead(fname, baseChromosome, baseStart, baseEnd, baseStrand,used
 			#reset for read
 			read_sixMers = []
 			read_eventMeans = []
-			read_eventStd = []
 			read_eventLength = []
 			read_modelMeans = []
 			read_modelStd = []
 			read_positions = []
-			read_BrdUcalls = []
+			read_EdUcalls = []
 			refPos2feature = {}
 
 			#reset for position
@@ -161,7 +165,7 @@ def fetchMatchingRead(fname, baseChromosome, baseStart, baseEnd, baseStrand,used
 			strand = splitLine[4]
 			prevPos = -1
 
-			if chromosome != 'chrM' and baseChromosome == chromosome and baseStrand == strand and min(mappingStart,mappingEnd) <= baseStart and max(mappingStart,mappingEnd) >= baseEnd and readID not in usedIDs:
+			if chromosome != 'chrM' and baseChromosome == chromosome and baseStrand == strand and min(mappingStart,mappingEnd) <= baseStart and max(mappingStart,mappingEnd) >= baseEnd and readID not in usedIDs and readID in analoguePositiveIDs_BrdU:
 				switch = True
 			else:
 				switch = False
@@ -184,15 +188,14 @@ def fetchMatchingRead(fname, baseChromosome, baseStart, baseEnd, baseStrand,used
 			if pos != prevPos and prevPos != -1:
 
 				read_sixMers.append(sixMer)
-				read_eventMeans.append(np.mean(pos_eventMeans))
-				read_eventStd.append(np.std(pos_eventMeans))
-				read_eventLength.append(sum(pos_lengths))
+				read_eventMeans.append(pos_eventMeans)
+				read_eventLength.append(pos_lengths)
 				read_modelMeans.append(modelMean)
 				read_modelStd.append(modelStd)
 				read_positions.append(prevPos)
-				read_BrdUcalls.append(BrdUcall)
+				read_EdUcalls.append(EdUcall)
 
-				refPos2feature[prevPos] = (sixMer,np.mean(pos_eventMeans),sum(pos_lengths),modelMean,modelStd,BrdUcall)
+				refPos2feature[prevPos] = (sixMer,pos_eventMeans,pos_lengths,modelMean,modelStd,EdUcall)
 
 				#reset for position
 				pos_eventMeans = []
@@ -207,10 +210,10 @@ def fetchMatchingRead(fname, baseChromosome, baseStart, baseEnd, baseStrand,used
 			prevReadID = readID
 			prevPos = pos
 
-			#sort out BrdU calls
-			BrdUcall = '-'
+			#sort out EdU calls
+			EdUcall = '-'
 			if len(splitLine) == 8:
-				BrdUcall = splitLine[7]
+				EdUcall = splitLine[7]
 						
 			pos_eventMeans.append(eventMean)
 			pos_lengths.append(eventLength)
@@ -235,8 +238,8 @@ for matchChr in set2Chromosomes[int(sys.argv[1])]:
 		for m in marks:
 
 			#set filenames
-			bc08dnascent = folderPathThym+'/Thym_'+matchChr+'_'+strand+'_'+str(m)+'.trainingData'
-			bc12dnascent = folderPathBrdU+'/BrdU_'+matchChr+'_'+strand+'_'+str(m)+'.trainingData'
+			bc08dnascent = folderPathBrdU+'/BrdU_'+matchChr+'_'+strand+'_'+str(m)+'.trainingData'
+			bc12dnascent = folderPathEdU+'/EdU_'+matchChr+'_'+strand+'_'+str(m)+'.trainingData'
 
 			if not os.path.isfile(bc08dnascent) or not os.path.isfile(bc12dnascent):
 				print(bc08dnascent,bc12dnascent)
@@ -244,14 +247,13 @@ for matchChr in set2Chromosomes[int(sys.argv[1])]:
 
 			read_sixMers = []
 			read_eventMeans = []
-			read_eventStd = []
 			read_stutter = []
 			read_lengthMeans = []
 			read_lengthStd = []
 			read_modelMeans = []
 			read_modelStd = []
 			read_positions = []
-			read_BrdUcalls = []
+			read_EdUcalls = []
 
 			pos_eventMeans = []
 			pos_lengths = []
@@ -284,7 +286,6 @@ for matchChr in set2Chromosomes[int(sys.argv[1])]:
 
 								augmented_sixMers = []
 								augmented_eventMean = []
-								augmented_eventStd = []
 								augmented_eventLength = []
 								augmented_modelMeans = []
 								augmented_modelStd =[]
@@ -295,7 +296,7 @@ for matchChr in set2Chromosomes[int(sys.argv[1])]:
 								for i in range(0, len(read_positions)-12):
 
 									#look ahead			
-									if read_sixMers[i+5][0] == 'T' and random.choice(range(0,20)) == 0:
+									if read_sixMers[i+5][0] == 'T' and random.choice(range(0,40)) == 0:
 
 										#make sure all the reference positions are defined
 										noDels = True
@@ -304,7 +305,7 @@ for matchChr in set2Chromosomes[int(sys.argv[1])]:
 												noDels = False
 												break
 
-										#make sure we have a positive BrdU call from the HMM
+										#make sure we have a positive EdU call from the HMM
 										#positiveCall = False
 										#if noDels:
 										#	if matchingReadDic[read_positions[i+5]][5] != '-':
@@ -312,7 +313,7 @@ for matchChr in set2Chromosomes[int(sys.argv[1])]:
 										#			positiveCall = True
 
 
-										#for the next 12 bases, pull from the BrdU read
+										#for the next 12 bases, pull from the EdU read
 										if noDels:# and positiveCall:
 											ThymWindow = range(i,i+12)
 
@@ -331,7 +332,6 @@ for matchChr in set2Chromosomes[int(sys.argv[1])]:
 
 										augmented_sixMers.append(matchingReadDic[read_positions[i]][0])
 										augmented_eventMean.append(matchingReadDic[read_positions[i]][1])
-										augmented_eventStd.append(0)
 										augmented_eventLength.append(matchingReadDic[read_positions[i]][2])
 										augmented_modelMeans.append(matchingReadDic[read_positions[i]][3])
 										augmented_modelStd.append(matchingReadDic[read_positions[i]][4])
@@ -341,28 +341,26 @@ for matchChr in set2Chromosomes[int(sys.argv[1])]:
 										
 										augmented_sixMers.append(read_sixMers[i])
 										augmented_eventMean.append(read_eventMeans[i])
-										augmented_eventStd.append(0)
 										augmented_eventLength.append(read_eventLength[i])
 										augmented_modelMeans.append(read_modelMeans[i])
 										augmented_modelStd.append(read_modelStd[i])
-										augmented_logLikelihood.append(read_BrdUcalls[i])
+										augmented_logLikelihood.append(read_EdUcalls[i])
 
 								numReadSlices = math.floor(float(len(augmented_sixMers))/float(maxLen))
 
 								for s in range(numReadSlices):
 
-									tr = trainingRead(augmented_sixMers[maxLen*s:maxLen*(s+1)], augmented_eventMean[maxLen*s:maxLen*(s+1)], augmented_eventStd[maxLen*s:maxLen*(s+1)], augmented_eventLength[maxLen*s:maxLen*(s+1)], augmented_modelMeans[maxLen*s:maxLen*(s+1)], augmented_modelStd[maxLen*s:maxLen*(s+1)], augmented_logLikelihood[maxLen*s:maxLen*(s+1)], prevReadID+'.'+matchID+'_slice'+str(s), -1)
+									tr = trainingRead(augmented_sixMers[maxLen*s:maxLen*(s+1)], augmented_eventMean[maxLen*s:maxLen*(s+1)],  augmented_eventLength[maxLen*s:maxLen*(s+1)], augmented_modelMeans[maxLen*s:maxLen*(s+1)], augmented_modelStd[maxLen*s:maxLen*(s+1)], augmented_logLikelihood[maxLen*s:maxLen*(s+1)], prevReadID+'.'+matchID+'_slice'+str(s), -3)
 									saveRead(tr, prevReadID+'.'+matchID+'_slice'+str(s))
 
 					#reset for read
 					read_sixMers = []
 					read_eventMeans = []
-					read_eventStd = []
 					read_eventLength = []
 					read_modelMeans = []
 					read_modelStd = []
 					read_positions = []
-					read_BrdUcalls = []
+					read_EdUcalls = []
 
 					#reset for position
 					pos_eventMeans = []
@@ -377,7 +375,7 @@ for matchChr in set2Chromosomes[int(sys.argv[1])]:
 					strand = splitLine[4]
 					prevPos = -1
 
-					if chromosome != 'chrM' and readID in analoguePositiveIDs:
+					if chromosome != 'chrM' and readID in analoguePositiveIDs_EdU:
 						switch = True
 					else:
 						switch = False
@@ -400,13 +398,12 @@ for matchChr in set2Chromosomes[int(sys.argv[1])]:
 					if pos != prevPos and prevPos != -1:
 
 						read_sixMers.append(sixMer)
-						read_eventMeans.append(np.mean(pos_eventMeans))
-						read_eventStd.append(np.std(pos_eventMeans))
-						read_eventLength.append(sum(pos_lengths))
+						read_eventMeans.append(pos_eventMeans)
+						read_eventLength.append(pos_lengths)
 						read_modelMeans.append(modelMean)
 						read_modelStd.append(modelStd)
 						read_positions.append(prevPos)
-						read_BrdUcalls.append(BrdUcall)
+						read_EdUcalls.append(EdUcall)
 
 						#reset for position
 						pos_eventMeans = []
@@ -421,10 +418,10 @@ for matchChr in set2Chromosomes[int(sys.argv[1])]:
 					prevReadID = readID
 					prevPos = pos
 
-					#sort out BrdU calls
-					BrdUcall = '-'
+					#sort out EdU calls
+					EdUcall = '-'
 					if len(splitLine) == 8:
-						BrdUcall = splitLine[7]
+						EdUcall = splitLine[7]
 							
 					pos_eventMeans.append(eventMean)
 					pos_lengths.append(eventLength)
