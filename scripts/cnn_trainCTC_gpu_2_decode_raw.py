@@ -11,13 +11,11 @@ from tensorflow.python.keras.layers import TimeDistributed, Bidirectional, Resha
 from tensorflow.python.keras.callbacks import EarlyStopping, ModelCheckpoint, CSVLogger
 from tensorflow.python.keras import Input
 from tensorflow.python.keras.regularizers import l2
-from tensorflow.python.keras.optimizers import Adam, SGD
-from tensorflow.python.keras.utils import normalize, to_categorical
+from tensorflow.keras.optimizers import Adam
 from tensorflow.python.keras.preprocessing.sequence import pad_sequences
-from tensorflow.python.keras.utils import Sequence
+from tensorflow.keras.utils import Sequence
 from tensorflow.python.keras.initializers import glorot_uniform
 from tensorflow.python.keras import backend
-from tensorflow.python.keras.utils import plot_model
 from tensorflow.python.keras.backend import ctc_batch_cost, ctc_decode, get_value, cast
 
 
@@ -33,7 +31,7 @@ from scipy.stats import halfnorm
 
 tf.keras.backend.set_learning_phase(1)  # set inference phase
 
-f_checkpoint = '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/modelTraining/checkpoints_CTC_7/weights.06.h5'
+f_checkpoint = '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/modelTraining/checkpoints_CTC_8/weights.17.h5'
 
 maxLen = 2001
 maxReads = 100000 #250#
@@ -186,7 +184,7 @@ intToBase = {0:'A', 1:'T', 2:'G', 3:'C'}
 def trainingReadToTensor(t):
 
 	wholeRead = []
-	for i, s in enumerate(t.sixMers):
+	for i, s in enumerate(t.sixMers[0:maxLen]):
 
 		for j in range(len(t.eventMean[i])):
 
@@ -197,13 +195,9 @@ def trainingReadToTensor(t):
 
 			#other features
 			oneHot.append(t.eventMean[i][j])
-			oneHot.append(t.eventLength[i][j])
 			oneHot.append(t.modelMeans[i])
-			oneHot.append(t.modelStd[i])
 
 			wholeRead.append(np.array(oneHot))
-
-		wholeRead.append(np.zeros(8))
 
 	return np.array((wholeRead))
 
@@ -222,41 +216,41 @@ def ctc_lambda_func(args):
 #
 def buildModel():
 
-	input_shape = (None,8)
+	input_shape = (None,6)
 	classes = 4 #no analogue, BrdU, EdU, plus blank
 
 	# Define the input as a tensor with shape input_shape
 	X_input = Input(name='signal_input',shape=input_shape)
 	
 	# Stage 1
-	X = Conv1D(64, 4, strides = 1, padding='same', name = 'conv1', kernel_initializer = glorot_uniform(seed=0))(X_input)
+	X = Conv1D(64, 3, strides = 1, padding='same', name = 'conv1', kernel_initializer = glorot_uniform(seed=0))(X_input)
 	X = BatchNormalization(name = 'bn_conv1')(X)
 	X = Activation('tanh')(X)
 
 	# Stage 2
-	X = convolutional_block(X, f = 4, filters = [64, 64, 64, 64, 64, 64], stage = 2, block='a', s = 1)
+	X = convolutional_block(X, f = 3, filters = [64, 64, 64, 64, 64, 64], stage = 2, block='a', s = 1)
 
 	# Stage 3
-	X = convolutional_block(X, f=4, filters=[64, 64, 64, 64, 64, 64], stage=3, block='a', s=2)
+	X = convolutional_block(X, f=3, filters=[64, 64, 64, 64, 64, 64], stage=3, block='a', s=2)
 
 	# Stage 4
-	X = convolutional_block(X, f=8, filters=[128, 128, 128, 128, 128, 128], stage=4, block='a', s=2)
+	X = convolutional_block(X, f=9, filters=[128, 128, 128, 128, 128, 128], stage=4, block='a', s=2)
 
 	# Stage 5
-	X = convolutional_block(X, f=8, filters=[128, 128, 128, 128, 128, 128], stage=5, block='a', s=2)
+	X = convolutional_block(X, f=9, filters=[128, 128, 128, 128, 128, 128], stage=5, block='a', s=2)
 
 	# Stage 6
-	X = convolutional_block(X, f=16, filters=[256, 256, 256, 256, 256, 256], stage=6, block='a', s=2)
+	X = convolutional_block(X, f=15, filters=[256, 256, 256, 256, 256, 256], stage=6, block='a', s=2)
 
-	X = Conv1D(64, 4, strides = 1, padding='same', name = 'conv2', kernel_initializer = glorot_uniform(seed=0))(X)
+	X = Conv1D(64, 3, strides = 1, padding='same', name = 'conv2', kernel_initializer = glorot_uniform(seed=0))(X)
 	X = BatchNormalization(name = 'bn_conv2')(X)
 	X = Activation('tanh')(X)
 
-	X = Conv1D(64, 4, strides = 1, padding='same', name = 'conv3', kernel_initializer = glorot_uniform(seed=0))(X)
+	X = Conv1D(64, 3, strides = 1, padding='same', name = 'conv3', kernel_initializer = glorot_uniform(seed=0))(X)
 	X = BatchNormalization(name = 'bn_conv3')(X)
 	X = Activation('tanh')(X)
 
-	X = Conv1D(64, 4, strides = 1, padding='same', name = 'conv4', kernel_initializer = glorot_uniform(seed=0))(X)
+	X = Conv1D(64, 3, strides = 1, padding='same', name = 'conv4', kernel_initializer = glorot_uniform(seed=0))(X)
 
 	# Output layer
 	X = TimeDistributed(Dense(classes, activation='softmax', name='fc' + str(classes), kernel_initializer = glorot_uniform(seed=0)))(X)
@@ -277,19 +271,19 @@ def buildModel():
 
 
 
-directory = '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/EdU_trainingData/EdU_augmentedTrainingData_slices_CNN_LSTMevents_gap40'
+directory = '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/Thym_trainingData/trainingFiles_raw'
 
 '''
-filepaths = ['/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/EdU_trainingData/EdU_augmentedTrainingData_slices_CNN_LSTMevents_gap20',
-'/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/EdU_trainingData/EdU_augmentedTrainingData_slices_CNN_LSTMevents_gap30',
-'/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/EdU_trainingData/EdU_augmentedTrainingData_slices_CNN_LSTMevents_gap40',
-'/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/BrdU_trainingData/BrdU_augmentedTrainingData_slices_CNN_LSTMevents_gap20',
-'/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/BrdU_trainingData/BrdU_augmentedTrainingData_slices_CNN_LSTMevents_gap30',
-'/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/BrdU_trainingData/BrdU_augmentedTrainingData_slices_CNN_LSTMevents_gap40',
-'/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/EdUinBrdU_trainingData_LSTMevents/gap20',
-'/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/EdUinBrdU_trainingData_LSTMevents/gap30', 
-'/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/EdUinBrdU_trainingData_LSTMevents/gap40',  
-'/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/Thym_trainingData/trainingFiles_LSTMevents']
+filepaths = ['/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/EdU_trainingData/EdU_augmentedTrainingData_slices_CNN_raw_gap20',
+'/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/EdU_trainingData/EdU_augmentedTrainingData_slices_CNN_raw_gap30',
+'/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/EdU_trainingData/EdU_augmentedTrainingData_slices_CNN_raw_gap40',
+'/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/BrdU_trainingData/BrdU_augmentedTrainingData_slices_CNN_raw_gap20',
+'/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/BrdU_trainingData/BrdU_augmentedTrainingData_slices_CNN_raw_gap30',
+'/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/BrdU_trainingData/BrdU_augmentedTrainingData_slices_CNN_raw_gap40',
+'/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/EdUinBrdU_trainingData_raw/gap20',
+'/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/EdUinBrdU_trainingData_raw/gap30', 
+'/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/EdUinBrdU_trainingData_raw/gap40',  
+'/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/Thym_trainingData/trainingFiles_raw']
 '''
 maxReads = 5
 
@@ -304,7 +298,6 @@ allPaths = allPaths[-5:]
 model = buildModel()
 
 print(model.summary())
-plot_model(model, to_file='model.png')
 
 #uncomment to load weights from a trainign checkpoint
 model.load_weights(f_checkpoint)
@@ -319,7 +312,7 @@ f = open(allPaths[1], "rb")
 trainingRead = pickle.load(f)
 f.close()
 tensor = trainingReadToTensor(trainingRead)
-tensor = tensor.reshape(tensor.shape[0],1,8)
+tensor = tensor.reshape(tensor.shape[0],1,6)
 print(prediction_model.predict(tensor)[0:200])
 print(tensor[0:200])
 print(trainingRead.sixMers[0:200])

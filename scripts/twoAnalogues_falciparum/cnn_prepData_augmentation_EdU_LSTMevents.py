@@ -12,11 +12,12 @@ import math
 folderPathEdU = '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/EdU_trainingData/splitData_CNNbootstrap'
 folderPathThym = '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/Thym_trainingData/splitData'
 
-trainingFilesFolderPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/EdU_trainingData/EdU_augmentedTrainingData_slices_CNN_LSTMevents_gap20'
+trainingFilesFolderPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/EdU_trainingData/EdU_augmentedTrainingData_slices_CNN_LSTMevents_gap40'
 
 f_analoguePositiveIDs = '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/EdU_trainingData/analogueIDs.txt'
 
 maxLen = 4000
+maxRaw = 10
 llThreshold = 1.25
 
 analoguePositiveIDs = []
@@ -75,10 +76,31 @@ class trainingRead:
 		self.readID = readID
 		self.analogueConc = analogueConc
 
-		if not len(self.sixMers) == len(self.eventMean) == len(self.eventLength) == len(self.modelMeans) == len(self.modelStd):
-			print(len(self.sixMers), len(self.logLikelihood))
-			print("Length Mismatch")
-			sys.exit()
+		allPositions = []
+		for i, s in enumerate(self.sixMers):
+
+			oneSet = []
+			for j in range(len(self.eventMean[i])):
+
+				#base
+				oneHot = [0]*4
+				index = baseToInt[s[0]]
+				oneHot[index] = 1
+
+				#other features
+				oneHot.append(self.eventMean[i][j])
+				oneHot.append(self.eventLength[i][j])
+				oneHot.append(self.modelMeans[i])
+				oneHot.append(self.modelStd[i])
+				oneSet.append(oneHot)
+
+			if len(oneSet) < maxRaw:
+				for b in range(maxRaw - len(oneSet)):
+					oneSet.append([0.]*8)
+
+			allPositions.append(np.array(oneSet[0:maxRaw]))
+
+		self.trainingTensor = np.array((allPositions))
 
 
 #-------------------------------------------------
@@ -289,7 +311,7 @@ for matchChr in set2Chromosomes[int(sys.argv[1])]:
 								for i in range(0, len(read_positions)-12):
 
 									#look ahead			
-									if read_sixMers[i+5][0] == 'T' and random.choice(range(0,20)) == 0:
+									if read_sixMers[i+5][0] == 'T' and random.choice(range(0,40)) == 0:
 
 										#make sure all the reference positions are defined
 										noDels = True

@@ -15,6 +15,7 @@ folderPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasm
 bc08dnascent = '/home/mb915/rds/rds-mb915-notbackedup/data/2019_11_29_FT_ONT_Plasmodium_Barcoded/barcode01/DNAscentv2.trainingData'
 inputFiles = [('thymidine', bc08dnascent, folderPath)]
 maxLen = 4000
+maxRaw = 10
 maxReads = int(sys.argv[2])
 
 llThreshold = 1.25
@@ -33,9 +34,31 @@ class trainingRead:
 		self.readID = readID
 		self.label = label
 
-		if not len(self.sixMers) == len(self.eventMean) == len(self.eventLength) == len(self.modelMeans) == len(self.modelStd):
-			print("Length Mismatch")
-			sys.exit()
+		allPositions = []
+		for i, s in enumerate(self.sixMers):
+
+			oneSet = []
+			for j in range(len(self.eventMean[i])):
+
+				#base
+				oneHot = [0]*4
+				index = baseToInt[s[0]]
+				oneHot[index] = 1
+
+				#other features
+				oneHot.append(self.eventMean[i][j])
+				oneHot.append(self.eventLength[i][j])
+				oneHot.append(self.modelMeans[i])
+				oneHot.append(self.modelStd[i])
+				oneSet.append(oneHot)
+
+			if len(oneSet) < maxRaw:
+				for b in range(maxRaw - len(oneSet)):
+					oneSet.append([0.]*8)
+
+			allPositions.append(np.array(oneSet[0:maxRaw]))
+
+		self.trainingTensor = np.array((allPositions))
 
 
 #-------------------------------------------------

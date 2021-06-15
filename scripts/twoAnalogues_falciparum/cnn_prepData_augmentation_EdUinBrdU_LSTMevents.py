@@ -18,6 +18,7 @@ f_analoguePositiveIDs_EdU = '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_
 f_analoguePositiveIDs_BrdU = '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/BrdU_trainingData/analogueIDs.txt'
 
 maxLen = 4000
+maxRaw = 10
 llThreshold = 1.25
 
 analoguePositiveIDs_EdU = []
@@ -82,10 +83,31 @@ class trainingRead:
 		self.readID = readID
 		self.analogueConc = analogueConc
 
-		if not len(self.sixMers) == len(self.eventMean) == len(self.eventLength) == len(self.modelMeans) == len(self.modelStd):
-			print(len(self.sixMers), len(self.logLikelihood))
-			print("Length Mismatch")
-			sys.exit()
+		allPositions = []
+		for i, s in enumerate(self.sixMers):
+
+			oneSet = []
+			for j in range(len(self.eventMean[i])):
+
+				#base
+				oneHot = [0]*4
+				index = baseToInt[s[0]]
+				oneHot[index] = 1
+
+				#other features
+				oneHot.append(self.eventMean[i][j])
+				oneHot.append(self.eventLength[i][j])
+				oneHot.append(self.modelMeans[i])
+				oneHot.append(self.modelStd[i])
+				oneSet.append(oneHot)
+
+			if len(oneSet) < maxRaw:
+				for b in range(maxRaw - len(oneSet)):
+					oneSet.append([0.]*8)
+
+			allPositions.append(np.array(oneSet[0:maxRaw]))
+
+		self.trainingTensor = np.array((allPositions))
 
 
 #-------------------------------------------------

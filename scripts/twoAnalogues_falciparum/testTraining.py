@@ -216,6 +216,7 @@ for aSet in analogueSets:
 	base2DetectFiles[aSet[0]] = detectOutputFilename
 
 	#use the model we built to run DNAscent detect
+	#if not os.path.isfile(detectOutputFilename):
 	os.system(DNAscentExecutable +'/bin/DNAscent' + ' detect -r ' + referenceGenome + ' -i ' + aSet[2] + ' -b ' + aSet[1] + ' -o ' + detectOutputFilename + ' -t ' + str(threads))
 
 print('   Plotting...')

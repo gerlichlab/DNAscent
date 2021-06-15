@@ -4,7 +4,7 @@ matplotlib.use('Agg')
 from matplotlib import pyplot as plt
 import tensorflow as tf
 from tensorflow.python.keras.models import Sequential, model_from_json, Model
-from tensorflow.python.keras.layers import Dense, Dropout, ZeroPadding1D, Layer
+from tensorflow.python.keras.layers import Dense, Dropout, ZeroPadding1D, Layer, LSTM, Bidirectional, Concatenate
 from tensorflow.python.keras.layers import Embedding, Flatten, MaxPooling1D,AveragePooling1D, Input
 from tensorflow.python.keras.layers import Conv1D, MaxPooling1D, Activation, LSTM, SeparableConv1D, Add
 from tensorflow.python.keras.layers import TimeDistributed, Bidirectional, Reshape, BatchNormalization, Reshape, Lambda
@@ -18,14 +18,13 @@ from tensorflow.python.keras.utils import Sequence
 from tensorflow.python.keras.initializers import glorot_uniform
 from tensorflow.python.keras import backend
 from tensorflow.python.keras.utils import plot_model
-from tensorflow.python.keras.backend import ctc_batch_cost, ctc_decode, get_value, cast
-
+from tensorflow.python.keras.backend import ctc_batch_cost
 
 import itertools
+from itertools import groupby
 import random
 import numpy as np
 np.set_printoptions(threshold=sys.maxsize)
-np.set_printoptions(suppress=True)
 import sys
 import os
 import pickle
@@ -33,13 +32,20 @@ from scipy.stats import halfnorm
 
 tf.keras.backend.set_learning_phase(1)  # set inference phase
 
-f_checkpoint = '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/modelTraining/checkpoints_CTC_7/weights.06.h5'
+#as compared with train13, this disregards insertion events (mostly in order to get 12 features so we can divide by 4
 
-maxLen = 2001
-maxReads = 100000 #250#
+logPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/modelTraining/trainingLog_CTC_1.csv'
+trainingReadLogPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/modelTraining/trainingReads_CTC_1.txt'
+valReadLogPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/modelTraining/validationReads_CTC_1.txt'
+checkpointPath = '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/modelTraining/checkpoints_CTC_1'
+validationSplit = 0.2
+
+f_checkpoint = '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/modelTraining/checkpoints41/weights.19-0.39.h5'
+
+maxLen = 1000
 
 #static params
-truePositive = 0.5
+truePositive = 0.9
 trueNegative = 0.9
 falsePositive = 1. - trueNegative
 llThreshold = 1.25
@@ -48,16 +54,22 @@ llThreshold = 1.25
 #
 class trainingRead:
 
-	def __init__(self, read_sequence, read_raw, read_modelMeans, read_modelStdvs, seqIdx2LL, readID, analogueConc, ll):
-		
-		self.sequence = read_sequence
-		self.raw = read_raw
-		self.modelMeans = read_modelMeans
-		self.modelStdvs = read_modelStdvs
+	def __init__(self, augmented_sixMers, augmented_eventMean, augmented_eventLength, augmented_modelMeans, augmented_modelStd, logLikelihood, readID, analogueConc):
+
+
+		self.sixMers = augmented_sixMers
+		self.eventMean = augmented_eventMean
+		self.eventLength = augmented_eventLength
+		self.modelMeans = augmented_modelMeans
+		self.modelStd = augmented_modelStd
+		self.logLikelihood = logLikelihood
 		self.readID = readID
 		self.analogueConc = analogueConc
-		self.logLikelihood = seqIdx2LL
-		self.labelLength = ll
+
+		if not len(self.sixMers) == len(self.eventMean) == len(self.eventLength) == len(self.modelMeans) == len(self.modelStd):
+			print(len(self.sixMers), len(self.logLikelihood))
+			print("Length Mismatch")
+			sys.exit()
 
 #-------------------------------------------------
 # from https://keras.io/examples/vision/captcha_ocr/
@@ -83,41 +95,6 @@ class CTCLayer(Layer):
 
 		# At test time, just return the computed predictions
 		return y_pred
-
-
-#-------------------------------------------------
-#
-def identity_block(X, f, filters, stage, block):
-    
-    # Defining name basis
-    conv_name_base = 'res' + str(stage) + block + '_branch'
-    bn_name_base = 'bn' + str(stage) + block + '_branch'
-    
-    # Retrieve Filters
-    F1, F2, F3 = filters
-    
-    # Save the input value
-    X_shortcut = X
-    
-    # First component of main path
-    X = SeparableConv1D(filters = F1, kernel_size = f, strides = 1, padding = 'same', name = conv_name_base + '2a', kernel_initializer = glorot_uniform(seed=0))(X)
-    X = BatchNormalization(name = bn_name_base + '2a')(X)
-    X = Activation('tanh')(X)
-    
-    # Second component of main path
-    X = SeparableConv1D(filters = F2, kernel_size = f, strides = 1, padding = 'same', name = conv_name_base + '2b', kernel_initializer = glorot_uniform(seed=0))(X)
-    X = BatchNormalization(name = bn_name_base + '2b')(X)
-    X = Activation('tanh')(X)
-
-    # Third component of main path 
-    X = SeparableConv1D(filters = F3, kernel_size = f, strides = 1, padding = 'same', name = conv_name_base + '2c', kernel_initializer = glorot_uniform(seed=0))(X)
-    X = BatchNormalization(name = bn_name_base + '2c')(X)
-
-    # Final step: Add shortcut value to main path, and pass it through a RELU activation
-    X = Add()([X, X_shortcut])
-    X = Activation('tanh')(X)
-    
-    return X
 
 
 #-------------------------------------------------
@@ -186,7 +163,7 @@ intToBase = {0:'A', 1:'T', 2:'G', 3:'C'}
 def trainingReadToTensor(t):
 
 	wholeRead = []
-	for i, s in enumerate(t.sixMers):
+	for i, s in enumerate(t.sixMers[0:maxLen]):
 
 		for j in range(len(t.eventMean[i])):
 
@@ -203,19 +180,158 @@ def trainingReadToTensor(t):
 
 			wholeRead.append(np.array(oneHot))
 
-		wholeRead.append(np.zeros(8))
-
 	return np.array((wholeRead))
 
 
 #-------------------------------------------------
 #
-def ctc_lambda_func(args):
-    y_pred, labels, input_length, label_length = args
-    # the 2 is critical here since the first couple outputs of the RNN
-    # tend to be garbage:
-    #y_pred = y_pred[:, 2:, :]
-    return ctc_batch_cost(labels, y_pred, input_length, label_length)
+def trainingReadToLabel(t,whichSet):
+
+	label = []
+
+
+	if whichSet == 0.:
+		for i, s in enumerate(t.modelMeans[0:maxLen]):
+
+			label.append(0)
+
+	elif whichSet == 1: #a BrdU augmented read
+		for i, s in enumerate(t.logLikelihood[0:maxLen]):
+
+			if s == '-': #not thymidine
+				label.append(0)
+			else:
+				if s == '-X': #not thymidine
+					label.append(0)
+				elif s[-1] == 'X': #in a swapped thymidine region
+					label.append(0)
+				else:
+					score = float(s[:-1])
+					if score > llThreshold and np.random.uniform() <= truePositive:
+						label.append(1)
+					else:
+						label.append(0)
+	elif whichSet == 2: #a EdU augmented read
+		for i, s in enumerate(t.logLikelihood[0:maxLen]):
+
+			if s == '-': #not thymidine
+				label.append(0)
+			else:
+				if s == '-X': #not thymidine
+					label.append(0)
+				elif s[-1] == 'X': #in a swapped thymidine region
+					label.append(0)
+				else:
+					score = float(s[:-1])
+					if score > llThreshold and np.random.uniform() <= truePositive:
+						label.append(2)
+					else:
+						label.append(0)
+	elif whichSet == 3: #a EdU augmented read
+		for i, s in enumerate(t.logLikelihood[0:maxLen]):
+
+			if s == '-': #not thymidine
+				label.append(0)
+			else:
+				if s == '-X': #not thymidine
+					label.append(0)
+				elif s[-1] == 'X': #in a swapped BrdU region
+					score = float(s[:-1])
+					if score > llThreshold and np.random.uniform() <= truePositive:
+						label.append(1)
+					else:
+						label.append(0)
+				else:
+					score = float(s[:-1])
+					if score > llThreshold and np.random.uniform() <= truePositive:
+						label.append(2)
+					else: #in an EdU region
+						label.append(0)
+	return np.array(label)
+
+
+#-------------------------------------------------
+#
+class DataGenerator(Sequence):
+	#'Generates data for Keras'
+	def __init__(self, list_IDs, labels, batch_size=32, dim=(32,32,32), n_channels=1, n_classes=10, shuffle=True):
+		#'Initialization'
+		self.dim = dim
+		self.batch_size = batch_size
+		self.labels = labels
+		self.list_IDs = list_IDs
+		self.n_channels = n_channels
+		self.n_classes = n_classes
+		self.shuffle = shuffle
+		self.on_epoch_end()
+
+	def __len__(self):
+		#'Denotes the number of batches per epoch'
+		return int(np.floor(len(self.list_IDs) / self.batch_size))
+
+	def __getitem__(self, index):
+		#'Generate one batch of data'
+		# Generate indexes of the batch
+		indexes = self.indexes[index*self.batch_size:(index+1)*self.batch_size]
+
+		# Find list of IDs
+		list_IDs_temp = [self.list_IDs[k] for k in indexes]
+
+		# Generate data
+		inputs,outputs = self.__data_generation(list_IDs_temp)
+
+		return inputs,outputs
+
+	def on_epoch_end(self):
+		#'Updates indexes after each epoch'
+		self.indexes = np.arange(len(self.list_IDs))
+		if self.shuffle == True:
+			np.random.shuffle(self.indexes)
+
+	def __data_generation(self, list_IDs_temp):
+
+		# Generate data
+		X = []
+		y = []
+		input_lengths = []
+		label_lengths = []
+
+		for i, ID in enumerate(list_IDs_temp):
+
+			whichSet = -1
+			if 'Thym_trainingData' in ID:
+				whichSet = 0
+			elif 'BrdU_augmentedTrainingData' in ID:
+				whichSet = 1
+			elif 'EdU_augmentedTrainingData' in ID:
+				whichSet = 2
+			elif 'EdUinBrdU_trainingData' in ID:
+				whichSet = 3
+			if whichSet == -1:
+				print('setting analogue failed')
+				sys.exit()
+
+			#pull data for this 6mer from the appropriate pickled read
+			trainingRead = pickle.load(open(ID, "rb"))
+
+			tensor = trainingReadToTensor(trainingRead)
+			label = trainingReadToLabel(trainingRead,whichSet)
+
+			X.append(tensor)
+			y.append(label)
+
+			input_lengths.append(len(tensor))
+			label_lengths.append(len(label))			
+
+		X = pad_sequences(X, dtype='float32', value=-1)
+		X = X.reshape(X.shape[0],X.shape[1],8)
+		y = pad_sequences(y, dtype='float32', value=-1,maxlen=max(label_lengths))
+		input_lengths = np.array(input_lengths)
+		label_lengths = np.array(label_lengths)
+		inputs = {'signal_input': X, 'the_labels': y, 'input_length': input_lengths,'label_length': label_lengths}
+		outputs = {'ctc': np.zeros([len(input_lengths)])}  # dummy data for dummy loss function
+
+		return inputs,outputs
 
 
 #-------------------------------------------------
@@ -275,11 +391,8 @@ def buildModel():
 #-------------------------------------------------
 #MAIN
 
+#uncomment to train from scratch
 
-
-directory = '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/EdU_trainingData/EdU_augmentedTrainingData_slices_CNN_LSTMevents_gap40'
-
-'''
 filepaths = ['/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/EdU_trainingData/EdU_augmentedTrainingData_slices_CNN_LSTMevents_gap20',
 '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/EdU_trainingData/EdU_augmentedTrainingData_slices_CNN_LSTMevents_gap30',
 '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/EdU_trainingData/EdU_augmentedTrainingData_slices_CNN_LSTMevents_gap40',
@@ -290,46 +403,95 @@ filepaths = ['/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasm
 '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/EdUinBrdU_trainingData_LSTMevents/gap30', 
 '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/EdUinBrdU_trainingData_LSTMevents/gap40',  
 '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/Thym_trainingData/trainingFiles_LSTMevents']
+
+maxReads = [500,
+500,
+500,
+500,
+500,
+500,
+500,
+500,
+500,
+1000]
+
+
+trainPaths = []
+valPaths = []
+
+for index, directory in enumerate(filepaths):
+
+	allPaths = []
+	for fcount, fname in enumerate(os.listdir(directory)):
+		allPaths.append(directory + '/' + fname)
+		if fcount > maxReads[index]:
+			break
+
+	random.shuffle(allPaths)
+	divideIndex = int(validationSplit*len(allPaths))
+	trainPaths += allPaths[divideIndex+1:]
+	valPaths += allPaths[0:divideIndex]
+	
+#record the reads we're using for training and val
+f_trainingReads = open(trainingReadLogPath,'w')
+for ri in trainPaths:
+	f_trainingReads.write(ri+'\n')
+f_trainingReads.close()
+
+f_valReads = open(valReadLogPath,'w')
+for ri in valPaths:
+	f_valReads.write(ri+'\n')
+f_valReads.close()
+
+partition = {'training':trainPaths, 'validation':valPaths}
+
+#uncommment to resume from a checkpoint
 '''
-maxReads = 5
+val_readIDs = []
+f_readIDs = open(valReadLogPath,'r')
+for line in f_readIDs:
+	val_readIDs.append(line.rstrip())
+f_readIDs.close()
 
-allPaths = []
-for fcount, fname in enumerate(os.listdir(directory)):
-	allPaths.append(directory + '/' + fname)
-	if fcount > maxReads:
-		break
+train_readIDs = []
+f_readIDs = open(trainingReadLogPath,'r')
+for line in f_readIDs:
+	train_readIDs.append(line.rstrip())
+f_readIDs.close()
 
-allPaths = allPaths[-5:]
+partition = {'training':train_readIDs, 'validation':val_readIDs}
+'''
+labels = {}
+
+# Parameters
+params = {'dim': (None,8),
+          'batch_size': 32,
+          'n_classes': 1,
+          'n_channels': 1,
+          'shuffle': True}
+
+# Generators
+training_generator = DataGenerator(partition['training'], labels, **params)
+validation_generator = DataGenerator(partition['validation'], labels, **params)
+
+#-------------------------------------------------
+#CNN architecture
 
 model = buildModel()
+
 
 print(model.summary())
 plot_model(model, to_file='model.png')
 
+
 #uncomment to load weights from a trainign checkpoint
-model.load_weights(f_checkpoint)
+#model.load_weights(f_checkpoint)
 
-prediction_model = Model(
-    model.get_layer(name="signal_input").input, model.get_layer(name="time_distributed").output
-)
+#callbacks
+es = EarlyStopping(monitor='val_loss', min_delta=0, patience=20, verbose=1, mode='auto', baseline=None)
+chk = ModelCheckpoint(checkpointPath + '/weights.{epoch:02d}.h5', monitor='val_loss', verbose=0, save_best_only=False, save_weights_only=False, mode='auto', period=1)
+csv = CSVLogger(logPath, separator=',', append=False)
 
-
-#for i, ID in enumerate(val_readIDs):
-f = open(allPaths[1], "rb")
-trainingRead = pickle.load(f)
-f.close()
-tensor = trainingReadToTensor(trainingRead)
-tensor = tensor.reshape(tensor.shape[0],1,8)
-print(prediction_model.predict(tensor)[0:200])
-print(tensor[0:200])
-print(trainingRead.sixMers[0:200])
-
-
-print(len(trainingRead.modelMeans))
-output = prediction_model.predict(tensor)
-inputshape = np.array([tensor.shape[0]])
-output = output.reshape(1,output.shape[0],output.shape[2])
-result = ctc_decode(output, input_length=inputshape, greedy=False)
-sess = tf.Session()
-with sess.as_default():
-	print(result[0][0].eval())
+#generator fit
+model.fit_generator(generator=training_generator, validation_data=validation_generator, epochs=100, verbose=1, callbacks=[chk,csv])
+print('made it to end')

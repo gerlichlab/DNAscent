@@ -1,7 +1,8 @@
 import sys
 import numpy as np
+from scipy.stats import mode
 
-maxReads = 100
+maxReads = 500
 readCtr = 0
 
 currentPos = -1
@@ -35,6 +36,8 @@ f.close()
 
 print(np.mean(rawAtEachPos))
 print(np.std(rawAtEachPos))
+print(np.median(rawAtEachPos))
+print(mode(rawAtEachPos))
 		
 	
 	
