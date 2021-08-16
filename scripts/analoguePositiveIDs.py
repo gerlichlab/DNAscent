@@ -7,11 +7,14 @@ from matplotlib import pyplot as plt
 threshold = 0.50
 
 f = open(sys.argv[1],'r')
-numCalls = 0
+BrdUnumCalls = 0
+EdUnumCalls = 0
 numAttempts = 0
 
+g = open('analoguePositiveIDs.txt','w')
+
+#maxReads = 5000
 readCount = 0
-passedReads = 0
 
 for line in f:
 
@@ -22,32 +25,40 @@ for line in f:
 
 		readCount += 1
 
-		#progress
-		if readCount % 500 == 0:
-			sys.stderr.write(str(readCount) + " " + str(passedReads) + "\n")
-
-		if numAttempts != 0:
-			if float(numCalls)/float(numAttempts) >= 0.2:
-				print(readID)
-				passedReads += 1
-
 		splitLine = line.rstrip().split()
-		readID = splitLine[0][1:]
 		strand = splitLine[4]
 
+		if numAttempts != 0:
+			fractionsBrdU = float(BrdUnumCalls)/float(numAttempts)
+			fractionsEdU = float(EdUnumCalls)/float(numAttempts)
+
+			if fractionsBrdU > 0.2:
+				g.write(readID+'\n')
+
 		numAttempts = 0
-		numCalls = 0
+		BrdUnumCalls = 0
+		EdUnumCalls = 0
+
+		readID = splitLine[0][1:]
 
 		continue
+
+	#if readCount > maxReads:
+	#	break
 
 	else:
 
 		splitLine = line.split('\t')
-		BrdUprob = float(splitLine[1])
+		EdUprob = float(splitLine[1])
+		BrdUprob = float(splitLine[2])
 		position = int(splitLine[0])
 		
 		if BrdUprob > threshold:
-			numCalls += 1
+			BrdUnumCalls += 1
+		if EdUprob > threshold:
+			EdUnumCalls += 1
 		numAttempts += 1
 
 f.close()
+g.close()
+

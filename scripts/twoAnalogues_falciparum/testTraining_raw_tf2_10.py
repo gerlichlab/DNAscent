@@ -38,7 +38,7 @@ EdUIndex = '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmod
 BrdUIndex = '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_21_FT_ONT_Plasmodium_BrdU_EdU/index.dnascent'
 ThymIndex = '/home/mb915/rds/rds-mb915-notbackedup/data/2019_11_29_FT_ONT_Plasmodium_Barcoded/index.dnascent'
 analogueSets = [('Thymidine',testBamThym,ThymIndex),('BrdU',testBamBrdU,BrdUIndex),('EdU',testBamEdU,EdUIndex)]
-threads = 56 #number of threads to use for DNAscent detect
+threads = 112 #number of threads to use for DNAscent detect
 
 
 #-------------------------------------------------
@@ -89,7 +89,7 @@ def convolutional_block(X, f, filters, stage, block, s=1):
     X_shortcut = Conv1D(filters=F6, kernel_size=f, strides=1, padding='same', name=conv_name_base + '1', kernel_initializer=glorot_uniform(seed=0))(X_shortcut)
     X_shortcut = BatchNormalization(name=bn_name_base + '1')(X_shortcut)
 
-    # Final step: Add shortcut value to main path, and pass it through a RELU activation
+    # Final step: Add shortcut value to main path, and pass it through a tanh activation
     X = Add()([X, X_shortcut])
     X = Activation('tanh')(X)
 
@@ -112,34 +112,34 @@ def buildModel(input_shape = (64, 64, 3), classes = 6):
     X = TimeDistributed(Bidirectional(GRU(8,return_sequences=False)))(X)
 
     # Stage 1
-    X = Conv1D(64, 4, strides = 1, padding='same', name = 'conv1', kernel_initializer = glorot_uniform(seed=0))(X)
+    X = Conv1D(64, 3, strides = 1, padding='same', name = 'conv1', kernel_initializer = glorot_uniform(seed=0))(X)
     X = BatchNormalization(name = 'bn_conv1')(X)
     X = Activation('tanh')(X)
 
     # Stage 2
-    X = convolutional_block(X, f = 4, filters = [64, 64, 64, 64, 64, 64], stage = 2, block='a', s = 1)
+    X = convolutional_block(X, f = 5, filters = [64, 64, 64, 64, 64, 64], stage = 2, block='a', s = 1)
 
     # Stage 3
-    X = convolutional_block(X, f=4, filters=[64, 64, 64, 64, 64, 64], stage=3, block='a', s=2)
+    X = convolutional_block(X, f=5, filters=[128, 128, 128, 128, 128, 128], stage=3, block='a', s=2)
 
     # Stage 4
-    X = convolutional_block(X, f=8, filters=[128, 128, 128, 128, 128, 128], stage=4, block='a', s=2)
+    X = convolutional_block(X, f=9, filters=[128, 128, 128, 128, 128, 128], stage=4, block='a', s=2)
 
     # Stage 5
-    X = convolutional_block(X, f=8, filters=[128, 128, 128, 128, 128, 128], stage=5, block='a', s=2)
+    X = convolutional_block(X, f=9, filters=[256, 256, 256, 256, 256, 256], stage=5, block='a', s=2)
 
     # Stage 6
-    X = convolutional_block(X, f=16, filters=[256, 256, 256, 256, 256, 256], stage=6, block='a', s=2)
+    X = convolutional_block(X, f=17, filters=[256, 256, 256, 256, 256, 256], stage=6, block='a', s=2)
 
-    X = Conv1D(64, 4, strides = 1, padding='same', name = 'conv2', kernel_initializer = glorot_uniform(seed=0))(X)
+    X = Conv1D(256, 3, strides = 1, padding='same', name = 'conv2', kernel_initializer = glorot_uniform(seed=0))(X)
     X = BatchNormalization(name = 'bn_conv2')(X)
     X = Activation('tanh')(X)
 
-    X = Conv1D(64, 4, strides = 1, padding='same', name = 'conv3', kernel_initializer = glorot_uniform(seed=0))(X)
+    X = Conv1D(128, 3, strides = 1, padding='same', name = 'conv3', kernel_initializer = glorot_uniform(seed=0))(X)
     X = BatchNormalization(name = 'bn_conv3')(X)
     X = Activation('tanh')(X)
 
-    X = Conv1D(64, 4, strides = 1, padding='same', name = 'conv4', kernel_initializer = glorot_uniform(seed=0))(X)
+    X = Conv1D(64, 3, strides = 1, padding='same', name = 'conv4', kernel_initializer = glorot_uniform(seed=0))(X)
 
     # Output layer
     X = TimeDistributed(Dense(classes, activation='softmax', name='fc' + str(classes), kernel_initializer = glorot_uniform(seed=0)))(X)
@@ -149,6 +149,7 @@ def buildModel(input_shape = (64, 64, 3), classes = 6):
     model = Model(inputs = X_input, outputs = X, name='BrdUDetect')
 
     return model
+
 
 
 ##############################################################################################################

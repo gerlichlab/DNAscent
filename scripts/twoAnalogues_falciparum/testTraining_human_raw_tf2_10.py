@@ -30,13 +30,19 @@ tf.keras.backend.set_learning_phase(0)  # set inference phase
 
 checkpointDirectory = os.path.dirname(sys.argv[1])
 DNAscentExecutable = '/home/mb915/rds/hpc-work/development/twoAnalogues/DNAscent_raw'+str(sys.argv[2])
-referenceGenome = '/home/mb915/rds/rds-mb915-notbackedup/genomes/SacCer3.fasta'
-testBamBrdU = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/barcode10/EdUTrainingTest.bam'
-testBamThym = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/barcode08/EdUTrainingTest.bam'
-BrdUIndex = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/index.dnascent'
-ThymIndex = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/index.dnascent'
+referenceGenome = '/home/mb915/rds/rds-mb915-notbackedup/genomes/GCF_000001405.39_GRCh38.p13_genomic.fna'
+#testBamBrdU = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/barcode10/EdUTrainingTest.bam'
+#testBamThym = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/barcode08/EdUTrainingTest.bam'
+#BrdUIndex = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/index.dnascent'
+#ThymIndex = '/home/mb915/rds/rds-mb915-notbackedup/data/2018_06_18_CAM_ONT_gDNA_BrdU_40_60_80_100_full/index.dnascent'
+
+testBamBrdU = '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_28_VM_ONT_human_Thym_Chase/EdUOriTest/oriReads.bam'
+testBamThym = '/home/mb915/rds/rds-mb915-notbackedup/data/2019_11_21_VM_ONT_human_Brdu_0-100uM/barcode08_0uM/short.bam'
+BrdUIndex = '/home/mb915/rds/rds-mb915-notbackedup/data/2021_05_28_VM_ONT_human_Thym_Chase/index.dnascent'
+ThymIndex = '/home/mb915/rds/rds-mb915-notbackedup/data/2019_11_21_VM_ONT_human_Brdu_0-100uM/index.dnascent'
+
 analogueSets = [('Thymidine',testBamThym,ThymIndex),('BrdU',testBamBrdU,BrdUIndex)]
-threads = 56 #number of threads to use for DNAscent detect
+threads = 112 #number of threads to use for DNAscent detect
 
 
 #-------------------------------------------------
@@ -87,7 +93,7 @@ def convolutional_block(X, f, filters, stage, block, s=1):
     X_shortcut = Conv1D(filters=F6, kernel_size=f, strides=1, padding='same', name=conv_name_base + '1', kernel_initializer=glorot_uniform(seed=0))(X_shortcut)
     X_shortcut = BatchNormalization(name=bn_name_base + '1')(X_shortcut)
 
-    # Final step: Add shortcut value to main path, and pass it through a RELU activation
+    # Final step: Add shortcut value to main path, and pass it through a tanh activation
     X = Add()([X, X_shortcut])
     X = Activation('tanh')(X)
 
@@ -110,34 +116,34 @@ def buildModel(input_shape = (64, 64, 3), classes = 6):
     X = TimeDistributed(Bidirectional(GRU(8,return_sequences=False)))(X)
 
     # Stage 1
-    X = Conv1D(64, 4, strides = 1, padding='same', name = 'conv1', kernel_initializer = glorot_uniform(seed=0))(X)
+    X = Conv1D(64, 3, strides = 1, padding='same', name = 'conv1', kernel_initializer = glorot_uniform(seed=0))(X)
     X = BatchNormalization(name = 'bn_conv1')(X)
     X = Activation('tanh')(X)
 
     # Stage 2
-    X = convolutional_block(X, f = 4, filters = [64, 64, 64, 64, 64, 64], stage = 2, block='a', s = 1)
+    X = convolutional_block(X, f = 5, filters = [64, 64, 64, 64, 64, 64], stage = 2, block='a', s = 1)
 
     # Stage 3
-    X = convolutional_block(X, f=4, filters=[64, 64, 64, 64, 64, 64], stage=3, block='a', s=2)
+    X = convolutional_block(X, f=5, filters=[128, 128, 128, 128, 128, 128], stage=3, block='a', s=2)
 
     # Stage 4
-    X = convolutional_block(X, f=8, filters=[128, 128, 128, 128, 128, 128], stage=4, block='a', s=2)
+    X = convolutional_block(X, f=9, filters=[128, 128, 128, 128, 128, 128], stage=4, block='a', s=2)
 
     # Stage 5
-    X = convolutional_block(X, f=8, filters=[128, 128, 128, 128, 128, 128], stage=5, block='a', s=2)
+    X = convolutional_block(X, f=9, filters=[256, 256, 256, 256, 256, 256], stage=5, block='a', s=2)
 
     # Stage 6
-    X = convolutional_block(X, f=16, filters=[256, 256, 256, 256, 256, 256], stage=6, block='a', s=2)
+    X = convolutional_block(X, f=17, filters=[256, 256, 256, 256, 256, 256], stage=6, block='a', s=2)
 
-    X = Conv1D(64, 4, strides = 1, padding='same', name = 'conv2', kernel_initializer = glorot_uniform(seed=0))(X)
+    X = Conv1D(256, 3, strides = 1, padding='same', name = 'conv2', kernel_initializer = glorot_uniform(seed=0))(X)
     X = BatchNormalization(name = 'bn_conv2')(X)
     X = Activation('tanh')(X)
 
-    X = Conv1D(64, 4, strides = 1, padding='same', name = 'conv3', kernel_initializer = glorot_uniform(seed=0))(X)
+    X = Conv1D(128, 3, strides = 1, padding='same', name = 'conv3', kernel_initializer = glorot_uniform(seed=0))(X)
     X = BatchNormalization(name = 'bn_conv3')(X)
     X = Activation('tanh')(X)
 
-    X = Conv1D(64, 4, strides = 1, padding='same', name = 'conv4', kernel_initializer = glorot_uniform(seed=0))(X)
+    X = Conv1D(64, 3, strides = 1, padding='same', name = 'conv4', kernel_initializer = glorot_uniform(seed=0))(X)
 
     # Output layer
     X = TimeDistributed(Dense(classes, activation='softmax', name='fc' + str(classes), kernel_initializer = glorot_uniform(seed=0)))(X)
@@ -147,6 +153,7 @@ def buildModel(input_shape = (64, 64, 3), classes = 6):
     model = Model(inputs = X_input, outputs = X, name='BrdUDetect')
 
     return model
+
 
 
 ##############################################################################################################
@@ -206,7 +213,7 @@ base2DetectFiles = {'Thymidine':'','BrdU':'','EdU':''}
 
 for aSet in analogueSets:
 
-	detectOutputFilename = detectOutputDir + '/' + aSet[0] + '_' + os.path.splitext(fname)[0] + '_cerevisiae.detect'
+	detectOutputFilename = detectOutputDir + '/' + aSet[0] + '_' + os.path.splitext(fname)[0] + '_human.detect'
 	base2DetectFiles[aSet[0]] = detectOutputFilename
 
 	#use the model we built to run DNAscent detect
@@ -322,7 +329,7 @@ plt.xlim(0,1.0)
 plt.xlabel('False Positive Rate')
 plt.ylabel('Calls/Attempts')
 plt.ylim(0,1)
-plt.savefig(plotOutputDir + '/' + os.path.splitext(fname)[0] + 'raw_cerevisiae_bc10.pdf')
+plt.savefig(plotOutputDir + '/' + os.path.splitext(fname)[0] + 'raw_human.pdf')
 plt.xlim(0,0.2)
-plt.savefig(plotOutputDir + '/' + os.path.splitext(fname)[0] + 'raw_zoom_cerevisiae_bc10.pdf')
+plt.savefig(plotOutputDir + '/' + os.path.splitext(fname)[0] + 'raw_zoom_human.pdf')
 plt.close()

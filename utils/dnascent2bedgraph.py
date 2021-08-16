@@ -27,6 +27,7 @@ Optional arguments are:
      --minLength            only convert reads with specified minimum read length (in base pairs) into bedgraphs (default: 1),
      --maxLength            only convert reads with specified maximum read length (in base pairs) into bedgraphs (default: Inf),
   -n,--maxReads             maximum number of reads to convert into bedgraphs (default: Inf),
+     --targets              forkSense bed file with specific reads to plot,
      --filesPerDir          maximum reads per subdirectory (default: 300).
 Written by Michael Boemo, Department of Pathology, University of Cambridge.
 Please submit bug reports to GitHub Issues (https://github.com/MBoemo/DNAscent/issues)."""
@@ -49,6 +50,7 @@ def parseArguments(args):
 	a.maxLength = 1000000000
 	a.maxReads = 1000000000
 	a.filesPerDir = 300
+	a.useTargets = False
 
 	for i, argument in enumerate(args):
 			
@@ -69,6 +71,10 @@ def parseArguments(args):
 
 		elif argument == '--maxLength':
 			a.maxLength = int(args[i+1])
+
+		elif argument == '--targets':
+			a.targetPath = str(args[i+1])
+			a.useTargets = True
 
 		elif argument == '-n' or argument == '--maxReads':
 			a.maxReads = int(args[i+1])
@@ -113,7 +119,7 @@ def makeRegionsLine(line, chromosome):
 
 
 #--------------------------------------------------------------------------------------------------------------------------------------
-def parseBaseFile(fname, args):
+def parseBaseFile(fname, args, targetIDs):
 	print('Parsing '+fname[0]+'...')
 	first = True
 	count = 0
@@ -133,6 +139,22 @@ def parseBaseFile(fname, args):
 		if line[0] == '>':
 
 			if not first:
+
+				if args.useTargets and readID not in targetIDs:
+
+					#get readID and chromosome
+					splitLine = line.rstrip().split(' ')
+					readID = splitLine[0][1:]
+					chromosome = splitLine[1]
+					strand = splitLine[4]
+					mappingStart = int(splitLine[2])
+					mappingEnd = int(splitLine[3])
+					prevPos = mappingStart
+
+					first = False
+					buff = []
+
+					continue
 
 				rLen = mappingEnd - mappingStart
 
@@ -260,7 +282,7 @@ def parseBaseFile(fname, args):
 
 
 #--------------------------------------------------------------------------------------------------------------------------------------
-def parseSecondaryFile(fname, readID2directory,args):
+def parseSecondaryFile(fname, readID2directory, args, targetIDs):
 	print('Parsing '+fname[0]+'...')
 	f = open(fname[0],'r')
 	first = True
@@ -279,6 +301,22 @@ def parseSecondaryFile(fname, readID2directory,args):
 		if line[0] == '>':
 
 			if not first:
+
+				if args.useTargets and readID not in targetIDs:
+
+					#get readID and chromosome
+					splitLine = line.rstrip().split(' ')
+					readID = splitLine[0][1:]
+					chromosome = splitLine[1]
+					strand = splitLine[-1:][0]
+					mappingStart = int(splitLine[2])
+					mappingEnd = int(splitLine[3])
+					prevPos = mappingStart
+
+					first = False
+					buff = []
+
+					continue
 
 				rLen = mappingEnd - mappingStart
 
@@ -390,6 +428,20 @@ else:
 
 baseFname = ""
 secondaryFname = []
+
+targetIDs = []
+if args.useTargets:
+	f = open(args.targetPath,'r')
+	for line in f:
+		splitLine = line.rstrip().split()
+		readID = splitLine[3]
+		
+		#only short
+		if abs(int(splitLine[2]) - int(splitLine[1])) > 4000:
+			continue
+
+		targetIDs.append(readID)
+	f.close()
 
 if hasattr( args, 'detectPath'):
 	baseFname = (args.detectPath,"detect")
