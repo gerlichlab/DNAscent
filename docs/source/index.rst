@@ -1,6 +1,6 @@
 .. _index:
 
-Index
+index
 ===============================
 
 ``DNAscent index`` is a ``DNAscent`` subprogram that creates a map between Oxford Nanopore readIDs and fast5 files.  This allows ``DNAscent detect`` to scan through bam files and pull out the relevant signal information for each read.

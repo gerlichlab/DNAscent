@@ -10,7 +10,7 @@
 #ifndef COMMON_H
 #define COMMON_H
 
-#define VERSION "2.0.2"
+#define VERSION "3.1.2"
 
 #include <algorithm>
 #include <vector>
@@ -187,5 +187,8 @@ int argMax( std::vector< double > );
 double vectorMean( std::vector< double > & );
 double vectorStdv( std::vector< double > &, double & );
 double vectorSum( std::vector< double > & );
+std::vector<double> movingAvgFilter(std::vector<double> &, unsigned int);
+std::vector<double> movingAvgFilterLogistic(std::vector<double> &, unsigned int);
+std::vector<double> normVectorSum(std::vector<double>);
 
 #endif

@@ -704,7 +704,7 @@ std::string eventalign( read &r,
 			unsigned int evPos;
 			std::string sixMerRef;
 			if (r.isReverse){
-				evPos = globalPosOnRef - pos;
+				evPos = globalPosOnRef - pos + 5;
 				sixMerRef = reverseComplement(sixMerStrand);
 			}
 			else{
@@ -720,10 +720,10 @@ std::string eventalign( read &r,
 
 
 					if (label == "M"){
-						out += std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string(r.raw[raw_i]) + "\t" + std::to_string(0) + "\t" + sixMerStrand + "\t" + std::to_string(meanStd.first) + "\t" + std::to_string(meanStd.second) + "\n";
+						out += std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string((r.raw[raw_i]- r.scalings.shift) / r.scalings.scale) + "\t" + std::to_string(0) + "\t" + sixMerStrand + "\t" + std::to_string(meanStd.first) + "\t" + std::to_string(meanStd.second) + "\n";
 					}
 					else if (label == "I" and evIdx < lastM_ev){ //don't print insertions after the last match because we're going to align these in the next segment
-						out += std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string(r.raw[raw_i]) + "\t" + std::to_string(0) + "\t" + "NNNNNN" + "\t" + "0" + "\t" + "0" + "\n";
+						out += std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string((r.raw[raw_i]- r.scalings.shift) / r.scalings.scale) + "\t" + std::to_string(0) + "\t" + "NNNNNN" + "\t" + "0" + "\t" + "0" + "\n";
 					}
 				}
 			}
@@ -899,7 +899,7 @@ std::string eventalign( read &r,
 			unsigned int evPos;
 			std::string sixMerRef;
 			if (r.isReverse){
-				evPos = globalPosOnRef + pos;
+				evPos = globalPosOnRef + pos + 5;
 				sixMerRef = reverseComplement(sixMerStrand);
 			}
 			else{
@@ -956,10 +956,10 @@ std::string eventalign( read &r,
 
 
 std::string eventalign_train( read &r,
-            unsigned int totalWindowLength,
-			std::map<unsigned int, double> &BrdULikelihood,
-			double signalDilation,
-			bool useRaw){
+		unsigned int totalWindowLength,
+		std::map<unsigned int, std::pair<double,double>> &BrdULikelihood,
+		double signalDilation,
+		bool useRaw){
 
 	std::string out;
 	//get the positions on the reference subsequence where we could attempt to make a call
@@ -1095,7 +1095,7 @@ std::string eventalign_train( read &r,
 		evIdx = 0;
 		for (size_t i = 0; i < stateLabels.size(); i++){
 
-			std::string label = stateLabels[i].substr(stateLabels[i].find('_')+1);
+		std::string label = stateLabels[i].substr(stateLabels[i].find('_')+1);
 	        int pos = std::stoi(stateLabels[i].substr(0,stateLabels[i].find('_')));
 
 	        if (label == "D") continue; //silent states don't emit an event
@@ -1110,7 +1110,7 @@ std::string eventalign_train( read &r,
 			unsigned int evPos;
 			std::string sixMerRef;
 			if (r.isReverse){
-				evPos = globalPosOnRef - pos;
+				evPos = globalPosOnRef - pos + 5;
 				sixMerRef = reverseComplement(sixMerStrand);
 			}
 			else{
@@ -1126,7 +1126,7 @@ std::string eventalign_train( read &r,
 				for (unsigned int raw_i = r.eventIdx2rawIdx[globalEvIdx].first; raw_i <= r.eventIdx2rawIdx[globalEvIdx].second; raw_i++){
 
 					if (label == "M" and BrdULikelihood.count(evPos) > 0){
-						out += std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string((r.raw[raw_i]- r.scalings.shift) / r.scalings.scale) + "\t" + std::to_string(0) + "\t" + sixMerStrand + "\t" + std::to_string(meanStd.first) + "\t" + std::to_string(meanStd.second) + "\t" + std::to_string(BrdULikelihood[evPos]) + "\n";
+						out += std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string((r.raw[raw_i]- r.scalings.shift) / r.scalings.scale) + "\t" + std::to_string(0) + "\t" + sixMerStrand + "\t" + std::to_string(meanStd.first) + "\t" + std::to_string(meanStd.second) + "\t" + std::to_string(BrdULikelihood[evPos].first) + "\t" + std::to_string(BrdULikelihood[evPos].second) + "\n";
 					}
 					else if (label == "M"){
 						out += std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string((r.raw[raw_i]- r.scalings.shift) / r.scalings.scale) + "\t" + std::to_string(0) + "\t" + sixMerStrand + "\t" + std::to_string(meanStd.first) + "\t" + std::to_string(meanStd.second) + "\n";
@@ -1139,7 +1139,7 @@ std::string eventalign_train( read &r,
 			else{
 
 				if (label == "M" and BrdULikelihood.count(evPos) > 0){
-					out += std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(eventLength) + "\t" + sixMerStrand + "\t" + std::to_string(meanStd.first) + "\t" + std::to_string(meanStd.second) + "\t" + std::to_string(BrdULikelihood[evPos]) + "\n";
+					out += std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(eventLength) + "\t" + sixMerStrand + "\t" + std::to_string(meanStd.first) + "\t" + std::to_string(meanStd.second) + "\t" + std::to_string(BrdULikelihood[evPos].first)+ "\t" + std::to_string(BrdULikelihood[evPos].second) + "\n";
 				}
 				else if (label == "M"){
 					out += std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(eventLength) + "\t" + sixMerStrand + "\t" + std::to_string(meanStd.first) + "\t" + std::to_string(meanStd.second) + "\n";
@@ -1286,9 +1286,9 @@ std::string eventalign_train( read &r,
 		for (size_t i = 0; i < stateLabels.size(); i++){
 
 			std::string label = stateLabels[i].substr(stateLabels[i].find('_')+1);
-	        int pos = std::stoi(stateLabels[i].substr(0,stateLabels[i].find('_')));
+			int pos = std::stoi(stateLabels[i].substr(0,stateLabels[i].find('_')));
 
-	        if (label == "D") continue; //silent states don't emit an event
+			if (label == "D") continue; //silent states don't emit an event
 
 			std::string sixMerStrand = (r.referenceSeqMappedTo).substr(posOnRef - pos - 6, 6);
 
@@ -1300,7 +1300,7 @@ std::string eventalign_train( read &r,
 			unsigned int evPos;
 			std::string sixMerRef;
 			if (r.isReverse){
-				evPos = globalPosOnRef + pos;
+				evPos = globalPosOnRef + pos + 5;
 				sixMerRef = reverseComplement(sixMerStrand);
 			}
 			else{
@@ -1316,7 +1316,7 @@ std::string eventalign_train( read &r,
 				for (unsigned int raw_i = r.eventIdx2rawIdx[globalEvIdx].first; raw_i <= r.eventIdx2rawIdx[globalEvIdx].second; raw_i++){
 
 					if (label == "M" and BrdULikelihood.count(evPos) > 0){
-						out += std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string((r.raw[raw_i]- r.scalings.shift) / r.scalings.scale) + "\t" + std::to_string(0) + "\t" + sixMerStrand + "\t" + std::to_string(meanStd.first) + "\t" + std::to_string(meanStd.second) + "\t" + std::to_string(BrdULikelihood[evPos]) + "\n";
+						out += std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string((r.raw[raw_i]- r.scalings.shift) / r.scalings.scale) + "\t" + std::to_string(0) + "\t" + sixMerStrand + "\t" + std::to_string(meanStd.first) + "\t" + std::to_string(meanStd.second) + "\t" + std::to_string(BrdULikelihood[evPos].first) + "\t" + std::to_string(BrdULikelihood[evPos].second) + "\n";
 					}
 					else if (label == "M"){
 						out += std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string((r.raw[raw_i]- r.scalings.shift) / r.scalings.scale) + "\t" + std::to_string(0) + "\t" + sixMerStrand + "\t" + std::to_string(meanStd.first) + "\t" + std::to_string(meanStd.second) + "\n";
@@ -1329,7 +1329,7 @@ std::string eventalign_train( read &r,
 			else{
 
 				if (label == "M" and BrdULikelihood.count(evPos) > 0){
-					out += std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(eventLength) + "\t" + sixMerStrand + "\t" + std::to_string(meanStd.first) + "\t" + std::to_string(meanStd.second) + "\t" + std::to_string(BrdULikelihood[evPos]) + "\n";
+					out += std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(eventLength) + "\t" + sixMerStrand + "\t" + std::to_string(meanStd.first) + "\t" + std::to_string(meanStd.second) + "\t" + std::to_string(BrdULikelihood[evPos].first) + "\t" + std::to_string(BrdULikelihood[evPos].second) + "\n";
 				}
 				else if (label == "M"){
 					out += std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(eventLength) + "\t" + sixMerStrand + "\t" + std::to_string(meanStd.first) + "\t" + std::to_string(meanStd.second) + "\n";
@@ -1339,7 +1339,7 @@ std::string eventalign_train( read &r,
 				}
 			}
 
-	        evIdx ++;
+			evIdx ++;
 		}
 
 		//go again starting at posOnRef + lastM_ref using events starting at readHead + lastM_ev
@@ -1357,8 +1357,11 @@ std::string eventalign_train( read &r,
 
 
 std::pair<bool,std::shared_ptr<AlignedRead>> eventalign_detect( read &r,
-            unsigned int totalWindowLength,
-			double signalDilation ){
+							  	  unsigned int totalWindowLength,
+							  	  double signalDilation ){
+
+	//bool useRaw = true;
+	bool useRaw = false;
 
 	//get the positions on the reference subsequence where we could attempt to make a call
 	std::string strand;
@@ -1434,6 +1437,7 @@ std::cerr << "Out of reference sequence size: " << (r.referenceSeqMappedTo).leng
 		}
 
 		std::vector< double > eventSnippet;
+		std::vector< unsigned int > eventIndices;
 		std::vector< double > eventLengthsSnippet;
 
 		/*get the events that correspond to the read snippet */
@@ -1452,6 +1456,7 @@ std::cerr << "Out of reference sequence size: " << (r.referenceSeqMappedTo).leng
 				double ev = (r.normalisedEvents)[(r.eventAlignment)[j].first];
 				if (ev > r.scalings.shift + 1.0 and ev < 250.0){
 					eventSnippet.push_back( ev );
+					eventIndices.push_back( (r.eventAlignment)[j].first );
 					eventLengthsSnippet.push_back( (r.eventLengths)[(r.eventAlignment)[j].first] );
 				}
 			}
@@ -1459,6 +1464,12 @@ std::cerr << "Out of reference sequence size: " << (r.referenceSeqMappedTo).leng
 			/*stop once we get to the end of the window */
 			if ( (r.eventAlignment)[j].second >= (r.refToQuery)[posOnRef + windowLength - 5] ) break;
 		}
+		
+		//flag large insertions
+		int querySpan = (r.refToQuery)[posOnRef + windowLength] - (r.refToQuery)[posOnRef];
+		assert(querySpan >= 0);
+		int referenceSpan = windowLength;
+		int indelScore = querySpan - referenceSpan;
 
 		//pass on this window if we have a deletion
 		//TODO: make sure this does actually catch deletion cases properly
@@ -1492,14 +1503,20 @@ std::cerr << "Out of reference sequence size: " << (r.referenceSeqMappedTo).leng
 		for (size_t i = 0; i < stateLabels.size(); i++){
 
 			std::string label = stateLabels[i].substr(stateLabels[i].find('_')+1);
-	        int pos = std::stoi(stateLabels[i].substr(0,stateLabels[i].find('_')));
+			int pos = std::stoi(stateLabels[i].substr(0,stateLabels[i].find('_')));
 
-	        if (label == "M"){
-	        	lastM_ev = evIdx;
-	        	lastM_ref = pos;
-	        }
+			if (label == "M"){
+				lastM_ev = evIdx;
+				lastM_ref = pos;
+			}
 
-	        if (label != "D") evIdx++; //silent states don't emit an event
+			if (label != "D") evIdx++; //silent states don't emit an event
+		}
+
+		int numInsertions = 0;
+		for (size_t i = 0; i < stateLabels.size(); i++){
+			std::string label = stateLabels[i].substr(stateLabels[i].find('_')+1);
+			if (label == "I") numInsertions++;
 		}
 
 		//do a second pass to print the alignment
@@ -1507,9 +1524,9 @@ std::cerr << "Out of reference sequence size: " << (r.referenceSeqMappedTo).leng
 		for (size_t i = 0; i < stateLabels.size(); i++){
 
 			std::string label = stateLabels[i].substr(stateLabels[i].find('_')+1);
-	        int pos = std::stoi(stateLabels[i].substr(0,stateLabels[i].find('_')));
+			int pos = std::stoi(stateLabels[i].substr(0,stateLabels[i].find('_')));
 
-	        if (label == "D") continue; //silent states don't emit an event
+			if (label == "D") continue; //silent states don't emit an event
 
 			std::string sixMerStrand = (r.referenceSeqMappedTo).substr(posOnRef + pos, 6);
 
@@ -1521,7 +1538,7 @@ std::cerr << "Out of reference sequence size: " << (r.referenceSeqMappedTo).leng
 			unsigned int evPos;
 			std::string sixMerRef;
 			if (r.isReverse){
-				evPos = globalPosOnRef - pos;
+				evPos = globalPosOnRef - pos  + 5;
 				sixMerRef = reverseComplement(sixMerStrand);
 			}
 			else{
@@ -1530,10 +1547,20 @@ std::cerr << "Out of reference sequence size: " << (r.referenceSeqMappedTo).leng
 			}
 
 			if (label == "M"){
-				ar -> addEvent(sixMerStrand, evPos, scaledEvent, eventLength);
-			}
 
-	        evIdx ++;
+				if (useRaw){
+
+					unsigned int globalEvIdx = eventIndices[evIdx];
+					for (unsigned int raw_i = r.eventIdx2rawIdx[globalEvIdx].first; raw_i <= r.eventIdx2rawIdx[globalEvIdx].second; raw_i++){
+
+						ar -> addEvent(sixMerStrand, evPos, (r.raw[raw_i]- r.scalings.shift) / r.scalings.scale, 0.,indelScore);
+					}
+				}
+				else{
+					ar -> addEvent(sixMerStrand, evPos, scaledEvent, eventLength,indelScore);
+				}
+			}
+			evIdx ++;
 		}
 
 
@@ -1588,6 +1615,7 @@ std::cerr << "Out of reference sequence size: " << (r.referenceSeqMappedTo).leng
 			}
 		}
 
+
 		std::string readSnippet = (r.referenceSeqMappedTo).substr(posOnRef - windowLength, windowLength);
 
 		std::reverse(readSnippet.begin(), readSnippet.end());
@@ -1607,6 +1635,7 @@ std::cerr << "Out of reference sequence size: " << (r.referenceSeqMappedTo).leng
 		}
 
 		std::vector< double > eventSnippet;
+		std::vector< unsigned int > eventIndices;
 		std::vector< double > eventLengthsSnippet;
 
 		/*get the events that correspond to the read snippet */
@@ -1627,6 +1656,7 @@ std::cerr << "Out of reference sequence size: " << (r.referenceSeqMappedTo).leng
 				double ev = (r.normalisedEvents)[(r.eventAlignment)[j].first];
 				if (ev > r.scalings.shift + 1.0 and ev < 250.0){
 					eventSnippet.push_back( ev );
+					eventIndices.push_back( (r.eventAlignment)[j].first );
 					eventLengthsSnippet.push_back( (r.eventLengths)[(r.eventAlignment)[j].first] );
 				}
 			}
@@ -1634,6 +1664,12 @@ std::cerr << "Out of reference sequence size: " << (r.referenceSeqMappedTo).leng
 			/*stop once we get to the end of the window */
 			if ( (r.eventAlignment)[j].second < (r.refToQuery)[posOnRef - windowLength] ) break;
 		}
+		
+		//flag large insertions
+		int querySpan = (r.refToQuery)[posOnRef] - (r.refToQuery)[posOnRef - windowLength];
+		assert(querySpan >= 0);
+		int referenceSpan = windowLength;
+		int indelScore = querySpan - referenceSpan;
 
 		//pass on this window if we have a deletion
 		//TODO: make sure this does actually catch deletion cases properly
@@ -1676,6 +1712,12 @@ std::cerr << "Out of reference sequence size: " << (r.referenceSeqMappedTo).leng
 	        if (label != "D") evIdx++; //silent states don't emit an event
 		}
 
+		int numInsertions = 0;
+		for (size_t i = 0; i < stateLabels.size(); i++){
+			std::string label = stateLabels[i].substr(stateLabels[i].find('_')+1);
+			if (label == "I") numInsertions++;
+		}
+
 		//do a second pass to print the alignment
 		evIdx = 0;
 		for (size_t i = 0; i < stateLabels.size(); i++){
@@ -1695,7 +1737,7 @@ std::cerr << "Out of reference sequence size: " << (r.referenceSeqMappedTo).leng
 			unsigned int evPos;
 			std::string sixMerRef;
 			if (r.isReverse){
-				evPos = globalPosOnRef + pos;
+				evPos = globalPosOnRef + pos + 5;
 				sixMerRef = reverseComplement(sixMerStrand);
 			}
 			else{
@@ -1704,7 +1746,17 @@ std::cerr << "Out of reference sequence size: " << (r.referenceSeqMappedTo).leng
 			}
 
 			if (label == "M"){
-				ar -> addEvent(sixMerStrand, evPos, scaledEvent, eventLength);
+				if (useRaw){
+
+					unsigned int globalEvIdx = eventIndices[evIdx];
+					for (unsigned int raw_i = r.eventIdx2rawIdx[globalEvIdx].first; raw_i <= r.eventIdx2rawIdx[globalEvIdx].second; raw_i++){
+
+						ar -> addEvent(sixMerStrand, evPos, (r.raw[raw_i]- r.scalings.shift) / r.scalings.scale, 0.,indelScore);
+					}
+				}
+				else{
+					ar -> addEvent(sixMerStrand, evPos, scaledEvent, eventLength,indelScore);
+				}
 			}
 
 			evIdx ++;

@@ -8,7 +8,6 @@
 
 #include "../tensorflow/include/tensorflow/c/eager/c_api.h"
 #include <fstream>
-#include "regions.h"
 #include "data_IO.h"
 #include "trainGMM.h"
 #include "forkSense.h"
@@ -23,32 +22,26 @@
 static const char *help=
 "forkSense: DNAscent AI executable that calls replication origins, termination sites, and fork movement.\n"
 "To run DNAscent forkSense, do:\n"
-"   DNAscent forkSense -d /path/to/BrdUCalls.detect -o /path/to/output.forkSense\n"
+"   DNAscent forkSense -d /path/to/BrdUCalls.detect -o /path/to/output.forkSense --order EdU,BrdU\n"
 "Required arguments are:\n"
 "  -d,--detect               path to output file from DNAscent detect,\n"
-"  -o,--output               path to output file for forkSense.\n"
+"  -o,--output               path to output file for forkSense,\n"
+"     --order                order in which the analogues were pulsed (EdU,BrdU or BrdU,EdU).\n"
 "Optional arguments are:\n"
 "  -t,--threads              number of threads (default: 1 thread),\n"
+"  --markAnalogues           writes analogue incorporation locations to a bed file (default: off),\n"
 "  --markOrigins             writes replication origin locations to a bed file (default: off),\n"
 "  --markTerminations        writes replication termination locations to a bed file (default: off),\n"
-"  --markForks               writes replication fork locations to a bed file (default: off).\n"
+"  --markForks               writes replication fork locations to a bed file (default: off),\n"
+"  --makeSignatures          writes replication stress signatures to a bed files (default: off).\n"
 "Written by Michael Boemo, Department of Pathology, University of Cambridge.\n"
 "Please submit bug reports to GitHub Issues (https://github.com/MBoemo/DNAscent/issues).";
 
-struct Arguments {
 
-	std::string detectFilename;
-	std::string outputFilename;
-	bool markOrigins = false;
-	bool markTerms = false;
-	bool markForks = false;
-	unsigned int threads = 1;
-};
-
-Arguments parseSenseArguments( int argc, char** argv ){
+forkSenseArgs parseSenseArguments( int argc, char** argv ){
 
  	if( argc < 2 ){
- 		std::cout << "Exiting with error.  Insufficient arguments passed to DNAscent regions." << std::endl << help << std::endl;
+ 		std::cout << "Exiting with error.  Insufficient arguments passed to DNAscent forkSense." << std::endl << help << std::endl;
 		exit(EXIT_FAILURE);
 	}
  	if ( std::string( argv[ 1 ] ) == "-h" or std::string( argv[ 1 ] ) == "--help" ){
@@ -56,11 +49,15 @@ Arguments parseSenseArguments( int argc, char** argv ){
 		exit(EXIT_SUCCESS);
 	}
 	else if( argc < 4 ){
- 		std::cout << "Exiting with error.  Insufficient arguments passed to DNAscent regions." << std::endl;
+ 		std::cout << "Exiting with error.  Insufficient arguments passed to DNAscent forkSense." << std::endl;
 		exit(EXIT_FAILURE);
 	}
 
- 	Arguments args;
+ 	forkSenseArgs args;
+
+	bool specifiedDetect = false;
+	bool specifiedOutput = false;
+	bool specifiedOrder = false;
 
  	/*parse the command line arguments */
 	for ( int i = 1; i < argc; ){
@@ -71,11 +68,19 @@ Arguments parseSenseArguments( int argc, char** argv ){
  			std::string strArg( argv[ i + 1 ] );
 			args.detectFilename = strArg;
 			i+=2;
+			specifiedDetect = true;
 		}
 		else if ( flag == "-o" or flag == "--output" ){
  			std::string strArg( argv[ i + 1 ] );
 			args.outputFilename = strArg;
 			i+=2;
+			specifiedOutput = true;
+		}
+		else if (flag == "--order" ){
+ 			std::string strArg( argv[ i + 1 ] );
+			args.analogueOrder = strArg;
+			i+=2;
+			specifiedOrder = true;
 		}
 		else if ( flag == "-t" or flag == "--threads" ){
 
@@ -98,458 +103,357 @@ Arguments parseSenseArguments( int argc, char** argv ){
 			args.markForks = true;
 			i+=1;
 		}
+		else if ( flag == "--markAnalogues" ){
+
+			args.markAnalogues = true;
+			i+=1;
+		}
+		else if ( flag == "--makeSignatures" ){
+
+			args.makeSignatures = true;
+			i+=1;
+		}
 		else throw InvalidOption( flag );
 	}
 	if (args.outputFilename == args.detectFilename) throw OverwriteFailure();
+	if (not (specifiedDetect and specifiedOutput and specifiedOrder)){
+ 		std::cout << "Exiting with error.  Missing required arguments." << std::endl;
+ 		std::cout << help << std::endl;
+		exit(EXIT_FAILURE);
+	}
+
+	if (args.analogueOrder != "EdU,BrdU" and args.analogueOrder != "BrdU,EdU"){
+ 		std::cout << "Exiting with error.  Analogue order should be EdU,BrdU or BrdU,EdU." << std::endl;
+ 		std::cout << help << std::endl;
+		exit(EXIT_FAILURE);
+	}
 
 	return args;
 }
 
 
-TF_Tensor *read2tensor(DetectedRead &r, const TensorShape &shape){
+std::string writeForkSenseHeader(forkSenseArgs &args, KMeansResult analougeIncorporation){
 
-	size_t size = r.tensorInput.size();
+	auto t = std::time(nullptr);
+	auto tm = *std::localtime(&t);
+	std::ostringstream oss;
+	oss << std::put_time(&tm, "%d/%m/%Y %H:%M:%S");
+	auto str = oss.str();
+	
+	std::string compute = "CPU";
 
-	auto output_array = std::make_unique<float[]>(size);
-	{
-		for(size_t i = 0; i < size; i++){
-			output_array[i] = r.tensorInput[i];
-		}
-	}
+	std::string out;
+	out += "#DetectFile " + args.detectFilename + "\n";
+	out += "#Threads " + std::to_string(args.threads) + "\n";
+	out += "#Compute " + compute + "\n";
+	out += "#SystemStartTime " + str + "\n";
+	out += "#Software " + std::string(getExePath()) + "\n";
+	out += "#Version " + std::string(VERSION) + "\n";
+	out += "#Commit " + std::string(getGitCommit()) + "\n";
+	out += "#EstimatedRegionBrdU " + std::to_string(analougeIncorporation.centroid_1) + "\n";
+	out += "#EstimatedRegionEdU " + std::to_string(analougeIncorporation.centroid_2) + "\n";
 
-	auto output = tf_obj_unique_ptr(TF_NewTensor(TF_FLOAT,
-					shape.values, shape.dim,
-					(void *)output_array.get(), size*sizeof(float), 
-					cpp_array_deallocator<float>, nullptr));
-
-	if(output) output_array.release();
-
-	return output.release();
+	return out;
 }
 
 
-std::vector<int> pooling = {6,4,4,4,2};
+std::string writeBedHeader( forkSenseArgs &args){
 
+	auto t = std::time(nullptr);
+	auto tm = *std::localtime(&t);
+	std::ostringstream oss;
+	oss << std::put_time(&tm, "%d/%m/%Y %H:%M:%S");
+	auto str = oss.str();
+	
+	std::string compute = "CPU";
 
-std::pair<std::string,std::string> callForks(DetectedRead &r){
+	std::string out;
+	out += "#DetectFile " + args.detectFilename + "\n";
+	out += "#ForkSenseFile " + args.outputFilename + "\n";
+	out += "#AnalogueOrder " + args.analogueOrder + "\n";
+	out += "#Threads " + std::to_string(args.threads) + "\n";
+	out += "#Compute " + compute + "\n";
+	out += "#SystemStartTime " + str + "\n";
+	out += "#Software " + std::string(getExePath()) + "\n";
+	out += "#Version " + std::string(VERSION) + "\n";
+	out += "#Commit " + std::string(getGitCommit()) + "\n";
 
-	assert(r.positions.size() == r.probabilities.size());
-
-	float threshold = 0.8;
-	float threshold_weak = 0.5;
-	int minLength = 1000;
-
-	std::vector<std::pair<int,int>> leftForks, leftForks_weak, rightForks, rightForks_weak;
-	std::string outBedLeft,outBedRight;
-
-	bool inFork = false;
-	int forkStart = -1, potentialEnd = -1;
-
-	//rightward-moving forks
-	for (size_t i = 1; i < r.probabilities.size(); i++){
-
-		if (r.probabilities[i][2] > threshold and not inFork){ //initialise the site
-
-			forkStart = r.positions[i];
-			inFork = true;
-		}
-		else if (inFork and r.probabilities[i][2] <= threshold and r.probabilities[i-1][2] >= threshold){//flag as a potential end if we dip below the threshold
-
-			potentialEnd = r.positions[i];
-		}
-		else if (inFork and (r.probabilities[i][0] > threshold or r.probabilities[i][1] > threshold)){//close if we've confidently moved to something else
-
-			assert(forkStart != -1 and potentialEnd != -1);
-
-			if ( abs(potentialEnd - forkStart) >= minLength ){
-				rightForks.push_back(std::make_pair(forkStart,potentialEnd));
-			}
-
-			inFork = false;
-			forkStart = -1;
-			potentialEnd = -1;
-		}
-	}
-
-	//if we got to the end of the read without closing
-	if (inFork){
-
-		assert(forkStart != -1);
-		if (potentialEnd == -1) potentialEnd = r.positions.back();
-
-		if ( abs(potentialEnd - forkStart) >= minLength ){
-			rightForks.push_back(std::make_pair(forkStart,potentialEnd));
-		}
-	}
-
-	inFork = false;
-	forkStart = -1;
-	potentialEnd = -1;
-
-	//weak call rightward-moving forks
-	for (size_t i = 1; i < r.probabilities.size(); i++){
-
-		if (r.probabilities[i][2] > threshold_weak and not inFork){ //initialise the site
-
-			forkStart = r.positions[i];
-			inFork = true;
-		}
-		else if (inFork and r.probabilities[i][2] >= threshold){//throw it out if it becomes a confident fork call
-
-			inFork = false;
-			forkStart = -1;
-			potentialEnd = -1;
-		}
-		else if (inFork and r.probabilities[i][2] <= threshold_weak and r.probabilities[i-1][2] >= threshold_weak){//flag as a potential end if we dip below the threshold
-
-			potentialEnd = r.positions[i];
-		}
-		else if (inFork and (r.probabilities[i][0] > threshold_weak or r.probabilities[i][1] > threshold_weak)){//close if we've confidently moved to something else
-
-			assert(forkStart != -1 and potentialEnd != -1);
-
-			rightForks_weak.push_back(std::make_pair(forkStart,potentialEnd));
-			//std::cout << "weak right" << forkStart << " " << potentialEnd << std::endl;
-
-			inFork = false;
-			forkStart = -1;
-			potentialEnd = -1;
-		}
-	}
-
-	inFork = false;
-	forkStart = -1;
-	potentialEnd = -1;
-
-	//reverse order for leftward-moving forks
-	std::vector<int> revPositions(r.positions.rbegin(), r.positions.rend());
-	std::vector<std::vector<float>> revProbabilities(r.probabilities.rbegin(), r.probabilities.rend());
-
-	//leftward-moving forks
-	for (size_t i = 1; i < revProbabilities.size(); i++){
-
-		if (revProbabilities[i][0] > threshold and not inFork){ //initialise the site
-
-			forkStart = revPositions[i];
-			inFork = true;
-		}
-		else if (inFork and revProbabilities[i][0] <= threshold and revProbabilities[i-1][0] >= threshold){//flag as a potential end if we dip below the threshold
-
-			potentialEnd = revPositions[i];
-		}
-		else if (inFork and (revProbabilities[i][1] > threshold or revProbabilities[i][2] > threshold)){//close if we've confidently moved to something else
-
-			assert(forkStart != -1 and potentialEnd != -1);
-
-			if ( abs(potentialEnd - forkStart) >= minLength ){
-				leftForks.push_back(std::make_pair(potentialEnd,forkStart));
-			}
-
-			inFork = false;
-			forkStart = -1;
-			potentialEnd = -1;
-		}
-	}
-
-	//if we got to the end of the read without closing
-	if (inFork){
-
-		assert(forkStart != -1);
-		if (potentialEnd == -1) potentialEnd = revPositions.back();
-
-		if ( abs(potentialEnd - forkStart) >= minLength ){
-			leftForks.push_back(std::make_pair(potentialEnd,forkStart));
-		}
-	}
-
-	inFork = false;
-	forkStart = -1;
-	potentialEnd = -1;
-
-	//weak call leftward-moving forks
-	for (size_t i = 1; i < revProbabilities.size(); i++){
-
-		if (revProbabilities[i][0] > threshold_weak and not inFork){ //initialise the site
-
-			forkStart = revPositions[i];
-			inFork = true;
-		}
-		else if (inFork and r.probabilities[i][0] >= threshold){//throw it out if it becomes a confident fork call
-
-			inFork = false;
-			forkStart = -1;
-			potentialEnd = -1;
-		}
-		else if (inFork and revProbabilities[i][0] <= threshold_weak and revProbabilities[i-1][0] >= threshold_weak){//flag as a potential end if we dip below the threshold
-
-			potentialEnd = revPositions[i];
-		}
-		else if (inFork and (revProbabilities[i][1] > threshold_weak or revProbabilities[i][2] > threshold_weak)){//close if we've confidently moved to something else
-
-			assert(forkStart != -1 and potentialEnd != -1);
-
-			leftForks_weak.push_back(std::make_pair(potentialEnd,forkStart));
-			//std::cout << "weak left" << potentialEnd << " " << forkStart << std::endl;
-			inFork = false;
-			forkStart = -1;
-			potentialEnd = -1;
-		}
-	}
-
-	for (auto lf = leftForks.begin(); lf < leftForks.end(); lf++){
-
-		outBedLeft += r.chromosome + " " + std::to_string(lf -> first) + " " + std::to_string(lf -> second) + " " + r.header.substr(1) + "\n";
-	}
-
-	for (auto rf = rightForks.begin(); rf < rightForks.end(); rf++){
-
-		outBedRight += r.chromosome + " " + std::to_string(rf -> first) + " " + std::to_string(rf -> second) + " " + r.header.substr(1) + "\n";
-	}
-
-	return std::make_pair(outBedLeft,outBedRight);
+	return out;
 }
 
 
-std::string callOrigins(DetectedRead &r){
+std::vector<ReadSegment> stitchSegmentation(std::vector<ReadSegment> &primarySegments, std::vector<ReadSegment> &secondarySegments){
 
-	if (r.positions.size() != r.probabilities.size()){
-
-		std::cerr << r.positions.size() << std::endl;
-		std::cerr << r.probabilities.size() << std::endl;
-		std::cerr << r.readID << std::endl;
-	}
-
-	assert(r.positions.size() == r.probabilities.size());
-
-	float threshold = 0.8;
-	float threshold_weak = 0.5;
-	int minLength = 1000;
-
-	std::vector<std::pair<int,int>> leftForks, leftForks_weak, rightForks, rightForks_weak;
-	std::string outBed;
-
-	bool inFork = false;
-	int forkStart = -1, potentialEnd = -1;
-
-	//rightward-moving forks
-	for (size_t i = 1; i < r.probabilities.size(); i++){
-
-		if (r.probabilities[i][2] > threshold and not inFork){ //initialise the site
-
-			forkStart = r.positions[i];
-			inFork = true;
-		}
-		else if (inFork and r.probabilities[i][2] <= threshold and r.probabilities[i-1][2] >= threshold){//flag as a potential end if we dip below the threshold
-
-			potentialEnd = r.positions[i];
-		}
-		else if (inFork and (r.probabilities[i][0] > threshold or r.probabilities[i][1] > threshold)){//close if we've confidently moved to something else
-
-			assert(forkStart != -1 and potentialEnd != -1);
-
-			if ( abs(potentialEnd - forkStart) >= minLength ){
-				rightForks.push_back(std::make_pair(forkStart,potentialEnd));
-			}
-
-			inFork = false;
-			forkStart = -1;
-			potentialEnd = -1;
-		}
-	}
-
-	//if we got to the end of the read without closing
-	if (inFork){
-
-		assert(forkStart != -1);
-		if (potentialEnd == -1) potentialEnd = r.positions.back();
-
-		if ( abs(potentialEnd - forkStart) >= minLength ){
-			rightForks.push_back(std::make_pair(forkStart,potentialEnd));
-		}
-	}
-
-	inFork = false;
-	forkStart = -1;
-	potentialEnd = -1;
-
-	//weak call rightward-moving forks
-	/*
-	for (size_t i = 1; i < r.probabilities.size(); i++){
-
-		if (r.probabilities[i][2] > threshold_weak and not inFork){ //initialise the site
-
-			forkStart = r.positions[i];
-			inFork = true;
-		}
-		else if (inFork and r.probabilities[i][2] >= threshold){//throw it out if it becomes a confident fork call
-
-			inFork = false;
-			forkStart = -1;
-			potentialEnd = -1;
-		}
-		else if (inFork and r.probabilities[i][2] <= threshold_weak and r.probabilities[i-1][2] >= threshold_weak){//flag as a potential end if we dip below the threshold
-
-			potentialEnd = r.positions[i];
-		}
-		else if (inFork and (r.probabilities[i][0] > threshold_weak or r.probabilities[i][1] > threshold_weak)){//close if we've confidently moved to something else
-
-			assert(forkStart != -1 and potentialEnd != -1);
-
-			rightForks_weak.push_back(std::make_pair(forkStart,potentialEnd));
-			//std::cout << "weak right" << forkStart << " " << potentialEnd << std::endl;
-
-			inFork = false;
-			forkStart = -1;
-			potentialEnd = -1;
-		}
-	}
-	*/
-
-	inFork = false;
-	forkStart = -1;
-	potentialEnd = -1;
-
-	//reverse order for leftward-moving forks
-	std::vector<int> revPositions(r.positions.rbegin(), r.positions.rend());
-	std::vector<std::vector<float>> revProbabilities(r.probabilities.rbegin(), r.probabilities.rend());
-
-	//leftward-moving forks
-	for (size_t i = 1; i < revProbabilities.size(); i++){
-
-		if (revProbabilities[i][0] > threshold and not inFork){ //initialise the site
-
-			forkStart = revPositions[i];
-			inFork = true;
-		}
-		else if (inFork and revProbabilities[i][0] <= threshold and revProbabilities[i-1][0] >= threshold){//flag as a potential end if we dip below the threshold
-
-			potentialEnd = revPositions[i];
-		}
-		else if (inFork and (revProbabilities[i][1] > threshold or revProbabilities[i][2] > threshold)){//close if we've confidently moved to something else
-
-			assert(forkStart != -1 and potentialEnd != -1);
-
-			if ( abs(potentialEnd - forkStart) >= minLength ){
-				leftForks.push_back(std::make_pair(potentialEnd,forkStart));
-			}
-
-			inFork = false;
-			forkStart = -1;
-			potentialEnd = -1;
-		}
-	}
-
-	//if we got to the end of the read without closing
-	if (inFork){
-
-		assert(forkStart != -1);
-		if (potentialEnd == -1) potentialEnd = revPositions.back();
-
-		if ( abs(potentialEnd - forkStart) >= minLength ){
-			leftForks.push_back(std::make_pair(potentialEnd,forkStart));
-		}
-	}
-
-	inFork = false;
-	forkStart = -1;
-	potentialEnd = -1;
-
-	//weak call leftward-moving forks
-	/*
-	for (size_t i = 1; i < revProbabilities.size(); i++){
-
-		if (revProbabilities[i][0] > threshold_weak and not inFork){ //initialise the site
-
-			forkStart = revPositions[i];
-			inFork = true;
-		}
-		else if (inFork and r.probabilities[i][0] >= threshold){//throw it out if it becomes a confident fork call
-
-			inFork = false;
-			forkStart = -1;
-			potentialEnd = -1;
-		}
-		else if (inFork and revProbabilities[i][0] <= threshold_weak and revProbabilities[i-1][0] >= threshold_weak){//flag as a potential end if we dip below the threshold
-
-			potentialEnd = revPositions[i];
-		}
-		else if (inFork and (revProbabilities[i][1] > threshold_weak or revProbabilities[i][2] > threshold_weak)){//close if we've confidently moved to something else
-
-			assert(forkStart != -1 and potentialEnd != -1);
-
-			leftForks_weak.push_back(std::make_pair(potentialEnd,forkStart));
-			//std::cout << "weak left" << potentialEnd << " " << forkStart << std::endl;
-			inFork = false;
-			forkStart = -1;
-			potentialEnd = -1;
-		}
-	}
-	*/
-
-
-	//match up regions
-	for ( size_t li = 0; li < leftForks.size(); li++ ){
-
-		//find the closest right fork region
-		int minDist = std::numeric_limits<int>::max();
-		int bestMatch = -1;
-		for ( size_t ri = 0; ri < rightForks.size(); ri++ ){
-
-			if (leftForks[li].second > rightForks[ri].first ) continue;
-
-			int dist = rightForks[ri].first - leftForks[li].second;
-			if (dist < minDist){
-				minDist = dist;
-				bestMatch = ri;
-			}
-		}
-
-		//make sure no other left forks are closer
-		bool failed = false;
-		if (bestMatch != -1){
-
-			for (size_t l2 = 0; l2 < leftForks.size(); l2++){
-
-				if (l2 == li) continue;
-
-				if (leftForks[l2].second > rightForks[bestMatch].first ) continue;
-
-				int dist = rightForks[bestMatch].first - leftForks[l2].second;
-
-				if (dist < minDist){
-
-					failed = true;
-					break;
-				}
-			}
-		}
-		if (failed) continue;
-		else if (bestMatch != -1){
-
-			//make sure there are no weak fork calls in between matching left and right forks
-			bool abort = false;
-			for ( size_t lw = 0; lw < leftForks_weak.size(); lw++){
-				if (leftForks_weak[lw].first > leftForks[li].second and leftForks_weak[lw].second < rightForks[bestMatch].first){
-					abort = true;
-					//std::cout << leftForks_weak[lw].first << " " << leftForks_weak[lw].second << std::endl;
-					break;
-				}
-			}
-			if (not abort){
-				for ( size_t rw = 0; rw < rightForks_weak.size(); rw++){
-					if (rightForks_weak[rw].first > leftForks[li].second and rightForks_weak[rw].second < rightForks[bestMatch].first){
-						//std::cout << rightForks_weak[rw].first << " " << rightForks_weak[rw].second << std::endl;
-						abort = true;
+	std::map<int, int> connectivity;
+	std::vector<ReadSegment> stitchedSegments;
+	
+	int segmentStitch = 3000;
+	
+	for (size_t i = 0; i < primarySegments.size(); i++){
+	
+		for (size_t j = i+1; j < primarySegments.size(); j++){
+		
+			//segments shouldn't overlap
+			assert(primarySegments[j].leftmostCoord >= primarySegments[i].rightmostCoord or primarySegments[i].leftmostCoord >= primarySegments[j].rightmostCoord);
+		
+			if (primarySegments[j].leftmostCoord - primarySegments[i].rightmostCoord < segmentStitch){
+			
+				//make sure there's not a short segment between
+				bool interveningSegment = false;
+				for (size_t k = 0; k < secondarySegments.size(); k++){
+				
+					//segments shouldn't overlap
+					assert(primarySegments[i].leftmostCoord >= secondarySegments[k].rightmostCoord or secondarySegments[k].leftmostCoord >= primarySegments[i].rightmostCoord);
+					
+					if (primarySegments[i].rightmostCoord <= secondarySegments[k].leftmostCoord and secondarySegments[k].rightmostCoord <= primarySegments[j].leftmostCoord){
+						interveningSegment = true;
 						break;
 					}
 				}
+				
+				if (not interveningSegment){
+					connectivity[i] = j;
+					break;
+				}
+			}
+		}
+	}
+	
+	//stitch 
+	std::vector<int> ignoreIndices;
+	for (size_t i = 0; i < primarySegments.size(); i++){
+	
+		if (std::find(ignoreIndices.begin(), ignoreIndices.end(), i) != ignoreIndices.end()) continue;
+	
+		int targetLeft = i;
+		int startCoord = primarySegments[targetLeft].leftmostCoord;
+		int startIdx = primarySegments[targetLeft].leftmostIdx;
+		int endCoord = primarySegments[targetLeft].rightmostCoord;
+		int endIdx = primarySegments[targetLeft].rightmostIdx;
+		
+		while (connectivity.count(targetLeft) > 0){
+		
+			int idxToMerge = connectivity[targetLeft];
+		
+			assert(endCoord < primarySegments[idxToMerge].rightmostCoord);
+			assert(endIdx < primarySegments[idxToMerge].rightmostIdx);
+		
+			endCoord = primarySegments[idxToMerge].rightmostCoord;
+			endIdx = primarySegments[idxToMerge].rightmostIdx;
+			ignoreIndices.push_back(idxToMerge);
+			targetLeft = idxToMerge;
+		}
+	
+		struct ReadSegment s = {startCoord, startIdx, endCoord, endIdx};
+		stitchedSegments.push_back(s);
+	}
+	return stitchedSegments;
+}
+
+
+void callSegmentation(DetectedRead &r){
+
+	int minLength = 1000;
+
+	bool inSegment = false;
+	int startCoord = -1, endCoord = -1;
+	int startIdx = -1, endIdx = -1;
+	
+	std::vector<ReadSegment> EdU_segments;
+	std::vector<ReadSegment> BrdU_segments;
+
+	for (size_t i = 0; i < r.positions.size(); i++){
+
+		if (r.EdU_segment_label[i] == 1 and not inSegment){ //initialise the site
+
+			startCoord = r.positions[i];
+			startIdx = i;
+			inSegment = true;
+		}
+		else if (inSegment and (r.thymidine_segment_label[i] == 1 or r.BrdU_segment_label[i] == 1)){//close if we've confidently moved to something else
+		
+			endCoord = r.positions[i];
+			endIdx = i;
+
+			assert(startCoord != -1 and endCoord != -1);
+
+			if ( abs(endCoord - startCoord) >= minLength ){
+
+				std::pair<int, int> trim = segmentationTrim(r.positions, r.eduCalls, r.brduCalls, startIdx, endIdx);
+				startIdx += trim.first;
+				endIdx -= trim.second;
+				startCoord = r.positions[startIdx];
+				endCoord = r.positions[endIdx];
+				
+				assert(startCoord < endCoord);
+				
+				struct ReadSegment s = {startCoord, startIdx, endCoord, endIdx};
+				EdU_segments.push_back(s);
 			}
 
-			//if we didn't find any problematic weak fork calls between the matching left and right forks, make the call
-			if (not abort){
-				r.origins.push_back(std::make_pair(leftForks[li].second, rightForks[bestMatch].first));
-				outBed += r.chromosome + " " + std::to_string(leftForks[li].second) + " " + std::to_string(rightForks[bestMatch].first) + " " + r.header.substr(1) + "\n";
+			inSegment = false;
+			startCoord = -1;
+			endCoord = -1;
+			startIdx = -1;
+			endIdx = -1;
+		}
+	}
+	//if we got to the end of the read without closing
+	if (inSegment){
+
+		assert(startCoord != -1);
+		if (endCoord == -1){
+			endCoord = r.positions.back();
+			endIdx = r.positions.size() - 1;
+		}
+
+		if ( abs(endCoord - startCoord) >= minLength ){
+
+			std::pair<int, int> trim = segmentationTrim(r.positions, r.eduCalls, r.brduCalls, startIdx, endIdx);
+			startIdx += trim.first;
+			endIdx -= trim.second;
+			startCoord = r.positions[startIdx];
+			endCoord = r.positions[endIdx];
+			
+			assert(startCoord < endCoord);
+			
+			struct ReadSegment s = {startCoord, startIdx, endCoord, endIdx};
+			EdU_segments.push_back(s);
+		}
+	}
+
+	startCoord = -1;
+	endCoord = -1;
+	startIdx = -1;
+	endIdx = -1;
+	inSegment = false;
+
+	for (size_t i = 0; i < r.positions.size(); i++){
+
+		if (r.BrdU_segment_label[i] == 1 and not inSegment){ //initialise the site
+
+			startCoord = r.positions[i];
+			startIdx = i;
+			inSegment = true;
+		}
+		else if (inSegment and (r.thymidine_segment_label[i] == 1 or r.EdU_segment_label[i] == 1)){//close if we've confidently moved to something else
+		
+			endCoord = r.positions[i];
+			endIdx = i;
+
+			assert(startCoord != -1 and endCoord != -1);
+
+			if ( abs(endCoord - startCoord) >= minLength ){
+			
+				std::pair<int, int> trim = segmentationTrim(r.positions, r.brduCalls, r.eduCalls, startIdx, endIdx);
+				startIdx += trim.first;
+				endIdx -= trim.second;
+				startCoord = r.positions[startIdx];
+				endCoord = r.positions[endIdx];
+				
+				assert(startCoord < endCoord);
+			
+				struct ReadSegment s = {startCoord, startIdx, endCoord, endIdx};
+				BrdU_segments.push_back(s);
 			}
+
+			inSegment = false;
+			startCoord = -1;
+			endCoord = -1;
+			startIdx = -1;
+			endIdx = -1;
+		}
+	}
+	//if we got to the end of the read without closing
+	if (inSegment){
+
+		assert(startCoord != -1);
+		if (endCoord == -1){
+			endCoord = r.positions.back();
+			endIdx = r.positions.size() - 1;
+		}
+
+		if ( abs(endCoord - startCoord) >= minLength ){
+		
+			std::pair<int, int> trim = segmentationTrim(r.positions, r.brduCalls, r.eduCalls, startIdx, endIdx);
+			startIdx += trim.first;
+			endIdx -= trim.second;
+			startCoord = r.positions[startIdx];
+			endCoord = r.positions[endIdx];
+			
+			assert(startCoord < endCoord);
+		
+			struct ReadSegment s = {startCoord, startIdx, endCoord, endIdx};
+			BrdU_segments.push_back(s);
+		}
+	}
+	
+	r.BrdU_segment = stitchSegmentation(BrdU_segments, EdU_segments);
+	r.EdU_segment = stitchSegmentation(EdU_segments, BrdU_segments);
+}
+
+
+std::string callOrigins(DetectedRead &r, forkSenseArgs args){
+
+	std::string outBed;
+
+	//match up regions
+	for ( size_t li = 0; li < r.leftForks.size(); li++ ){
+
+		//find the closest right fork region
+		int minDist = std::numeric_limits<int>::max();
+		int bestMatch = -1;
+		for ( size_t ri = 0; ri < r.rightForks.size(); ri++ ){
+
+			if (r.rightForks[ri].rightmostCoord < r.leftForks[li].rightmostCoord) continue;
+
+			int dist = r.rightForks[ri].rightmostCoord - r.leftForks[li].leftmostCoord;
+			assert(dist >= 0);
+			if (dist < minDist){
+				minDist = dist;
+				bestMatch = ri;
+			}
+		}
+
+		//make sure no other left forks are closer
+		bool failed = false;
+		if (bestMatch != -1){
+
+			for (size_t l2 = 0; l2 < r.leftForks.size(); l2++){
+
+				if (l2 == li) continue;
+
+				if (r.rightForks[bestMatch].rightmostCoord < r.leftForks[l2].rightmostCoord) continue;
+
+				int dist = r.rightForks[bestMatch].rightmostCoord - r.leftForks[l2].leftmostCoord;
+				assert(dist >= 0);
+
+				if (dist < minDist){
+
+					failed = true;
+					break;
+				}
+			}
+		}
+		if (failed) continue;
+		else if (bestMatch != -1){
+
+			int orilb = std::min(r.leftForks[li].rightmostCoord, r.rightForks[bestMatch].leftmostCoord);
+			int oriub = std::max(r.leftForks[li].rightmostCoord, r.rightForks[bestMatch].leftmostCoord);
+			
+			int orilb_idx = std::min(r.leftForks[li].rightmostIdx, r.rightForks[bestMatch].leftmostIdx);
+			int oriub_idx = std::max(r.leftForks[li].rightmostIdx, r.rightForks[bestMatch].leftmostIdx);
+			
+			struct ReadSegment s = {orilb, orilb_idx, oriub, oriub_idx};
+			r.origins.push_back(s);
+
+			outBed += r.chromosome + " " 
+			       + std::to_string(orilb) + " " 
+			       + std::to_string(oriub) + " "
+			       + r.readID.substr(1) + " "
+			       + std::to_string( r.mappingLower ) + " "
+			       + std::to_string( r.mappingUpper ) + " "
+			       + r.strand + "\n"; 
 		}
 	}
 
@@ -557,114 +461,23 @@ std::string callOrigins(DetectedRead &r){
 }
 
 
-std::string callTerminations(DetectedRead &r){
+std::string callTerminations(DetectedRead &r, forkSenseArgs args){
 
-	assert(r.positions.size() == r.probabilities.size());
-
-	float threshold = 0.8;
-	float threshold_weak = 0.5;
-	int minLength = 1000;
-
-	std::vector<std::pair<int,int>> leftForks, rightForks;
 	std::string outBed;
 
-	bool inFork = false;
-	int forkStart = -1, potentialEnd = -1;
-
-	//rightward-moving forks
-	for (size_t i = 1; i < r.probabilities.size(); i++){
-
-		if (r.probabilities[i][2] > threshold and not inFork){ //initialise the site
-
-			forkStart = r.positions[i];
-			inFork = true;
-		}
-		else if (inFork and r.probabilities[i][2] <= threshold and r.probabilities[i-1][2] >= threshold){
-
-			potentialEnd = r.positions[i];
-		}
-		else if (inFork and (r.probabilities[i][0] > threshold or r.probabilities[i][1] > threshold)){//close if we've confidently moved to something else
-
-			assert(forkStart != -1 and potentialEnd != -1);
-
-			if ( abs(potentialEnd - forkStart) >= minLength ){
-				rightForks.push_back(std::make_pair(forkStart,potentialEnd));
-			}
-			inFork = false;
-			forkStart = -1;
-			potentialEnd = -1;
-
-		}
-	}
-
-	//if we got to the end of the read without closing
-	if (inFork){
-
-		assert(forkStart != -1);
-		if (potentialEnd == -1) potentialEnd = r.positions.back();
-
-		if ( abs(potentialEnd - forkStart) >= minLength ){
-			rightForks.push_back(std::make_pair(forkStart,potentialEnd));
-		}
-	}
-
-	inFork = false;
-	forkStart = -1;
-	potentialEnd = -1;
-
-	//reverse order for leftward-moving forks
-	std::vector<int> revPositions(r.positions.rbegin(), r.positions.rend());
-	std::vector<std::vector<float>> revProbabilities(r.probabilities.rbegin(), r.probabilities.rend());
-
-	//leftward-moving forks
-	for (size_t i = 1; i < revProbabilities.size(); i++){
-
-		if (revProbabilities[i][0] > threshold and not inFork){ //initialise the site
-
-			forkStart = revPositions[i];
-			inFork = true;
-		}
-		else if (inFork and revProbabilities[i][0] <= threshold and revProbabilities[i-1][0] >= threshold){
-
-			potentialEnd = revPositions[i];
-		}
-		else if (inFork and (revProbabilities[i][1] > threshold or revProbabilities[i][2] > threshold)){//close if we've confidently moved to something else
-
-			assert(forkStart != -1 and potentialEnd != -1);
-
-			if ( abs(potentialEnd - forkStart) >= minLength ){
-				leftForks.push_back(std::make_pair(potentialEnd,forkStart));
-			}
-
-			inFork = false;
-			forkStart = -1;
-			potentialEnd = -1;
-
-		}
-	}
-
-	//if we got to the end of the read without closing
-	if (inFork){
-
-		assert(forkStart != -1);
-		if (potentialEnd == -1) potentialEnd = revPositions.back();
-
-		if ( abs(potentialEnd - forkStart) >= minLength ){
-			leftForks.push_back(std::make_pair(potentialEnd,forkStart));
-		}
-	}
-
 	//match up regions
-	for ( size_t li = 0; li < leftForks.size(); li++ ){
+	for ( size_t li = 0; li < r.leftForks.size(); li++ ){
 
 		//find the closest right fork region
 		int minDist = std::numeric_limits<int>::max();
 		int bestMatch = -1;
-		for ( size_t ri = 0; ri < rightForks.size(); ri++ ){
+		for ( size_t ri = 0; ri < r.rightForks.size(); ri++ ){
 
-			if (leftForks[li].first < rightForks[ri].second ) continue;
+			if (r.leftForks[li].rightmostCoord < r.rightForks[ri].rightmostCoord ) continue;
 
-			int dist = leftForks[li].first - rightForks[ri].second;
+			int dist = r.leftForks[li].rightmostCoord - r.rightForks[ri].leftmostCoord;
+			assert(dist >= 0);
+
 			if (dist < minDist){
 				minDist = dist;
 				bestMatch = ri;
@@ -676,13 +489,15 @@ std::string callTerminations(DetectedRead &r){
 		bool failed = false;
 		if (bestMatch != -1){
 
-			for (size_t l2 = 0; l2 < leftForks.size(); l2++){
+			for (size_t l2 = 0; l2 < r.leftForks.size(); l2++){
 
 				if (li == l2) continue;
 
-				if (leftForks[l2].first < rightForks[bestMatch].second ) continue;
+				if (r.leftForks[l2].rightmostCoord < r.rightForks[bestMatch].rightmostCoord ) continue;
 
-				int dist = leftForks[l2].first - rightForks[bestMatch].second;
+				int dist = r.leftForks[l2].rightmostCoord - r.rightForks[bestMatch].leftmostCoord;
+				assert(dist >= 0);
+
 				if (dist < minDist){
 
 					failed = true;
@@ -693,218 +508,1021 @@ std::string callTerminations(DetectedRead &r){
 		if (failed) continue;
 		else if (bestMatch != -1){
 
-			r.terminations.push_back(std::make_pair(rightForks[li].second, leftForks[bestMatch].first));
-			outBed += r.chromosome + " " + std::to_string(rightForks[bestMatch].second) + " " + std::to_string(leftForks[li].first) + " " + r.header.substr(1) + "\n";
+			int termlb = std::min(r.leftForks[li].leftmostCoord,r.rightForks[bestMatch].rightmostCoord);
+			int termub = std::max(r.leftForks[li].leftmostCoord,r.rightForks[bestMatch].rightmostCoord);
+			
+			int termlb_idx = std::min(r.leftForks[li].leftmostIdx,r.rightForks[bestMatch].rightmostIdx);
+			int termub_idx = std::max(r.leftForks[li].leftmostIdx,r.rightForks[bestMatch].rightmostIdx);
+			
+			struct ReadSegment s = {termlb, termlb_idx, termub, termub_idx};
+
+			r.terminations.push_back(s);
+			outBed += r.chromosome + " " 
+			       + std::to_string(termlb) + " " 
+			       + std::to_string(termub) + " " 
+			       + r.readID.substr(1) + " "
+			       + std::to_string( r.mappingLower ) + " "
+			       + std::to_string( r.mappingUpper ) + " "
+			       + r.strand + "\n"; 
 		}
 	}
 
 	return outBed;
 }
 
-std::string runCNN(DetectedRead &r, std::shared_ptr<ModelSession> session, unsigned int trimFactor){
 
-	r.generateInput();
-	r.trim(trimFactor);
+std::pair<std::string,std::string> writeAnalogueRegions(DetectedRead &r, bool segmentToForks){
 
-	TensorShape input_shape={{1, r.inputSize, 2, 1}, 3};
-	//TensorShape input_shape={{1, (int64_t)r.tensorInput.size(), 1}, 3};
-	auto input_values = tf_obj_unique_ptr(read2tensor(r, input_shape));
-	if(!input_values){
-		std::cerr << "Tensor creation failure." << std::endl;
-		exit (EXIT_FAILURE);
-	}
+	std::string outBedEdU, outBedBrdU;
 
-	CStatus status;
-	TF_Tensor* inputs[]={input_values.get()};
-	TF_Tensor* outputs[1]={};
-	TF_SessionRun(*(session->session.get()), nullptr,
-		&session->inputs, inputs, 1,
-		&session->outputs, outputs, 1,
-		nullptr, 0, nullptr, status.ptr);
-	auto _output_holder = tf_obj_unique_ptr(outputs[0]);
-
-	if(status.failure()){
-		status.dump_error();
-		exit (EXIT_FAILURE);
-	}
-
-	TF_Tensor &output = *outputs[0];
-	if(TF_TensorType(&output) != TF_FLOAT){
-		std::cerr << "Error, unexpected output tensor type." << std::endl;
-		exit(EXIT_FAILURE);
-	}
-
-	std::string str_output;
+	for (auto i = r.BrdU_segment.begin(); i < r.BrdU_segment.end(); i++){
 	
-	/*
-	unsigned int outputFields = 3;
-	{
-		str_output += r.readID + " " + r.chromosome + " " + std::to_string(r.mappingLower) + " " + std::to_string(r.mappingUpper) + " " + r.strand + "\n"; //header
-		size_t output_size = TF_TensorByteSize(&output) / sizeof(float);
-		assert(output_size == r.brduCalls.size() * outputFields);
-		auto output_array = (const float *)TF_TensorData(&output);
-		unsigned int pos = 0;
-		str_output += std::to_string(r.positions[0]);
-		for(size_t i = 0; i < output_size; i++){
-			if((i+1)%outputFields==0){
-				r.probabilities.push_back({output_array[i-2],output_array[i-1],output_array[i]});
-				str_output += "\t" + std::to_string(output_array[i-2]) + "\t" + std::to_string(output_array[i]) + "\n";
-				pos++;
-				if (i != output_size-1) str_output += std::to_string(r.positions[pos]);
-			}
-		}
-	}
-	*/
+		if (segmentToForks and (i -> partners == 0)) continue;
 
-	unsigned int outputFields = 3;
-	{
-		str_output += r.readID + " " + r.chromosome + " " + std::to_string(r.mappingLower) + " " + std::to_string(r.mappingUpper) + " " + r.strand + "\n"; //header
-		size_t output_size = TF_TensorByteSize(&output) / sizeof(float);
-		assert(output_size == (r.tensorInput.size())/2 * outputFields);
-		auto output_array = (const float *)TF_TensorData(&output);
-		unsigned int pos = 0;
-		unsigned int posIdx = 0;
-		str_output += std::to_string(r.positions[posIdx]);
-		for(size_t i = 0; i < output_size; i++){
-			if((i+1)%outputFields==0 and r.mappedPositions[pos] == r.positions[posIdx]){
-				r.probabilities.push_back({output_array[i-2],output_array[i-1],output_array[i]});
-				str_output += "\t" + std::to_string(output_array[i-2]) + "\t" + std::to_string(output_array[i]) + "\n";
-				posIdx++;
-				if (r.positions.back() != r.positions[posIdx-1]){
-					str_output += std::to_string(r.positions[posIdx]);
-				}
-				else{
-					break;
-				}
-			}
-			if ((i+1)%outputFields==0) pos++;
-		}
+		outBedBrdU += r.chromosome + " " 
+		            + std::to_string(i -> leftmostCoord) + " " 
+		            + std::to_string(i -> rightmostCoord) + " " 
+		            + r.readID.substr(1) + " "
+		            + std::to_string( r.mappingLower ) + " "
+		            + std::to_string( r.mappingUpper ) + " "
+		            + r.strand + "\n"; 
 	}
+	for (auto i = r.EdU_segment.begin(); i < r.EdU_segment.end(); i++){
 	
-	/*
-	unsigned int outputFields = 4;
-	{
-		str_output += r.readID + " " + r.chromosome + " " + std::to_string(r.mappingLower) + " " + std::to_string(r.mappingUpper) + " " + r.strand + "\n"; //header
-		size_t output_size = TF_TensorByteSize(&output) / sizeof(float);
-		assert(output_size == r.brduCalls.size() * outputFields);
-		auto output_array = (const float *)TF_TensorData(&output);
-		unsigned int pos = 0;
-		str_output += std::to_string(r.positions[0]);
-		for(size_t i = 0; i < output_size; i++){
-			if((i+1)%outputFields==0){
-				r.probabilities.push_back({output_array[i-3],output_array[i-2],output_array[i-1],output_array[i]});
-				str_output += "\t" + std::to_string(output_array[i-3]) + "\t" + std::to_string(output_array[i-1]) + "\n";
-				pos++;
-				if (i != output_size-1) str_output += std::to_string(r.positions[pos]);
-			}
-		}
+		if (segmentToForks and (i -> partners == 0)) continue;
+
+		outBedEdU += r.chromosome + " " 
+		            + std::to_string(i -> leftmostCoord) + " " 
+		            + std::to_string(i -> rightmostCoord) + " " 
+		            + r.readID.substr(1) + " "
+		            + std::to_string( r.mappingLower ) + " "
+		            + std::to_string( r.mappingUpper ) + " "
+		            + r.strand + "\n"; 
 	}
-	*/
-	return str_output;
+
+	return std::make_pair(outBedBrdU,outBedEdU);
 }
 
 
-void emptyBuffer(std::vector< DetectedRead > &buffer, Arguments args, std::shared_ptr<ModelSession> session, std::ofstream &outFile, std::ofstream &originFile, std::ofstream &termFile, std::ofstream &leftForkFile, std::ofstream &rightForkFile, int trimFactor){
+void callForks(DetectedRead &r, std::string analogueOrder){
 
-	#pragma omp parallel for schedule(dynamic) shared(args, outFile, session,trimFactor) num_threads(args.threads)
+	//maximum distance in bp between EdU and BrdU segments that allow them to be matched
+	int maxGap = 5000;
+	
+	std::vector<ReadSegment> *analogue1_segments;
+	std::vector<ReadSegment> *analogue2_segments;
+	
+	if (analogueOrder == "EdU,BrdU"){
+
+		analogue1_segments = &(r.EdU_segment);
+		analogue2_segments = &(r.BrdU_segment);
+	}
+	else{
+
+		analogue2_segments = &(r.EdU_segment);
+		analogue1_segments = &(r.BrdU_segment);
+	}
+
+	std::vector<std::pair<size_t,size_t>> proto_rightForkPairs, proto_leftForkPairs;
+
+	//match up segments - right fork
+	for ( size_t li = 0; li < (*analogue1_segments).size(); li++ ){
+
+		//find the closest analogue 2 patch
+		int minDist = std::numeric_limits<int>::max();
+		int bestMatch = -1;
+		for ( size_t ri = 0; ri < (*analogue2_segments).size(); ri++ ){
+
+			if ( (*analogue2_segments)[ri].leftmostCoord < (*analogue1_segments)[li].rightmostCoord ) continue;
+
+			int dist = (*analogue2_segments)[ri].leftmostCoord - (*analogue1_segments)[li].rightmostCoord;
+			assert(dist >= 0);
+			
+			if (dist < minDist){
+				minDist = dist;
+				bestMatch = ri;
+			}
+		}
+
+		//make sure no other analogue 1 patches are closer
+		bool failed = false;
+		if (bestMatch != -1){
+
+			for (size_t l2 = 0; l2 < (*analogue1_segments).size(); l2++){
+
+				if (li == l2) continue;
+
+				if ( (*analogue2_segments)[bestMatch].leftmostCoord < (*analogue1_segments)[l2].rightmostCoord ) continue;
+
+				int dist = (*analogue2_segments)[bestMatch].leftmostCoord - (*analogue1_segments)[l2].rightmostCoord;
+				assert(dist >= 0);
+				
+				if (dist < minDist){
+
+					failed = true;
+					break;
+				}
+			}
+		}
+
+		if (failed) continue;
+		else if (bestMatch != -1 and minDist < maxGap){
+
+			assert( (*analogue1_segments)[li].leftmostCoord < (*analogue2_segments)[bestMatch].rightmostCoord );
+			
+			(*analogue1_segments)[li].partners++;
+			(*analogue2_segments)[bestMatch].partners++;
+			
+			proto_rightForkPairs.push_back(std::make_pair(li,bestMatch));
+		}
+	}
+
+
+	//match up segments - left fork
+	for ( size_t li = 0; li < (*analogue1_segments).size(); li++ ){
+
+		//find the closest analogue 2 patch
+		int minDist = std::numeric_limits<int>::max();
+		int bestMatch = -1;
+		for ( size_t ri = 0; ri < (*analogue2_segments).size(); ri++ ){
+
+			if ( (*analogue1_segments)[li].leftmostCoord < (*analogue2_segments)[ri].rightmostCoord ) continue;
+			
+			int dist = (*analogue1_segments)[li].leftmostCoord - (*analogue2_segments)[ri].rightmostCoord;
+			assert(dist >= 0);
+
+			if (dist < minDist){
+				minDist = dist;
+				bestMatch = ri;
+			}
+		}
+
+		//make sure no other analogue 2 patches are closer
+		bool failed = false;
+		if (bestMatch != -1){
+
+			for (size_t l2 = 0; l2 < (*analogue1_segments).size(); l2++){
+
+				if (li == l2) continue;
+
+				if ( (*analogue1_segments)[l2].leftmostCoord <  (*analogue2_segments)[bestMatch].rightmostCoord ) continue;
+
+				int dist = (*analogue1_segments)[l2].leftmostCoord -  (*analogue2_segments)[bestMatch].rightmostCoord;
+				assert(dist >= 0);
+				
+				if (dist < minDist){
+					failed = true;
+					break;
+				}
+			}
+		}
+		if (failed) continue;
+		else if (bestMatch != -1 and minDist < maxGap){
+
+			assert( (*analogue2_segments)[bestMatch].leftmostCoord < (*analogue1_segments)[li].rightmostCoord );
+			
+			(*analogue2_segments)[bestMatch].partners++;
+			(*analogue1_segments)[li].partners++;
+			
+			proto_leftForkPairs.push_back(std::make_pair(bestMatch,li));
+		}
+	}
+	
+	//make fork bounds
+	std::string outBedLeft, outBedRight;
+	for (auto p = proto_rightForkPairs.begin(); p < proto_rightForkPairs.end(); p++){
+	
+		int tipPartners = 0;
+	
+		//left coordinate and index
+		assert( (*analogue1_segments)[p -> first].partners == 1 or (*analogue1_segments)[p -> first].partners == 2);
+		int lc = (*analogue1_segments)[p -> first].leftmostCoord;
+		int li = (*analogue1_segments)[p -> first].leftmostIdx;
+		if ( (*analogue1_segments)[p -> first].partners == 2){
+		
+			lc = ( (*analogue1_segments)[p -> first].leftmostCoord + (*analogue1_segments)[p -> first].rightmostCoord ) / 2;
+			li = ( (*analogue1_segments)[p -> first].leftmostIdx + (*analogue1_segments)[p -> first].rightmostIdx ) / 2;
+		}
+
+		//right coordinate and index		
+		int rc = (*analogue2_segments)[p -> second].rightmostCoord;
+		int ri = (*analogue2_segments)[p -> second].rightmostIdx;
+		if ( (*analogue2_segments)[p -> second].partners == 2){
+		
+			rc = ( (*analogue2_segments)[p -> second].rightmostCoord + (*analogue2_segments)[p -> second].leftmostCoord ) / 2;
+			ri = ( (*analogue2_segments)[p -> second].rightmostIdx + (*analogue2_segments)[p -> second].leftmostIdx ) / 2;
+			tipPartners++;
+		}
+		
+		double An1Len = (*analogue1_segments)[p -> first].rightmostCoord - lc;
+		double An2Len = rc - (*analogue2_segments)[p -> second].leftmostCoord;
+		
+		int BrdU_in_EdU = 0;
+		int EdU_in_EdU = 0;
+		int attempts_EdU = 0;
+		for (int j = li; j < (*analogue1_segments)[p -> first].rightmostIdx; j++){
+		
+			if (r.brduCalls[j] > 0.5) BrdU_in_EdU++;
+			if (r.eduCalls[j] > 0.5) EdU_in_EdU++;
+			attempts_EdU++;
+		}
+
+		int BrdU_in_BrdU = 0;
+		int EdU_in_BrdU = 0;
+		int attempts_BrdU = 0;	
+		for (int j = (*analogue2_segments)[p -> second].leftmostIdx; j < ri; j++){
+		
+			if (r.brduCalls[j] > 0.5) BrdU_in_BrdU++;
+			if (r.eduCalls[j] > 0.5) EdU_in_BrdU++;
+			attempts_BrdU++;
+		}
+		
+		struct ReadSegment s = {lc, li, rc, ri};
+		s.partners = tipPartners;
+		
+		double overallLength = rc-lc;
+		double sig4 = BrdU_in_EdU/(double) attempts_EdU;
+		double sig5 = EdU_in_EdU/(double) attempts_EdU;
+		double sig6 = EdU_in_BrdU/(double) attempts_BrdU;
+		double sig7 = BrdU_in_BrdU/(double) attempts_BrdU;
+		s.stress_signature = {overallLength,
+					An1Len,
+					An2Len, 
+					sig4, 
+					sig5, 
+					sig6, 
+					sig7};
+		r.rightForks.push_back(s);
+	}
+	for (auto p = proto_leftForkPairs.begin(); p < proto_leftForkPairs.end(); p++){
+	
+		int tipPartners = 0;
+
+		//left coordinate and index
+		assert( (*analogue2_segments)[p -> first].partners == 1 or (*analogue2_segments)[p -> first].partners == 2);
+		int lc = (*analogue2_segments)[p -> first].leftmostCoord;
+		int li = (*analogue2_segments)[p -> first].leftmostIdx;
+		if ( (*analogue2_segments)[p -> first].partners == 2){
+		
+			lc = ( (*analogue2_segments)[p -> first].leftmostCoord + (*analogue2_segments)[p -> first].rightmostCoord ) / 2;
+			li = ( (*analogue2_segments)[p -> first].leftmostIdx + (*analogue2_segments)[p -> first].rightmostIdx ) / 2;
+			tipPartners++;
+		}
+		
+		//right coordinate and index
+		int rc = (*analogue1_segments)[p -> second].rightmostCoord;
+		int ri = (*analogue1_segments)[p -> second].rightmostIdx;
+		if ( (*analogue1_segments)[p -> second].partners == 2){
+		
+			rc = ( (*analogue1_segments)[p -> second].rightmostCoord + (*analogue1_segments)[p -> second].leftmostCoord ) / 2;
+			ri = ( (*analogue1_segments)[p -> second].rightmostIdx + (*analogue1_segments)[p -> second].leftmostIdx ) / 2;
+		}
+		
+		double An2Len = (*analogue2_segments)[p -> first].rightmostCoord - lc;
+		double An1Len = rc - (*analogue1_segments)[p -> second].leftmostCoord;
+
+		int BrdU_in_EdU = 0;
+		int EdU_in_EdU = 0;
+		int attempts_EdU = 0;
+		
+		for (int j = (*analogue1_segments)[p -> second].leftmostIdx; j < ri; j++){
+		
+			if (r.brduCalls[j] > 0.5) BrdU_in_EdU++;
+			if (r.eduCalls[j] > 0.5) EdU_in_EdU++;
+			attempts_EdU++;
+		}
+		
+		int BrdU_in_BrdU = 0;
+		int EdU_in_BrdU = 0;
+		int attempts_BrdU = 0;
+		
+		for (int j = li; j < (*analogue2_segments)[p -> first].rightmostIdx; j++){
+		
+			if (r.brduCalls[j] > 0.5) BrdU_in_BrdU++;
+			if (r.eduCalls[j] > 0.5) EdU_in_BrdU++;
+			attempts_BrdU++;
+		}
+		
+		struct ReadSegment s = {lc, li, rc, ri};
+		
+		double overallLength = rc-lc;
+		double sig4 = BrdU_in_EdU/(double) attempts_EdU;
+		double sig5 = EdU_in_EdU/(double) attempts_EdU;
+		double sig6 = EdU_in_BrdU/(double) attempts_BrdU;
+		double sig7 = BrdU_in_BrdU/(double) attempts_BrdU;
+		s.stress_signature = {overallLength,
+					An1Len,
+					An2Len, 
+					sig4, 
+					sig5, 
+					sig6, 
+					sig7};
+					
+		s.partners = tipPartners;
+		r.leftForks.push_back(s);
+	}
+}
+
+
+std::pair< std::vector<int>, int > findNeighbours_mod( std::vector<int> &positions, std::vector< double > &calls, std::vector< double > &altCalls, int index, int epsilon ){
+
+	std::vector< int > neighbourIdx;
+	int positiveCalls = 0;
+	int positiveAltCalls = 0;
+	int ev = positions[index];
+	
+	int windowStart = index-epsilon;
+	int windowEnd = index+epsilon;
+	int numPositions = positions.size();
+	int startIdx = std::max(windowStart, 0);
+	int endIdx = std::min(windowEnd, numPositions-1);
+	
+	for ( int i = startIdx; i <= endIdx; i++ ){
+		int runningPos = positions[i];
+		int gap = std::abs(ev - runningPos);
+
+		if (gap <= epsilon){
+		
+			neighbourIdx.push_back(i);
+
+			if (calls[i] > 0.5){
+				positiveCalls++;
+			}
+			if (altCalls[i] > 0.5){
+				positiveAltCalls++;
+			}
+		}
+	}
+	
+	int delta = positiveCalls - positiveAltCalls;
+	int netPositiveCalls = std::max(0,delta);
+
+	
+	return std::make_pair(neighbourIdx, netPositiveCalls);
+}
+
+std::map<int,int> DBSCAN_mod( std::vector< int > &positions, std::vector< double > &calls, std::vector< double > &altCalls, int epsilon, double minDensity ){
+
+	//labels
+	//-2 := undefined
+	//-1 := noise
+	// 0 <= cluster int
+
+	//initialise labels
+	std::map< int, int > index2label;
+	for ( size_t i = 0; i < positions.size(); i++ ) index2label[i] = -2;
+
+	for ( size_t i = 0; i < positions.size(); i++ ){
+	
+		std::pair<std::vector<int>, int> neighbourPair = findNeighbours_mod( positions, calls, altCalls, i, epsilon );
+		std::vector<int> neighbourIndices = neighbourPair.first;
+		int neighbourCalls = neighbourPair.second;
+		int minPoints = neighbourIndices.size() * minDensity;
+		if (neighbourCalls < minPoints) {
+
+			index2label[i] = -1; //label as noise
+		}
+		else{
+		
+			index2label[i] = 1;
+		}
+	}
+	return index2label;
+}
+
+
+void runDBSCAN(DetectedRead &r, KMeansResult analougeIncorporation, std::string analogueOrder){
+	
+	int epsilon = 1000;
+	
+	double minBrdUDensity, minEdUDensity;
+	
+	if (analogueOrder == "EdU,BrdU"){
+
+		minBrdUDensity = std::max(0.1, analougeIncorporation.centroid_1_lowerBound);
+		minEdUDensity = std::max(0.1, analougeIncorporation.centroid_2_lowerBound);
+	}
+	else{
+
+		minBrdUDensity = std::max(0.1, analougeIncorporation.centroid_1_lowerBound);
+		minEdUDensity = std::max(0.1, analougeIncorporation.centroid_2_lowerBound);
+	}
+	
+	
+	std::map<int,int> eduLabels = DBSCAN_mod( r.positions, r.eduCalls, r.brduCalls, epsilon, minEdUDensity );
+	std::map<int,int> brduLabels = DBSCAN_mod( r.positions, r.brduCalls, r.eduCalls, epsilon, minBrdUDensity );
+	
+
+	for (size_t i = 0; i < r.positions.size(); i++){
+	
+		int eduLabel = 0;
+		int brduLabel = 0;
+		int thymLabel = 0;
+		
+		if (eduLabels[ i ] >= 0 and brduLabels[ i ] < 0){
+			eduLabel = 1;
+			brduLabel = 0;
+			thymLabel = 0;
+		}	
+		else if (brduLabels[ i ] >= 0 and eduLabels[ i ] < 0){
+			eduLabel = 0;
+			brduLabel = 1;
+			thymLabel = 0;
+		}
+		else if (brduLabels[ i ] < 0 and eduLabels[ i ] < 0){
+			eduLabel = 0;
+			brduLabel = 0;
+			thymLabel = 1;
+		}
+
+		r.EdU_segment_label.push_back(eduLabel);
+		r.BrdU_segment_label.push_back(brduLabel);
+		r.thymidine_segment_label.push_back(thymLabel);
+	}
+}
+
+
+std::pair<int, int> segmentationTrim(std::vector< int > &positions, std::vector< double > &calls, std::vector< double > &altCalls, int startIdx, int endIdx){
+
+	int epsilon = 500; //500 bp window
+	
+	if (positions[endIdx] - positions[startIdx] < 3*epsilon){
+	
+		return std::make_pair(0,0);
+	}
+	
+	std::vector< int > segmentPositions(positions.begin() + startIdx, positions.begin() + endIdx + 1);
+	std::vector< double > segmentCalls(calls.begin() + startIdx, calls.begin() + endIdx + 1);
+	std::vector< double > segmentAltCalls(altCalls.begin() + startIdx, altCalls.begin() + endIdx + 1);
+	
+	std::vector<double> segmentDensities;
+	int maxCallsInd = segmentCalls.size();
+	for (int i = 0; i < maxCallsInd; i++){
+	
+		int positiveCalls = 0;
+		int attempts = 0;
+		int lb = std::max(0,i-epsilon);
+		int segmentIdxLen = segmentCalls.size();
+		int ub = std::min(segmentIdxLen, i+epsilon);
+
+		for (int j = lb; j < ub; j++){
+		
+			int signedGap = segmentPositions[i]-segmentPositions[j];
+			if (std::abs(signedGap) < epsilon){
+	
+				if (segmentCalls[j] > 0.5) positiveCalls++;
+				if (segmentAltCalls[j] > 0.5) positiveCalls--;
+				attempts++;
+			}
+		}
+		segmentDensities.push_back((double)positiveCalls / (double) attempts);
+	}
+	
+	
+	double minDensity = vectorMean(segmentDensities);
+	
+	std::map<int,int> labels = DBSCAN_mod( segmentPositions, segmentCalls, segmentAltCalls, epsilon, minDensity );
+	
+	int trimFromLeft = 0;
+	int maxPosInd = segmentPositions.size();
+	for (int i = 0; i < maxPosInd; i++){
+	
+		if (labels.at(i) < 0) trimFromLeft++;
+		else break;
+	}
+	
+	int trimFromRight = 0;
+	for (int i = maxPosInd - 1; i > 0; i--){
+	
+		if (labels.at(i) < 0) trimFromRight++;
+		else break;
+	}
+
+	return std::make_pair(trimFromLeft, trimFromRight);
+}
+
+
+void callStalls(DetectedRead &r, std::string analogueOrder, KMeansResult analougeIncorporation){
+
+	int filterSize = 2000;
+	
+	std::vector< double > secondAnalogueCalls;
+	if (analogueOrder == "EdU,BrdU"){
+	
+		secondAnalogueCalls = r.brduCalls;
+	}
+	else{
+	
+		secondAnalogueCalls = r.eduCalls;
+	}
+
+	//check right forks
+	for (auto s = r.rightForks.begin(); s < r.rightForks.end(); s++){
+	
+		if (s -> partners > 0){
+			s -> score = -1;
+			continue;
+		}
+	
+		int forkTipIdx = s -> rightmostIdx;
+		int forkTipCoord = s -> rightmostCoord;
+		int numPositions = r.positions.size();
+		assert( forkTipIdx < numPositions);
+		double maximumScore = -3.0;
+		bool failOnAlignment = false;
+
+		if (forkTipIdx > 500 and (numPositions - forkTipIdx) > 1000){
+		
+			for (int i = std::max(forkTipIdx - filterSize,500); i < std::min(forkTipIdx + filterSize,numPositions-500); i++){
+			
+				if ( std::abs(r.positions[i] - forkTipCoord) > filterSize) continue;
+			
+				int positiveCalls = 0;
+				int attempts = 0;
+				for (int j = std::max(i - filterSize,0); j < i; j++){
+				
+					if (std::abs(r.positions[i] - r.positions[j]) < filterSize){
+
+						if (not r.alignmentQuality[j]) failOnAlignment = true;
+				
+						if (secondAnalogueCalls[j] > 0.5){
+							positiveCalls++;
+						}
+						attempts++;
+					}
+				}
+				if (attempts < 100) continue;
+				double LHS = (double) positiveCalls / (double) attempts;
+				
+				//guard against low denominators
+				if (LHS < 0.3) continue;
+				
+				positiveCalls = 0;
+				attempts = 0;
+				for (int j = i; j < std::min(i + filterSize, numPositions); j++){
+				
+					if (std::abs(r.positions[i] - r.positions[j]) < filterSize){
+
+						if (not r.alignmentQuality[j]) failOnAlignment = true;
+				
+						if (secondAnalogueCalls[j] > 0.5){
+							positiveCalls++;
+						}
+						attempts++;
+					}
+				}
+				if (attempts < 100) continue;
+				double RHS = (double) positiveCalls / (double) attempts;
+			
+				double score;
+				if (LHS - RHS > 0.){
+					score = (LHS-RHS)/LHS;
+					score = 1.55*log(1+exp(3.*(score-1))) - 1.55*log(1+exp(3.*(-1)));
+				}
+				else{
+					score = -2.0;
+				}
+				
+				r.stallScore[i] = score;
+				if (score > maximumScore){
+					maximumScore = score;
+				}
+			}
+		}
+
+		if (failOnAlignment){
+			s -> score = -4.0;
+			continue;
+		}
+
+		s -> score = maximumScore;
+	}
+	
+	//check left forks
+	for (auto s = r.leftForks.begin(); s < r.leftForks.end(); s++){
+	
+		if (s -> partners > 0){
+			s -> score = -1;
+			continue;
+		}
+	
+		int forkTipIdx = s -> leftmostIdx;
+		int forkTipCoord = s -> leftmostCoord;
+		int numPositions = r.positions.size();
+		assert( forkTipIdx < numPositions);
+		double maximumScore = -3.0;
+		bool failOnAlignment = false;
+
+		if (forkTipIdx > 500 and (numPositions - forkTipIdx) > 1000){
+		
+			for (int i = std::max(forkTipIdx - filterSize, 500); i < std::min(forkTipIdx + filterSize, numPositions - 500); i++){
+			
+				if ( std::abs(r.positions[i] - forkTipCoord) > filterSize) continue;
+			
+				int positiveCalls = 0;
+				int attempts = 0;
+				for (int j = std::max(i - filterSize,0); j < i; j++){
+				
+					if (std::abs(r.positions[i] - r.positions[j]) < filterSize){
+
+						if (not r.alignmentQuality[j]) failOnAlignment = true;
+					
+						if (secondAnalogueCalls[j] > 0.5){
+							positiveCalls++;
+						}
+						attempts++;
+					}
+				}
+				if (attempts < 100) continue;
+				
+				double LHS = (double) positiveCalls / (double) attempts;
+				
+				positiveCalls = 0;
+				attempts = 0;
+				for (int j = i; j < std::min(i + filterSize, numPositions); j++){
+				
+					if (std::abs(r.positions[i] - r.positions[j]) < filterSize){
+
+						if (not r.alignmentQuality[j]) failOnAlignment = true;
+				
+						if (secondAnalogueCalls[j] > 0.5){
+							positiveCalls++;
+						}
+						attempts++;
+					}
+				}
+				if (attempts < 100) continue;
+				
+				double RHS = (double) positiveCalls / (double) attempts;
+				
+				if (RHS < 0.3) continue;
+			
+				double score;
+				if (RHS - LHS > 0.){
+					score = (RHS-LHS)/RHS;
+					score = 1.55*log(1+exp(3.*(score-1))) - 1.55*log(1+exp(3.*(-1)));
+				}
+				else{
+					score = -2.0;
+				}
+				r.stallScore[i] = score;
+				if (score > maximumScore){
+					maximumScore = score;
+				}
+			}
+		}
+
+		if (failOnAlignment){
+			s -> score = -4.0;
+			continue;
+		}
+
+		s -> score = maximumScore;
+	}
+}
+
+
+void emptyBuffer(std::vector< DetectedRead > &buffer, forkSenseArgs args, fs_fileManager &fm, KMeansResult analogueIncorporation){
+
+	#pragma omp parallel for schedule(dynamic) shared(args, analogueIncorporation) num_threads(args.threads)
 	for ( auto b = buffer.begin(); b < buffer.end(); b++) {
 
-		std::string readOutput = runCNN(*b, session, trimFactor);
+		runDBSCAN(*b,analogueIncorporation, args.analogueOrder);
+		callSegmentation(*b);
+		
+		std::string termOutput, originOutput, leftForkOutput, rightForkOutput, leftForkOutput_signatures, rightForkOutput_signatures, BrdUOutput, EdUOutput;
+		bool segmentToForks = false;
 
-		std::string termOutput, originOutput, leftForkOutput, rightForkOutput;
-		if (args.markOrigins){
+		if (args.markOrigins or args.markTerms or args.markForks){
 
-			originOutput = callOrigins(*b);
+			callForks(*b, args.analogueOrder);
+			callStalls(*b, args.analogueOrder, analogueIncorporation);
+			
+			for (auto lf = (*b).leftForks.begin(); lf < (*b).leftForks.end(); lf++){
+			
+				leftForkOutput += (*b).chromosome + " " 
+				               + std::to_string(lf -> leftmostCoord) + " " 
+				               + std::to_string(lf -> rightmostCoord) + " " 
+				               + (*b).readID.substr(1) + " "
+				               + std::to_string( (*b).mappingLower ) + " "
+				               + std::to_string( (*b).mappingUpper ) + " "
+				               + (*b).strand + " "
+				               + std::to_string(lf -> score) + "\n"; 
+			}
+			
+			for (auto rf = (*b).rightForks.begin(); rf < (*b).rightForks.end(); rf++){
+			
+				rightForkOutput += (*b).chromosome + " " 
+				               + std::to_string(rf -> leftmostCoord) + " " 
+				               + std::to_string(rf -> rightmostCoord) + " " 
+				               + (*b).readID.substr(1) + " "
+				               + std::to_string( (*b).mappingLower ) + " "
+				               + std::to_string( (*b).mappingUpper ) + " "
+				               + (*b).strand + " "
+				               + std::to_string(rf -> score) + "\n"; 
+			}
+			
+			if (args.makeSignatures){
+			
+				for (auto lf = (*b).leftForks.begin(); lf < (*b).leftForks.end(); lf++){
+				
+					leftForkOutput_signatures += (*b).chromosome + " " 
+						       + std::to_string(lf -> leftmostCoord) + " " 
+						       + std::to_string(lf -> rightmostCoord) + " " 
+						       + (*b).readID.substr(1) + " "
+						       + std::to_string( (*b).mappingLower ) + " "
+						       + std::to_string( (*b).mappingUpper ) + " "
+						       + (*b).strand + " ";
+					for (auto s = (lf -> stress_signature).begin(); s < (lf -> stress_signature).end(); s++) leftForkOutput_signatures += std::to_string(*s) + " ";
+					leftForkOutput_signatures += std::to_string(lf -> score) + "\n"; 
+				}
+				
+				for (auto rf = (*b).rightForks.begin(); rf < (*b).rightForks.end(); rf++){
+				
+					rightForkOutput_signatures += (*b).chromosome + " " 
+						       + std::to_string(rf -> leftmostCoord) + " " 
+						       + std::to_string(rf -> rightmostCoord) + " " 
+						       + (*b).readID.substr(1) + " "
+						       + std::to_string( (*b).mappingLower ) + " "
+						       + std::to_string( (*b).mappingUpper ) + " "
+						       + (*b).strand + " ";
+					for (auto s = (rf -> stress_signature).begin(); s < (rf -> stress_signature).end(); s++) rightForkOutput_signatures += std::to_string(*s) + " ";
+					rightForkOutput_signatures += std::to_string(rf -> score) + "\n"; 
+				}			
+			}
+
+			if (args.markOrigins){
+
+				originOutput = callOrigins(*b,args);
+			}
+			if (args.markTerms){
+
+				termOutput = callTerminations(*b,args);
+			}
+			segmentToForks = true;
 		}
-		if (args.markTerms){
-			termOutput = callTerminations(*b);
+		
+		if (args.markAnalogues){
+
+			std::pair<std::string,std::string> analogueOutputPair = writeAnalogueRegions(*b, segmentToForks);
+			BrdUOutput = analogueOutputPair.first;
+			EdUOutput = analogueOutputPair.second;
 		}
-		if (args.markForks){
-			std::pair<std::string,std::string> forkOutputPair = callForks(*b);
-			leftForkOutput = forkOutputPair.first;
-			rightForkOutput = forkOutputPair.second;
+		
+		//fix the analogue segment indices
+		std::vector<int> eduSegment_output( (b -> positions).size(), 0);
+		std::vector<int> brduSegment_output( (b -> positions).size(), 0);
+		for (auto s = (*b).EdU_segment.begin(); s < (*b).EdU_segment.end(); s++){
+		
+			if ( (*s).partners == 0 ) continue;
+		
+			for (int i = (*s).leftmostIdx; i <= (*s).rightmostIdx; i++) eduSegment_output[i] = 1;
+		}
+		for (auto s = (*b).BrdU_segment.begin(); s < (*b).BrdU_segment.end(); s++){
+		
+			if ( (*s).partners == 0 ) continue;
+		
+			for (int i = (*s).leftmostIdx; i <= (*s).rightmostIdx; i++) brduSegment_output[i] = 1;
+		}
+		
+		//only output segmentation on non-trivial reads that have at least one analogue segment called on them
+		std::string readOutput;
+		if ( (*b).EdU_segment.size() > 0 or (*b).BrdU_segment.size() > 0){
+		
+			//write the read header
+			readOutput += (*b).readID + " " + (*b).chromosome + " " + std::to_string((*b).mappingLower) + " " + std::to_string((*b).mappingUpper) + " " + (*b).strand + "\n"; //header
+
+			for (size_t i = 0; i < (*b).positions.size(); i++){
+			
+				readOutput += std::to_string((*b).positions[i]) + "\t" + std::to_string(eduSegment_output[i]) + "\t" + std::to_string(brduSegment_output[i]) + "\n";
+			}
 		}
 
 		#pragma omp critical
 		{
-			outFile << readOutput;
-			if (args.markTerms and (*b).terminations.size() > 0) termFile << termOutput;
-			if (args.markOrigins and (*b).origins.size() > 0) originFile << originOutput;
-			if (args.markForks and leftForkOutput.size() > 0) leftForkFile << leftForkOutput;
-			if (args.markForks and rightForkOutput.size() > 0) rightForkFile << rightForkOutput;
+			fm.writeOutput(readOutput, termOutput, originOutput, leftForkOutput, rightForkOutput, leftForkOutput_signatures, rightForkOutput_signatures, BrdUOutput, EdUOutput);
 		}
 	}
 	buffer.clear();
 }
 
 
-bool checkReadLength( int length ){
+KMeansResult twoMeans_fs( std::vector< double > &observations ){
 
-	for (auto p = pooling.begin(); p < pooling.end(); p++){
+	double C1_old = 0.01;
+	double C2_old = 0.5;
+	double C1_new = C1_old;
+	double C2_new = C2_old;
+	double tol = 0.0001;
+	int maxIter = 100;
+	int iter = 0;
 
-		length /= *p;
+	std::vector<double> C1_points_old;
+	std::vector<double> C2_points_old;
+
+	//make an initial assignment
+	for ( size_t i = 0; i < observations.size(); i++ ){
+
+		if ( std::abs(observations[i] - C1_old) < std::abs(observations[i] - C2_old) ) C1_points_old.push_back(observations[i]);
+		else C2_points_old.push_back(observations[i]);
 	}
-	if (length <= 3) return false;
-	else return true;
+
+	//iterate until tolerance is met
+	do{
+		C1_old = C1_new;
+		C2_old = C2_new;
+
+		std::vector<double> C1_points_new;
+		std::vector<double> C2_points_new;
+
+		for ( size_t i = 0; i < C1_points_old.size(); i++ ){
+
+			if ( std::abs(C1_points_old[i] - C1_old) < std::abs(C1_points_old[i] - C2_old) ) C1_points_new.push_back(C1_points_old[i]);
+			else C2_points_new.push_back(C1_points_old[i]);
+		}	
+
+		for ( size_t i = 0; i < C2_points_old.size(); i++ ){
+
+			if ( std::abs(C2_points_old[i] - C1_old) < std::abs(C2_points_old[i] - C2_old) ) C1_points_new.push_back(C2_points_old[i]);
+			else C2_points_new.push_back(C2_points_old[i]);
+		}	
+
+		C1_new = vectorMean(C1_points_new);
+		C2_new = vectorMean(C2_points_new);
+
+		C1_points_old = C1_points_new;
+		C2_points_old = C2_points_new;
+
+		iter++;
+	}while (iter < maxIter and (std::abs(C1_old - C1_new)>tol or std::abs(C2_old - C2_new)>tol));
+	
+	//calculate lower bounds from K-means segmentation
+	auto C1_lowerBound = std::min_element( C1_points_old.begin(), C1_points_old.end() );
+	auto C2_lowerBound = std::min_element( C2_points_old.begin(), C2_points_old.end() );
+
+	//more conservative option - lower bound is mean - 1 stdv
+	double C1_stdv = vectorStdv( C1_points_old, C1_new );
+	double C2_stdv = vectorStdv( C2_points_old, C2_new );
+	
+	KMeansResult out = {C1_new, *C1_lowerBound, C1_stdv, C2_new, *C2_lowerBound, C2_stdv};
+
+	return out;
 }
 
 
-std::vector< unsigned int > parseCigar(std::string cigar, int mappingLower, int mappingUpper){
+int parseDetectLine(std::string line,
+			int &BrdUcalls,
+			int &EdUcalls,
+			int &attempts){
 
-	std::string cigarInt;
-	std::string cigarOp;
-	std::vector<std::pair<int,int>> cigarTuples;
+	std::string column;
+	std::stringstream ssLine(line);
+	int position = -1, cIndex = 0;
+	AnalogueScore B, E;
+	while ( std::getline( ssLine, column, '\t' ) ){
 
-	for (unsigned int i = 0; i < cigar.length(); i++){
+		if ( cIndex == 0 ){
 
-		if (std::isalpha(cigar[i]) == 0){ //not a match or deletion 
-
-			cigarInt += cigar[i];
+			position = std::stoi(column);
 		}
-		else{
+		else if ( cIndex == 1 ){
 
-			cigarOp = cigar[i];
-			assert(cigarOp == "M" or cigarOp == "D");
-			if (cigarOp == "M"){
+			E.set(std::stof(column));
+		}
+		else if ( cIndex == 2 ){
 
-				cigarTuples.push_back(std::make_pair(1,std::stoi(cigarInt)));
-			}
-			else{
+			B.set(std::stof(column));
+		}
+		cIndex++;
+	}
+	assert(position != -1);
 
-				cigarTuples.push_back(std::make_pair(0,std::stoi(cigarInt)));
-			}
-			cigarInt.clear();
-			cigarOp.clear();
+
+	if ( B.get() > 0.5 ){
+		BrdUcalls++;
+		attempts++;
+	}
+	else if ( E.get() > 0.5 ){
+		EdUcalls++;
+		attempts++;
+	}
+	else{
+		attempts++;
+	}
+	return position;
+}
+
+KMeansResult estimateAnalogueIncorporation(std::string detectFilename, int readCount){
+
+	int readCap = readCount;
+
+	std::ifstream inFile( detectFilename );
+	if ( not inFile.is_open() ) throw IOerror( detectFilename );
+
+	std::cout << "Estimating analogue incorporation..." << std::endl;
+
+	std::vector< double > BrdU_callFractions, EdU_callFractions;
+	
+	int resolution = 2000; //look in 2 kb segments
+	
+	int startingPos = -1;
+	int progress = 0;
+	std::string line;
+	
+	progressBar pb(readCap,false);
+	
+	int BrdUcalls = 0;
+	int EdUcalls = 0;
+	int attempts = 0;
+	int gap = 0;
+	
+	while( std::getline( inFile, line ) ){
+
+		if (line.substr(0,1) == "#") continue; //ignore header
+		if ( line.substr(0,1) == ">" ){
+
+			progress++;
+			pb.displayProgress( progress, 0, 0 );
+			
+			if (progress >= readCap) break;
+			
+			BrdUcalls = 0, EdUcalls = 0, attempts = 0, gap = 0, startingPos = -1;
+			continue;
+		}
+
+		int position = parseDetectLine(line, BrdUcalls, EdUcalls, attempts);
+
+		if (position == -1) continue;
+
+		if ( startingPos == -1 ) startingPos = position;
+		gap = position - startingPos;
+
+		if ( gap > resolution and attempts >= resolution / 10 ){
+
+			double BrdU_frac = (double) BrdUcalls / (double) attempts;
+			BrdU_callFractions.push_back( BrdU_frac );
+
+			double EdU_frac = (double) EdUcalls / (double) attempts;
+			EdU_callFractions.push_back( EdU_frac );
+
+			BrdUcalls = 0, EdUcalls = 0, attempts = 0, gap = 0, startingPos = -1;
 		}
 	}
+	std::cout << std::endl << "Done." << std::endl;
 
-	std::vector< unsigned int > mappedPositions;
-
-	int readHead = mappingLower;
-	for (auto c = cigarTuples.begin(); c < cigarTuples.end(); c++){
-
-		if (c -> first == 1){
-			for (size_t j = readHead; j < readHead + (c -> second); j++){
-				mappedPositions.push_back(j);
-			}
-			readHead += (c -> second);
-		}
-		else readHead += (c -> second);
+	KMeansResult BrdU_KMeans = twoMeans_fs( BrdU_callFractions );
+	
+	double BrdU_p;
+	double BrdU_stdv;
+	double BrdU_lowerBound;
+	
+	if (BrdU_KMeans.centroid_1 > BrdU_KMeans.centroid_2){
+		BrdU_p = BrdU_KMeans.centroid_1;
+		BrdU_stdv = BrdU_KMeans.centroid_1_stdv;
+		BrdU_lowerBound = BrdU_KMeans.centroid_1_lowerBound;
 	}
-	return mappedPositions;
+	else{
+		BrdU_p = BrdU_KMeans.centroid_2;
+		BrdU_stdv = BrdU_KMeans.centroid_2_stdv;
+		BrdU_lowerBound = BrdU_KMeans.centroid_2_lowerBound;	
+	}
+	
+	
+	KMeansResult EdU_KMeans = twoMeans_fs( EdU_callFractions );
+	
+	double EdU_p;
+	double EdU_stdv;
+	double EdU_lowerBound;
+	
+	if (EdU_KMeans.centroid_1 > EdU_KMeans.centroid_2){
+		EdU_p = EdU_KMeans.centroid_1;
+		EdU_stdv = EdU_KMeans.centroid_1_stdv;
+		EdU_lowerBound = EdU_KMeans.centroid_1_lowerBound;
+	}
+	else{
+		EdU_p = EdU_KMeans.centroid_2;
+		EdU_stdv = EdU_KMeans.centroid_2_stdv;
+		EdU_lowerBound = EdU_KMeans.centroid_2_lowerBound;	
+	}
+
+	std::cerr << "Estimated fraction of BrdU substitution in BrdU-positive regions: " << BrdU_p << std::endl;
+	std::cerr << "Estimated BrdU substitution lower bound in BrdU-positive regions: " << BrdU_lowerBound << std::endl;
+	std::cerr << "Estimated fraction of EdU substitution in EdU-positive regions: " << EdU_p << std::endl;
+	std::cerr << "Estimated EdU substitution lower bound in EdU-positive regions: " << EdU_lowerBound << std::endl;
+
+	inFile.close();
+	
+	KMeansResult out = {BrdU_p, BrdU_lowerBound, BrdU_stdv, EdU_p, EdU_lowerBound, EdU_stdv};
+	
+	return out;
 }
 
 
 int sense_main( int argc, char** argv ){
 
-	Arguments args = parseSenseArguments( argc, argv );
+	forkSenseArgs args = parseSenseArguments( argc, argv );
 
 	unsigned int maxBufferSize = 20*(args.threads);
-
-	//get the model
-	std::string pathExe = getExePath();
-	std::string modelPath = pathExe + "/dnn_models/" + "forkSense_segNet_synthetic.pb";
-	std::shared_ptr<ModelSession> session = model_load_cpu(modelPath.c_str(), "input_1", "time_distributed/Reshape_1", args.threads);
 
 	//get a read count
 	int readCount = 0;
@@ -917,40 +1535,18 @@ int sense_main( int argc, char** argv ){
 	}	
 	progressBar pb(readCount,true);
 	inFile.close();
+	
+	//estimate analogue incorporation
+	KMeansResult analogueIncorporation = estimateAnalogueIncorporation(args.detectFilename, readCount);
 
 	//open all the files
  	inFile.open( args.detectFilename );
 	if ( not inFile.is_open() ) throw IOerror( args.detectFilename );
  	std::ofstream outFile( args.outputFilename );
-	if ( not outFile.is_open() ) throw IOerror( args.outputFilename );
- 	std::ofstream originFile, termFile, leftForkFile, rightForkFile;
-	if (args.markTerms){
+ 	
+ 	fs_fileManager fm(args, analogueIncorporation);
 
-		termFile.open("terminations_DNAscent_forkSense.bed");
-		if ( not termFile.is_open() ) throw IOerror( "terminations_DNAscent_forkSense.bed" );
-	}
-	if (args.markOrigins){
-
-		originFile.open("origins_DNAscent_forkSense.bed");
-		if ( not originFile.is_open() ) throw IOerror( "origins_DNAscent_forkSense.bed" );
-	}
-	if (args.markForks){
-
-		leftForkFile.open("leftForks_DNAscent_forkSense.bed");
-		if ( not leftForkFile.is_open() ) throw IOerror( "leftForks_DNAscent_forkSense.bed" );
-
-		rightForkFile.open("rightForks_DNAscent_forkSense.bed");
-		if ( not rightForkFile.is_open() ) throw IOerror( "rightForks_DNAscent_forkSense.bed" );
-	}
-
-	//write the outfile header
-	std::string outHeader = writeForkSenseHeader(args.detectFilename, args.threads);;
-	outFile << outHeader;
-
-	//compute trim factor
-	unsigned int trimFactor = 1;
-	unsigned int failed = 0;
-	for (auto p = pooling.begin(); p < pooling.end(); p++) trimFactor *= *p;
+	int failed = 0;
 
 	std::vector< DetectedRead > readBuffer;
 	int progress = 0;
@@ -964,15 +1560,14 @@ int sense_main( int argc, char** argv ){
 			//check the read length on the back of the buffer
 			if (readBuffer.size() > 0){
 
-				bool longEnough = checkReadLength( readBuffer.back().positions.size() );
-				if (not longEnough){
+				if (readBuffer.back().positions.size() < 2000){
 					failed++;
 					readBuffer.pop_back();
 				}
 			}
 
 			//empty the buffer if it's full
-			if (readBuffer.size() >= maxBufferSize) emptyBuffer(readBuffer, args, session, outFile, originFile, termFile, leftForkFile, rightForkFile, trimFactor);
+			if (readBuffer.size() >= maxBufferSize) emptyBuffer(readBuffer, args, fm, analogueIncorporation);
 
 			progress++;
 			pb.displayProgress( progress, failed, 0 );
@@ -996,16 +1591,13 @@ int sense_main( int argc, char** argv ){
 			assert(d.mappingUpper > d.mappingLower);
 			readBuffer.push_back(d);
 		}
-		else if ( line.substr(0,1) == "%" ){
-
-			readBuffer.back().mappedPositions = parseCigar(line.substr(1), readBuffer.back().mappingLower, readBuffer.back().mappingUpper);
-		}
 		else{
 
 			std::string column;
 			std::stringstream ssLine(line);
 			int position = -1, cIndex = 0;
-			AnalogueScore B, BM;
+			AnalogueScore B, E;
+			bool qualityOK = true;
 			while ( std::getline( ssLine, column, '\t' ) ){
 
 				if ( cIndex == 0 ){
@@ -1014,27 +1606,34 @@ int sense_main( int argc, char** argv ){
 				}
 				else if ( cIndex == 1 ){
 
+					E.set(std::stof(column));
+				}
+				else if ( cIndex == 2 ){
+
 					B.set(std::stof(column));
+				}
+				else if ( cIndex == 3 ){
+					assert(column == "*");
+					qualityOK = false;
 				}
 				cIndex++;
 			}
 
+			readBuffer.back().alignmentQuality.push_back(qualityOK);
 			readBuffer.back().positions.push_back(position);
 			readBuffer.back().brduCalls.push_back(B.get());
+			readBuffer.back().eduCalls.push_back(E.get());
 		}
 	}
 
 	//empty the buffer at the end
-	bool longEnough = checkReadLength( readBuffer.back().positions.size() );
-	if (not longEnough){
+	if (readBuffer.back().positions.size() < 2000){
 		readBuffer.pop_back();
 	}
-	emptyBuffer(readBuffer, args, session, outFile, originFile, termFile, leftForkFile, rightForkFile, trimFactor);
+	emptyBuffer(readBuffer, args, fm, analogueIncorporation);
 
 	inFile.close();
-	outFile.close();
-	if (args.markTerms) termFile.close();
-	if (args.markOrigins) originFile.close();
+	fm.closeAll();
 
 	std::cout << std::endl << "Done." << std::endl;
 

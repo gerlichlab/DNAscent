@@ -11,181 +11,185 @@
 
 #include <cassert>
 #include <vector>
-#include "error_handling.h"
 #include <iostream>
+#include <fstream>
+#include "error_handling.h"
 
-/*function prototypes */
 int sense_main( int argc, char** argv );
+
+struct ReadSegment{
+	int leftmostCoord = 0;
+	int leftmostIdx = 0;
+	int rightmostCoord = 0;
+	int rightmostIdx = 0;
+	int partners = 0;
+	double score = 0.0;
+	std::vector<double> stress_signature;
+};
+
+
+struct KMeansResult{
+	double centroid_1;
+	double centroid_1_lowerBound;
+	double centroid_1_stdv;
+	double centroid_2;
+	double centroid_2_lowerBound;
+	double centroid_2_stdv;
+};
+
+struct forkSenseArgs {
+
+	std::string detectFilename;
+	std::string outputFilename;
+	std::string analogueOrder;
+	bool markOrigins = false;
+	bool markTerms = false;
+	bool markForks = false;
+	bool markAnalogues = false;
+	bool makeSignatures = false;
+	unsigned int threads = 1;
+};
+
+class AnalogueScore{
+
+	private:
+		double _score = 0.0;
+		bool _isSet = false;
+	public:
+		void set(double s){
+			_score = s;
+			_isSet = true;
+		}
+		double get(void){
+			assert(_isSet);
+			return _score;
+		}
+};
 
 class DetectedRead{
 
 	public:
-		std::vector< unsigned int > positions;
-		std::vector< unsigned int > mappedPositions;
-		std::vector< double > brduCalls;
+		std::vector< int > positions;
+		std::vector< bool > alignmentQuality;
+		std::vector< double > brduCalls, eduCalls;
+		std::map< int, double > stallScore;
 		std::string readID, chromosome, strand, header;
 		int mappingLower, mappingUpper;
-		std::vector<std::vector<float>> probabilities;
-		std::vector<std::pair<int,int>> origins;
-		std::vector<std::pair<int,int>> terminations;
+		std::vector< int > EdU_segment_label, BrdU_segment_label, thymidine_segment_label;
+		std::vector<ReadSegment> EdU_segment, BrdU_segment;
+		std::vector<ReadSegment> origins, terminations, leftForks, rightForks;
 		std::vector<double> tensorInput;
 		int64_t inputSize;
-		void trim(unsigned int trimFactor){
+};
+
+
+std::string writeForkSenseHeader(forkSenseArgs &, KMeansResult );
+std::string writeBedHeader( forkSenseArgs & );
+
+class fs_fileManager{
+
+	protected:
+	
+		forkSenseArgs inputArgs;
+		std::ofstream outFile, originFile, termFile, leftForkFile, rightForkFile, leftSignaturesFile, rightSignaturesFile, EdUFile, BrdUFile;
+
+	public:
+	
+		fs_fileManager( forkSenseArgs &args , KMeansResult analogueIncorporation){
+		
+			inputArgs = args;
+		
+			//main output file
+		 	outFile.open( args.outputFilename );
+			if ( not outFile.is_open() ) throw IOerror( args.outputFilename );
+			std::string outHeader = writeForkSenseHeader(args, analogueIncorporation);
+			outFile << outHeader;
 			
-			//assert(positions.size() > trimFactor and tensorInput.size() > trimFactor and positions.size() == tensorInput.size());
+			//aux bed files
+			if (args.markTerms){
 
-			/*			
-			unsigned int cropFromEnd = tensorInput.size() % trimFactor;
-			tensorInput.erase(tensorInput.end() - cropFromEnd, tensorInput.end());
-			*/
-			
-			//positions.erase(positions.end() - cropFromEnd, positions.end());
-			//assert(positions.size() % trimFactor == 0 and tensorInput.size() % trimFactor == 0);
-
-			/*
-			unsigned int cropFromEnd = (mappingUpper-mappingLower+1) % trimFactor;
-			inputSize = (mappingUpper-mappingLower+1) - cropFromEnd;
-			tensorInput.erase(tensorInput.end() - 2*cropFromEnd, tensorInput.end());
-
-			unsigned int upperThymPos = mappingUpper - cropFromEnd;
-			for (auto i = positions.size()-1; i >= 0; i--){
-
-				if (positions[i] > upperThymPos) positions.pop_back();
-				else break;
+				termFile.open("terminations_DNAscent_forkSense.bed");
+				termFile << writeBedHeader(args);
+				if ( not termFile.is_open() ) throw IOerror( "terminations_DNAscent_forkSense.bed" );
 			}
-			*/
+			if (args.markOrigins){
 
-			unsigned int cropFromEnd = mappedPositions.size() % trimFactor;
-			inputSize = mappedPositions.size() - cropFromEnd;
-			tensorInput.erase(tensorInput.end() - 2*cropFromEnd, tensorInput.end());
-			mappedPositions.erase(mappedPositions.end() - cropFromEnd, mappedPositions.end());
-
-			unsigned int upperThymPos = mappedPositions.back();
-			for (auto i = positions.size()-1; i >= 0; i--){
-
-				if (positions[i] > upperThymPos) positions.pop_back();
-				else break;
+				originFile.open("origins_DNAscent_forkSense.bed");
+				originFile << writeBedHeader(args);
+				if ( not originFile.is_open() ) throw IOerror( "origins_DNAscent_forkSense.bed" );
 			}
+			if (args.markForks){
 
+				leftForkFile.open("leftForks_DNAscent_forkSense.bed");
+				leftForkFile << writeBedHeader(args);
+				if ( not leftForkFile.is_open() ) throw IOerror( "leftForks_DNAscent_forkSense.bed" );
 
+				rightForkFile.open("rightForks_DNAscent_forkSense.bed");
+				rightForkFile << writeBedHeader(args);
+				if ( not rightForkFile.is_open() ) throw IOerror( "rightForks_DNAscent_forkSense.bed" );
+			}
+			if (args.makeSignatures){
+
+				leftSignaturesFile.open("leftForks_DNAscent_forkSense_stressSignatures.bed");
+				leftSignaturesFile << writeBedHeader(args);
+				if ( not leftSignaturesFile.is_open() ) throw IOerror( "leftForks_DNAscent_forkSense_stressSignatures.bed" );
+
+				rightSignaturesFile.open("rightForks_DNAscent_forkSense_stressSignatures.bed");
+				rightSignaturesFile << writeBedHeader(args);
+				if ( not rightSignaturesFile.is_open() ) throw IOerror( "rightForks_DNAscent_forkSense_stressSignatures.bed" );
+			}
+			if (args.markAnalogues){
+
+				BrdUFile.open("BrdU_DNAscent_forkSense.bed");
+				BrdUFile << writeBedHeader(args);
+				if ( not BrdUFile.is_open() ) throw IOerror( "BrdU_DNAscent_forkSense.bed" );
+
+				EdUFile.open("EdU_DNAscent_forkSense.bed");
+				EdUFile << writeBedHeader(args);
+				if ( not EdUFile.is_open() ) throw IOerror( "EdU_DNAscent_forkSense.bed" );
+			}
 		}
-		void generateInput(void){
-
-			/*
-			std::vector<double> out(mappingUpper-mappingLower+1,0.0001);
-			for (size_t i = 0; i < positions.size(); i++){
-				out[positions[i]-mappingLower] = brduCalls[i];
+		void writeOutput(std::string &readOutput,
+				std::string &termOutput,
+				std::string &originOutput,		
+				std::string &leftForkOutput,		
+				std::string &rightForkOutput,	
+				std::string &leftSignaturesOutput,		
+				std::string &rightSignaturesOutput,		
+				std::string &BrdUOutput,		
+				std::string &EdUOutput	){
+		
+			outFile << readOutput;
+			if (inputArgs.markTerms and termOutput.size() > 0) termFile << termOutput;
+			if (inputArgs.markOrigins and originOutput.size() > 0) originFile << originOutput;
+			if (inputArgs.markForks and leftForkOutput.size() > 0) leftForkFile << leftForkOutput;
+			if (inputArgs.markForks and rightForkOutput.size() > 0) rightForkFile << rightForkOutput;
+			if (inputArgs.makeSignatures and leftSignaturesOutput.size() > 0) leftSignaturesFile << leftSignaturesOutput;
+			if (inputArgs.makeSignatures and rightSignaturesOutput.size() > 0) rightSignaturesFile << rightSignaturesOutput;
+			if (inputArgs.markAnalogues and BrdUOutput.size() > 0) BrdUFile << BrdUOutput;
+			if (inputArgs.markAnalogues and EdUOutput.size() > 0) EdUFile << EdUOutput;
+		}
+		void closeAll(){
+			outFile.close();
+			if (inputArgs.markTerms) termFile.close();
+			if (inputArgs.markOrigins) originFile.close();
+			if (inputArgs.markAnalogues){
+				BrdUFile.close();
+				EdUFile.close();
 			}
-			tensorInput=out;
-			*/
-			
-			/*
-			for (size_t i = 0; i < positions.size(); i++){
-				tensorInput.push_back(brduCalls[i]);
+			if (inputArgs.makeSignatures){
+				leftSignaturesFile.close();
+				rightSignaturesFile.close();			
 			}
-			*/
-			
-
-			/*
-			int w = 501;
-			int deg = 5;
-			tensorInput = sg_smooth(brduCalls, w, deg);
-			*/
-			//adding moving average filter
-			/*
-			int window = 40;
-			for (size_t i = 0; i < positions.size(); i++){
-
-				double runningSum = 0;
-
-				for (int j = -window/2; j < window/2; j++){
-
-					if (i+j >= 0 and i+j < positions.size()) runningSum += brduCalls[i+j];
-
-				}
-
-				tensorInput.push_back(runningSum / (double) window);
+			if (inputArgs.markForks){
+				leftForkFile.close();
+				rightForkFile.close();			
 			}
-			*/
-			/*
-
-			int window = 10; //5;
-			std::vector<double> out(2*(mappingUpper-mappingLower+1),0.);
-			for (size_t i = 0; i < positions.size(); i++){
-
-				ssize_t lowerIndex = -1;
-				for (ssize_t j = i; j >= 0; j--){
-									
-					if (positions[i] - positions[j] > window) break;
-
-					lowerIndex = j;
-				}
-				assert(lowerIndex != -1);
-
-				ssize_t upperIndex = -1;
-				for (ssize_t j = i; j < positions.size(); j++){
-									
-					if (positions[j] - positions[i] > window) break;
-
-					upperIndex = j;
-				}
-				assert(upperIndex != -1);
-
-				double runningSum = 0.;
-				double count = 0.;
-				for (size_t j = lowerIndex; j <= upperIndex; j++){
-					runningSum += brduCalls[j];
-					count += 1.;
-				}
-				out[2*(positions[i]-mappingLower)] = runningSum / count;
-				out[2*(positions[i]-mappingLower)+1] = 1.;
-			}
-			tensorInput=out;
-			*/
-
-			int window = 10;
-			std::vector<double> out(2*mappedPositions.size(),0.);
-			int pIndex = 0;
-			for (size_t p = 0; p < mappedPositions.size(); p++){
-
-				//if it's a thymidine position
-				if (mappedPositions[p] == positions[pIndex]){
-					
-					ssize_t lowerIndex = -1;
-					for (ssize_t j = pIndex; j >= 0; j--){
-										
-						if (positions[pIndex] - positions[j] > window) break;
-
-						lowerIndex = j;
-					}
-					assert(lowerIndex != -1);
-
-					ssize_t upperIndex = -1;
-					for (ssize_t j = pIndex; j < positions.size(); j++){
-										
-						if (positions[j] - positions[pIndex] > window) break;
-
-						upperIndex = j;
-					}
-					assert(upperIndex != -1);
-
-					double runningSum = 0.;
-					double count = 0.;
-					for (size_t j = lowerIndex; j <= upperIndex; j++){
-						runningSum += brduCalls[j];
-						count += 1.;
-					}
-					out[2*p] = runningSum / count;
-					out[2*p+1] = 1.;
-					pIndex++;
-					
-					if (pIndex >= positions.size()) break;
-				}
-
-			}
-			tensorInput=out;
 		}
 };
+
+KMeansResult twoMeans_fs( std::vector< double > & );
+std::pair<int, int> segmentationTrim(std::vector< int > &, std::vector< double > &, std::vector< double > &, int , int );
 
 #endif
 

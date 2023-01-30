@@ -1,7 +1,7 @@
 #----------------------------------------------------------
 # Copyright 2020 University of Cambridge
 # Written by Michael A. Boemo (mb915@cam.ac.uk)
-# This software is licensed under GPL-2.0.  You should have
+# This software is licensed under GPL-3.0.  You should have
 # received a copy of the license with this software.  If
 # not, please Email the author.
 #----------------------------------------------------------
@@ -12,15 +12,14 @@ import os
 
 #--------------------------------------------------------------------------------------------------------------------------------------
 def splashHelp():
-	s = """dnascent2bedgraph.py: Converts the output of DNAscent detect, regions, and forkSense into bedgraphs.
+	s = """dnascent2bedgraph.py: Converts the output of DNAscent detect and forkSense into bedgraphs.
 To run dnascent2bedgraph.py, do:
   python dnascent2bedgraph.py [arguments]
 Example:
   python dnascent2bedgraph.py -d /path/to/dnascentDetect.out -f /path/to/dnascentForksense.out -o /path/to/newBedgraphDir
 Required arguments are at least one of the following:
   -d,--detect               path to DNAscent detect output file,
-  -f,--forkSense            path to DNAscent forkSense output file,
-  -r,--regions              path to DNAscent regions output file.
+  -f,--forkSense            path to DNAscent forkSense output file.
 Required argument is:
   -o,--output               output directory which will be created.
 Optional arguments are:
@@ -60,9 +59,6 @@ def parseArguments(args):
 		elif argument == '-f' or argument == '--forkSense':
 			a.sensePath = str(args[i+1])
 
-		elif argument == '-r' or argument == '--regions':
-			a.regionsPath = str(args[i+1])
-
 		elif argument == '-o' or argument == '--output':
 			a.outDir = str(args[i+1])
 
@@ -72,12 +68,12 @@ def parseArguments(args):
 		elif argument == '--maxLength':
 			a.maxLength = int(args[i+1])
 
+		elif argument == '-n' or argument == '--maxReads':
+			a.maxReads = int(args[i+1])
+
 		elif argument == '--targets':
 			a.targetPath = str(args[i+1])
 			a.useTargets = True
-
-		elif argument == '-n' or argument == '--maxReads':
-			a.maxReads = int(args[i+1])
 
 		elif argument == '--filesPerDir':
 			a.filesPerDir = int(args[i+1])
@@ -86,7 +82,7 @@ def parseArguments(args):
 			splashHelp()
 
 	#check that required arguments are met
-	if not ( ( hasattr( a, 'detectPath') or hasattr( a, 'sensePath') or hasattr( a, 'regionsPath') ) and  hasattr( a, 'outDir') ):
+	if not ( ( hasattr( a, 'detectPath') or hasattr( a, 'sensePath') ) and  hasattr( a, 'outDir') ):
 		splashHelp() 
 	return a
 
@@ -95,27 +91,19 @@ def parseArguments(args):
 def makeDetectLine(line, chromosome):
 	splitLine = line.rstrip().split()
 	pos = int(splitLine[0])
-	probBrdU = float(splitLine[1])
+	probBrdU = float(splitLine[2])
+	probEdU = float(splitLine[1])
 	sixMer = splitLine[2]
-	return chromosome + ' ' + str(pos) + ' ' + str(pos+1) + ' ' + str(probBrdU) + '\n'
+	return (chromosome + ' ' + str(pos) + ' ' + str(pos+1) + ' ' + str(probBrdU) + '\n',chromosome + ' ' + str(pos) + ' ' + str(pos+1) + ' ' + str(probEdU) + '\n')
 
 
 #--------------------------------------------------------------------------------------------------------------------------------------
 def makeSenseLine(line, chromosome, prevPos):
 	splitLine = line.rstrip().split()
 	pos = int(splitLine[0])
-	probForkLeft = float(splitLine[1])
-	probForkRight = float(splitLine[2])
-	return (chromosome + ' ' + str(prevPos) + ' ' + str(pos) + ' ' + str(probForkLeft) + '\n', chromosome + ' ' + str(prevPos) + ' ' + str(pos) + ' ' + str(probForkRight) + '\n')
-
-
-#--------------------------------------------------------------------------------------------------------------------------------------
-def makeRegionsLine(line, chromosome):
-	splitLine = line.rstrip().split()
-	posStart = int(splitLine[0])
-	posEnd = int(splitLine[1])
-	regionScore = float(splitLine[2])
-	return chromosome + ' ' + str(posStart) + ' ' + str(posEnd) + ' ' + str(regionScore) + '\n'
+	probEdUsegment = float(splitLine[1])
+	probBrdUsegment = float(splitLine[2])
+	return (chromosome + ' ' + str(prevPos) + ' ' + str(pos) + ' ' + str(probBrdUsegment) + '\n', chromosome + ' ' + str(prevPos) + ' ' + str(pos) + ' ' + str(probEdUsegment) + '\n', chromosome + ' ' + str(prevPos) + ' ' + str(pos) + ' ' + '\n')
 
 
 #--------------------------------------------------------------------------------------------------------------------------------------
@@ -173,38 +161,34 @@ def parseBaseFile(fname, args, targetIDs):
 					readID2directory[readID] = directoryCount
 
 					if fname[1] == "detect":
-						f_bg = open( args.outDir + '/' + str(directoryCount) + '/' + readID + '.detect.bedgraph','w')
+						f_bg = open( args.outDir + '/' + str(directoryCount) + '/' + readID + '.BrdUdetect.bedgraph','w')
+						f_bg2 = open( args.outDir + '/' + str(directoryCount) + '/' + readID + '.EdUdetect.bedgraph','w')
 						f_bg.write( 'track type=bedGraph name="'+readID +'" description="BedGraph format" visibility=full color=200,100,0 altColor=0,100,200 priority=20 viewLimits=0.0:1.0'+'\n')
+						f_bg2.write( 'track type=bedGraph name="'+readID +'" description="BedGraph format" visibility=full color=93,197,186 altColor=0,100,200 priority=20 viewLimits=0.0:1.0'+'\n')
 
 						for l in buff:
-							f_bg.write(l)
+							f_bg.write(l[0])
+							f_bg2.write(l[1])
 						f_bg.close()
-
-					elif fname[1] == "regions":
-						f_regions = open( args.outDir + '/' + str(readID2directory[readID]) + '/' + readID + '_regions.bedgraph','w')
-						f_regions.write( 'track type=bedGraph name="'+readID + '_' + strand + '_regions'+'" description="BedGraph format" visibility=full color=200,100,0 altColor=0,100,200 priority=20 viewLimits=-3.0:3.0'+'\n')
-
-						for l in buff:
-							f_regions.write(l)
-						f_regions.close()
+						f_bg2.close()
 
 					elif fname[1] == "sense":
 						#leftward moving fork
-						f_forkLeft = open( args.outDir + '/' + str(readID2directory[readID]) + '/' + readID + '_forkLeft.bedgraph','w')
-						f_forkLeft.write( 'track type=bedGraph name="'+readID + '_' + strand + '_forkLeft'+'" description="BedGraph format" visibility=full color=200,100,0 altColor=0,100,200 priority=20 viewLimits=0.0:1.0'+'\n')
+						f_BrdUsegment = open( args.outDir + '/' + str(readID2directory[readID]) + '/' + readID + '_BrdUsegment.bedgraph','w')
+						f_BrdUsegment.write( 'track type=bedGraph name="'+readID + '_' + strand + '_BrdUsegment'+'" description="BedGraph format" visibility=full color=200,100,0 altColor=0,100,200 priority=20 viewLimits=0.0:1.0'+'\n')
 
 						for l in buff:
-							f_forkLeft.write(l[0])
-						f_forkLeft.close()
+							f_BrdUsegment.write(l[0])
+						f_BrdUsegment.close()
 
 						#rightward moving fork
-						f_forkRight = open( args.outDir + '/' + str(readID2directory[readID]) + '/' + readID + '_forkRight.bedgraph','w')
-						f_forkRight.write( 'track type=bedGraph name="'+readID + '_' + strand + '_forkRight'+'" description="BedGraph format" visibility=full color=0,0,255 altColor=0,100,200 priority=20 viewLimits=0.0:1.0'+'\n')
+						f_EdUsegment = open( args.outDir + '/' + str(readID2directory[readID]) + '/' + readID + '_EdUsegment.bedgraph','w')
+						f_EdUsegment.write( 'track type=bedGraph name="'+readID + '_' + strand + '_EdUsegment'+'" description="BedGraph format" visibility=full color=93,197,186 altColor=0,100,200 priority=20 viewLimits=0.0:1.0'+'\n')
 
 						for l in buff:
-							f_forkRight.write(l[1])
-						f_forkRight.close()
-
+							f_EdUsegment.write(l[1])
+						f_EdUsegment.close()
+						
 					
 			#get readID and chromosome
 			splitLine = line.rstrip().split(' ')
@@ -220,12 +204,24 @@ def parseBaseFile(fname, args, targetIDs):
 
 		elif line[0] == '%':
 			continue
+
+
+		elif args.useTargets:
+
+			if readID not in targetIDs:
+				continue
+			else:
+				if fname[1] == "detect":
+					buff.append( makeDetectLine(line,chromosome) )
+				elif fname[1] == "sense":
+					splitLine = line.rstrip().split()
+					pos = int(splitLine[0])
+					buff.append( makeSenseLine(line,chromosome,prevPos) )
+					prevPos = pos
 		else:
 
 			if fname[1] == "detect":
 				buff.append( makeDetectLine(line,chromosome) )
-			elif fname[1] == "regions":
-				buff.append( makeRegionsLine(line,chromosome) )
 			elif fname[1] == "sense":
 				splitLine = line.rstrip().split()
 				pos = int(splitLine[0])
@@ -244,45 +240,41 @@ def parseBaseFile(fname, args, targetIDs):
 		readID2directory[readID] = directoryCount
 
 		if fname[1] == "detect":
-			f_bg = open( args.outDir + '/' + str(directoryCount) + '/' + readID + '.detect.bedgraph','w')
+			f_bg = open( args.outDir + '/' + str(directoryCount) + '/' + readID + '.BrdUdetect.bedgraph','w')
+			f_bg2 = open( args.outDir + '/' + str(directoryCount) + '/' + readID + '.EdUdetect.bedgraph','w')
 			f_bg.write( 'track type=bedGraph name="'+readID +'" description="BedGraph format" visibility=full color=200,100,0 altColor=0,100,200 priority=20 viewLimits=0.0:1.0'+'\n')
+			f_bg2.write( 'track type=bedGraph name="'+readID +'" description="BedGraph format" visibility=full color=93,197,186 altColor=0,100,200 priority=20 viewLimits=0.0:1.0'+'\n')
 
 			for l in buff:
-				f_bg.write(l)
+				f_bg.write(l[0])
+				f_bg2.write(l[1])
 			f_bg.close()
-
-		elif fname[1] == "regions":
-			f_regions = open( args.outDir + '/' + str(readID2directory[readID]) + '/' + readID + '_regions.bedgraph','w')
-			f_regions.write( 'track type=bedGraph name="'+readID + '_' + strand + '_regions'+'" description="BedGraph format" visibility=full color=200,100,0 altColor=0,100,200 priority=20 viewLimits=-3.0:3.0'+'\n')
-
-			for l in buff:
-				f_regions.write(l)
-			f_regions.close()
+			f_bg2.close()
 
 		elif fname[1] == "sense":
 			#leftward moving fork
-			f_forkLeft = open( args.outDir + '/' + str(readID2directory[readID]) + '/' + readID + '_forkLeft.bedgraph','w')
-			f_forkLeft.write( 'track type=bedGraph name="'+readID + '_' + strand + '_forkLeft'+'" description="BedGraph format" visibility=full color=200,100,0 altColor=0,100,200 priority=20 viewLimits=0.0:1.0'+'\n')
+			f_BrdUsegment = open( args.outDir + '/' + str(readID2directory[readID]) + '/' + readID + '_BrdUsegment.bedgraph','w')
+			f_BrdUsegment.write( 'track type=bedGraph name="'+readID + '_' + strand + '_BrdUsegment'+'" description="BedGraph format" visibility=full color=200,100,0 altColor=0,100,200 priority=20 viewLimits=0.0:1.0'+'\n')
 
 			for l in buff:
-				f_forkLeft.write(l[0])
-			f_forkLeft.close()
+				f_BrdUsegment.write(l[0])
+			f_BrdUsegment.close()
 
 			#rightward moving fork
-			f_forkRight = open( args.outDir + '/' + str(readID2directory[readID]) + '/' + readID + '_forkRight.bedgraph','w')
-			f_forkRight.write( 'track type=bedGraph name="'+readID + '_' + strand + '_forkRight'+'" description="BedGraph format" visibility=full color=0,0,255 altColor=0,100,200 priority=20 viewLimits=0.0:1.0'+'\n')
+			f_EdUsegment = open( args.outDir + '/' + str(readID2directory[readID]) + '/' + readID + '_EdUsegment.bedgraph','w')
+			f_EdUsegment.write( 'track type=bedGraph name="'+readID + '_' + strand + '_EdUsegment'+'" description="BedGraph format" visibility=full color=93,197,186 altColor=0,100,200 priority=20 viewLimits=0.0:1.0'+'\n')
 
 			for l in buff:
-				f_forkRight.write(l[1])
-			f_forkRight.close()
-
+				f_EdUsegment.write(l[1])
+			f_EdUsegment.close()
+			
 	f.close()
 	print('Done.')
 	return readID2directory
 
 
 #--------------------------------------------------------------------------------------------------------------------------------------
-def parseSecondaryFile(fname, readID2directory, args, targetIDs):
+def parseSecondaryFile(fname, readID2directory,args, targetIDs):
 	print('Parsing '+fname[0]+'...')
 	f = open(fname[0],'r')
 	first = True
@@ -331,29 +323,21 @@ def parseSecondaryFile(fname, readID2directory, args, targetIDs):
 
 						if fname[1] == "sense":
 							#leftward moving fork
-							f_forkLeft = open( args.outDir + '/' + str(readID2directory[readID]) + '/' + readID + '_forkLeft.bedgraph','w')
-							f_forkLeft.write( 'track type=bedGraph name="'+readID + '_' + strand + '_forkLeft'+'" description="BedGraph format" visibility=full color=200,100,0 altColor=0,100,200 priority=20 viewLimits=0.0:1.0'+'\n')
+							f_BrdUsegment = open( args.outDir + '/' + str(readID2directory[readID]) + '/' + readID + '_BrdUsegment.bedgraph','w')
+							f_BrdUsegment.write( 'track type=bedGraph name="'+readID + '_' + strand + '_BrdUsegment'+'" description="BedGraph format" visibility=full color=200,100,0 altColor=0,100,200 priority=20 viewLimits=0.0:1.0'+'\n')
 
 							for l in buff:
-								f_forkLeft.write(l[0])
-							f_forkLeft.close()
+								f_BrdUsegment.write(l[0])
+							f_BrdUsegment.close()
 
 							#rightward moving fork
-							f_forkRight = open( args.outDir + '/' + str(readID2directory[readID]) + '/' + readID + '_forkRight.bedgraph','w')
-							f_forkRight.write( 'track type=bedGraph name="'+readID + '_' + strand + '_forkRight'+'" description="BedGraph format" visibility=full color=0,0,255 altColor=0,100,200 priority=20 viewLimits=0.0:1.0'+'\n')
+							f_EdUsegment = open( args.outDir + '/' + str(readID2directory[readID]) + '/' + readID + '_EdUsegment.bedgraph','w')
+							f_EdUsegment.write( 'track type=bedGraph name="'+readID + '_' + strand + '_EdUsegment'+'" description="BedGraph format" visibility=full color=93,197,186 altColor=0,100,200 priority=20 viewLimits=0.0:1.0'+'\n')
 
 							for l in buff:
-								f_forkRight.write(l[1])
-							f_forkRight.close()
-
-
-						elif fname[1] == "regions":
-							f_regions = open( args.outDir + '/' + str(readID2directory[readID]) + '/' + readID + '_regions.bedgraph','w')
-							f_regions.write( 'track type=bedGraph name="'+readID + '_' + strand + '_regions'+'" description="BedGraph format" visibility=full color=200,100,0 altColor=0,100,200 priority=20 viewLimits=-3.0:3.0'+'\n')
-
-							for l in buff:
-								f_regions.write(l)
-							f_regions.close()
+								f_EdUsegment.write(l[1])
+							f_EdUsegment.close()
+							
 					
 			#get readID and chromosome
 			splitLine = line.rstrip().split(' ')
@@ -368,6 +352,17 @@ def parseSecondaryFile(fname, readID2directory, args, targetIDs):
 			buff = []
 		elif line[0] == '%':
 			continue
+
+		elif args.useTargets:
+
+			if readID not in targetIDs:
+				continue
+			else:
+				if fname[1] == "sense":
+					splitLine = line.rstrip().split()
+					pos = int(splitLine[0])
+					buff.append( makeSenseLine(line,chromosome,prevPos) )
+					prevPos = pos
 		else:
 
 			if fname[1] == "sense":
@@ -375,38 +370,29 @@ def parseSecondaryFile(fname, readID2directory, args, targetIDs):
 				pos = int(splitLine[0])
 				buff.append( makeSenseLine(line,chromosome,prevPos) )
 				prevPos = pos
-			elif fname[1] == "regions":
-				buff.append( makeRegionsLine(line,chromosome) )
 
 
 	rLen = mappingEnd - mappingStart
 
 	if rLen > args.minLength and rLen < args.maxLength and count < args.maxReads and readID in readID2directory:
 
-		if fname[1] == "regions":
-			f_regions = open( args.outDir + '/' + str(readID2directory[readID]) + '/' + readID + '_regions.bedgraph','w')
-			f_regions.write( 'track type=bedGraph name="'+readID + '_' + strand + '_regions'+'" description="BedGraph format" visibility=full color=200,100,0 altColor=0,100,200 priority=20 viewLimits=-3.0:3.0'+'\n')
-
-			for l in buff:
-				f_regions.write(l)
-			f_regions.close()
-
-		elif fname[1] == "sense":
+		if fname[1] == "sense":
 			#leftward moving fork
-			f_forkLeft = open( args.outDir + '/' + str(readID2directory[readID]) + '/' + readID + '_forkLeft.bedgraph','w')
-			f_forkLeft.write( 'track type=bedGraph name="'+readID + '_' + strand + '_forkLeft'+'" description="BedGraph format" visibility=full color=200,100,0 altColor=0,100,200 priority=20 viewLimits=0.0:1.0'+'\n')
+			f_BrdUsegment = open( args.outDir + '/' + str(readID2directory[readID]) + '/' + readID + '_BrdUsegment.bedgraph','w')
+			f_BrdUsegment.write( 'track type=bedGraph name="'+readID + '_' + strand + '_BrdUsegment'+'" description="BedGraph format" visibility=full color=200,100,0 altColor=0,100,200 priority=20 viewLimits=0.0:1.0'+'\n')
 
 			for l in buff:
-				f_forkLeft.write(l[0])
-			f_forkLeft.close()
+				f_BrdUsegment.write(l[0])
+			f_BrdUsegment.close()
 
 			#rightward moving fork
-			f_forkRight = open( args.outDir + '/' + str(readID2directory[readID]) + '/' + readID + '_forkRight.bedgraph','w')
-			f_forkRight.write( 'track type=bedGraph name="'+readID + '_' + strand + '_forkRight'+'" description="BedGraph format" visibility=full color=0,0,255 altColor=0,100,200 priority=20 viewLimits=0.0:1.0'+'\n')
+			f_EdUsegment = open( args.outDir + '/' + str(readID2directory[readID]) + '/' + readID + '_EdUsegment.bedgraph','w')
+			f_EdUsegment.write( 'track type=bedGraph name="'+readID + '_' + strand + '_EdUsegment'+'" description="BedGraph format" visibility=full color=93,197,186 altColor=0,100,200 priority=20 viewLimits=0.0:1.0'+'\n')
 
 			for l in buff:
-				f_forkRight.write(l[1])
-			f_forkRight.close()
+				f_EdUsegment.write(l[1])
+			f_EdUsegment.close()
+			
 
 	print('Done.')
 	f.close()
@@ -416,6 +402,17 @@ def parseSecondaryFile(fname, readID2directory, args, targetIDs):
 #MAIN
 
 args = parseArguments(sys.argv[1:])
+
+targetIDs = []
+if args.useTargets:
+	f = open(args.targetPath,'r')
+	for line in f:
+		if line[0] == '#':
+			continue
+		splitLine = line.rstrip().split()
+		readID = splitLine[3]
+		targetIDs.append(readID)
+	f.close()
 
 #check the output 
 if args.outDir[-1:] == "/":
@@ -429,64 +426,15 @@ else:
 baseFname = ""
 secondaryFname = []
 
-targetIDs = []
-if args.useTargets:
-	f = open(args.targetPath,'r')
-	for line in f:
-		splitLine = line.rstrip().split()
-		readID = splitLine[3]
-		
-		#only short
-		if abs(int(splitLine[2]) - int(splitLine[1])) > 4000:
-			continue
-
-		targetIDs.append(readID)
-	f.close()
-
 if hasattr( args, 'detectPath'):
 	baseFname = (args.detectPath,"detect")
 	if hasattr( args, 'sensePath'):
 		secondaryFname.append((args.sensePath,"sense"))
-	if hasattr( args, 'regionsPath'):
-		secondaryFname.append((args.regionsPath,"regions"))
-	
 else:
-	if hasattr( args, 'regionsPath') and hasattr( args, 'sensePath'):
-
-		#check which one has more reads, in case they were run on partial datasets
-		f = open(args.sensePath,'r')
-		readCountSense = 0
-		for line in f:
-			if line[0] == '>':
-				readCountSense += 1
-		f.close()
-
-		f = open(args.regionsPath,'r')
-		readCountRegions = 0
-		for line in f:
-			if line[0] == '>':
-				readCountRegions += 1
-		f.close()
-
-		if readCountRegions > readCountSense:
-			baseFname = (args.regionsPath,"regions")
-			secondaryFname.append((args.sensePath,"sense"))
-		else:
-			baseFname = (args.sensePath,"sense")
-			secondaryFname.append((args.regionsPath,"regions"))
-
-	elif hasattr( args, 'regionsPath'):
-		baseFname = (args.regionsPath,"regions")
-
-	elif hasattr( args, 'sensePath'):
+	if hasattr( args, 'sensePath'):
 		baseFname = (args.sensePath,"sense")
 
 
-readID2directory = parseBaseFile(baseFname, args)
+readID2directory = parseBaseFile(baseFname, args, targetIDs)
 for fname in secondaryFname:
-	parseSecondaryFile(fname, readID2directory, args)
-
-
-
-
-
+	parseSecondaryFile(fname, readID2directory, args, targetIDs)

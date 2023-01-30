@@ -98,7 +98,7 @@ template<class T> typename TFObjMeta<T>::UniquePtr tf_obj_unique_ptr(T *obj){
 class ModelSession{
 	public:
 		std::shared_ptr<TF_Graph*> graph;
-		std::shared_ptr<TF_Session*>	session;
+		std::shared_ptr<TF_Session*> session;
 		TF_Output inputs, outputs;
 };
 
@@ -125,26 +125,11 @@ struct TensorShape{
     }
 };
 
-static TF_Buffer* read_tf_buffer_from_file(const char* file) {
-	std::ifstream t(file, std::ifstream::binary);
-	t.exceptions(std::ifstream::failbit | std::ifstream::badbit);
-	t.seekg(0, std::ios::end);
-	size_t size = t.tellg();
-	auto data = std::make_unique<char[]>(size);
-	t.seekg(0);
-	t.read(data.get(), size);
-
-	TF_Buffer *buf = TF_NewBuffer();
-	buf->data = data.release();
-	buf->length = size;
-	buf->data_deallocator = free_cpp_array<char>;
-	return buf;
-}
 //end adapted from https://github.com/aljabr0/from-keras-to-c
 
 
-std::shared_ptr<ModelSession> model_load_cpu(const char *filename, const char *input_name, const char *output_name, unsigned int threads);
-std::shared_ptr<ModelSession> model_load_gpu(const char *filename, const char *input_name, const char *output_name, unsigned char device, unsigned int threads);
+std::shared_ptr<ModelSession> model_load_cpu(const char *filename, unsigned int threads, const char *);
+std::shared_ptr<ModelSession> model_load_gpu(const char *filename, unsigned char device, unsigned int threads, const char *);
 
 
 #endif

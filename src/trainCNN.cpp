@@ -193,8 +193,10 @@ int data_main( int argc, char** argv ){
 
 	//get the neural network model path
 	std::string pathExe = getExePath();
-	std::string modelPath = pathExe + "/dnn_models/" + "BrdU_detect.pb";
-	std::shared_ptr<ModelSession> session = model_load_cpu(modelPath.c_str(), "input_1", "time_distributed/Reshape_1",args.threads);
+	std::string modelPath = pathExe + "dnn_models/detect_model_BrdUEdU/";
+	std::string input_layer_name = "serving_default_input_1";
+
+	std::shared_ptr<ModelSession> session = model_load_cpu(modelPath.c_str(), args.threads, input_layer_name.c_str());
 
 	//load DNAscent index
 	std::map< std::string, std::string > readID2path;
@@ -233,7 +235,6 @@ int data_main( int argc, char** argv ){
 	const char *allReads = ".";
 	itr = sam_itr_querys(bam_idx,bam_hdr,allReads);
 
-	unsigned int windowLength = 10;
 	int result;
 	int failedEvents = 0;
 	unsigned int maxBufferSize;
@@ -263,7 +264,7 @@ int data_main( int argc, char** argv ){
 		/*if we've filled up the buffer with short reads, compute them in parallel */
 		if (buffer.size() >= maxBufferSize or (buffer.size() > 0 and result == -1 ) ){
 
-			#pragma omp parallel for schedule(dynamic) shared(buffer,windowLength,analogueModel,thymidineModel,args,prog,failed) num_threads(args.threads)
+			#pragma omp parallel for schedule(dynamic) shared(buffer,analogueModel,thymidineModel,args,prog,failed) num_threads(args.threads)
 			for (unsigned int i = 0; i < buffer.size(); i++){
 
 				read r; 
@@ -308,23 +309,18 @@ int data_main( int argc, char** argv ){
 					continue;
 				}
 
-				std::map<unsigned int, double> BrdUCalls;
-				if (args.useHMM){
-					BrdUCalls = llAcrossRead_forTraining( r, windowLength);
-				}
-				else{
-					unsigned int windowLength_align = 50;
-					std::pair<bool,std::shared_ptr<AlignedRead>> ar = eventalign_detect( r, windowLength_align, 1.0 );
-					if (not ar.first){
-						failed++;
-						prog++;
-						continue;
-					}
-					BrdUCalls = runCNN_training(ar.second,session);
-				}
+				std::map<unsigned int, std::pair<double,double>> analogueCalls;
 
-
-				std::string readOut = eventalign_train( r, 100, BrdUCalls, args.dilation, args.useRaw);
+				unsigned int windowLength_align = 50;
+				std::pair<bool,std::shared_ptr<AlignedRead>> ar = eventalign_detect( r, windowLength_align, 1.0 );
+				if (not ar.first){
+					failed++;
+					prog++;
+					continue;
+				}
+				analogueCalls = runCNN_training(ar.second,session);
+				
+				std::string readOut = eventalign_train( r, 100, analogueCalls, args.dilation, args.useRaw);
 
 				#pragma omp critical
 				{

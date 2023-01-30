@@ -1,4 +1,0 @@
-  File "cnn_trainCTC_gpu.py", line 416
-    inputs = {'the_input': X,
-                            ^
-TabError: inconsistent use of tabs and spaces in indentation

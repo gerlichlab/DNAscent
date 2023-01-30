@@ -12,6 +12,6 @@
 /*function prototypes */
 int train_main( int argc, char** argv );
 std::vector< double > gaussianMixtureEM( double, double, double, double, double, std::vector< double > &, double, int );
-std::map<int,int> DBSCAN( std::vector< double >, double, int );
+std::map<int,int> DBSCAN( std::vector< double > &, double, unsigned int );
 
 #endif
