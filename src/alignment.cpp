@@ -199,22 +199,20 @@ inline int lnArgMax(std::vector<double> v){
 	return maxarg;
 }
 
-//Initial transitions between modules (external transitions)
-double externalD2D = eln(Pore_Substrate_Config.HMM_config.externalD2D);
-double externalD2M1 = eln(Pore_Substrate_Config.HMM_config.externalD2M);
-double externalI2M1 = eln(Pore_Substrate_Config.HMM_config.externalI2M);
-double externalM12D = eln(Pore_Substrate_Config.HMM_config.externalM2D);
-
-//Initial transitions within modules (internal transitions)
-double internalM12I = eln(Pore_Substrate_Config.HMM_config.internalM2I);
-double internalI2I = eln(Pore_Substrate_Config.HMM_config.internalI2I);
-
 
 std::pair< double, std::vector< std::string > > builtinViterbi( std::vector <double> &observations,
 				std::string &sequence,
 				PoreParameters scalings,
 				bool flip,
 				double signalDilation){
+	
+	//HMM transition probabilities	
+	double externalD2D = eln(Pore_Substrate_Config.HMM_config.externalD2D);
+	double externalD2M1 = eln(Pore_Substrate_Config.HMM_config.externalD2M);
+	double externalI2M1 = eln(Pore_Substrate_Config.HMM_config.externalI2M);
+	double externalM12D = eln(Pore_Substrate_Config.HMM_config.externalM2D);
+	double internalM12I = eln(Pore_Substrate_Config.HMM_config.internalM2I);
+	double internalI2I = eln(Pore_Substrate_Config.HMM_config.internalI2I);
 
 	//transition probabilities that change on a per-read basis
 	double internalM12M1 = eln(1. - (1./scalings.eventsPerBase));
@@ -225,10 +223,7 @@ std::pair< double, std::vector< std::string > > builtinViterbi( std::vector <dou
 
 	unsigned int k = Pore_Substrate_Config.kmer_len;
 
-	size_t n_states = sequence.length() - k - 1;
-	// PLP checkpoint 2:
-	std::cout << k - 1 << " checkpoint 2" << std::endl;
-	// end checkpoint 2
+	size_t n_states = sequence.length() - k + 1;
 
 	//pre-compute 6mer indices
 	std::vector<unsigned int> kmerIndices;
@@ -594,19 +589,13 @@ std::string eventalign( read &r,
 				continue;
 			}
 
-			for (unsigned int i = windowLength; i < 1.5*windowLength - k + 1; i++){
-
-				// PLP checkpoint 3
-				std::cout << 1.5*windowLength - k + 1 << " checkpoint 3" << std::endl;
+			for (unsigned int i = windowLength; i < 1.5*windowLength - k - 1; i++){
 
 				std::string kmer = breakSnippet.substr(i,k);
 				std::pair<double,double> meanStd = Pore_Substrate_Config.pore_model[kmer2index(kmer, k)];
 
 				std::string kmer_back = breakSnippet.substr(i-1,k);
 				std::pair<double,double> meanStd_back = Pore_Substrate_Config.pore_model[kmer2index(kmer_back, k)];
-
-				// PLP checkpoint 5
-				std::cout << kmer_back << " checkpoint 5" << std::endl;
 
 				std::string kmer_front = breakSnippet.substr(i+1,k);
 				std::pair<double,double> meanStd_front = Pore_Substrate_Config.pore_model[kmer2index(kmer_front, k)];
@@ -643,7 +632,7 @@ std::string eventalign( read &r,
 		for ( unsigned int j = readHead; j < (r.eventAlignment).size(); j++ ){
 
 			/*if an event has been aligned to a position in the window, add it */
-			if ( (r.refToQuery)[posOnRef] <= (r.eventAlignment)[j].second and (r.eventAlignment)[j].second < (r.refToQuery)[posOnRef + windowLength - k - 1] ){
+			if ( (r.refToQuery)[posOnRef] <= (r.eventAlignment)[j].second and (r.eventAlignment)[j].second < (r.refToQuery)[posOnRef + windowLength - k + 1] ){
 
 				if (firstMatch){
 					readHead = j;
@@ -659,7 +648,7 @@ std::string eventalign( read &r,
 			}
 
 			/*stop once we get to the end of the window */
-			if ( (r.eventAlignment)[j].second >= (r.refToQuery)[posOnRef + windowLength - k - 1] ) break;
+			if ( (r.eventAlignment)[j].second >= (r.refToQuery)[posOnRef + windowLength - k + 1] ) break;
 		}
 
 		//pass on this window if we have a deletion
@@ -673,12 +662,8 @@ std::string eventalign( read &r,
 		//calculate where we are on the assembly - if we're a reverse complement, we're moving backwards down the reference genome
 		int globalPosOnRef;
 		if ( r.isReverse ) globalPosOnRef = r.refEnd - posOnRef - k;
-
 		else globalPosOnRef = r.refStart + posOnRef;
 		
-		// PLP checkpoint 6
-		std::cout << globalPosOnRef << " checkpoint 6" << std::endl;
-
 		std::pair< double, std::vector<std::string> > builtinAlignment = builtinViterbi( eventSnippet, readSnippet, r.scalings, false, signalDilation);
 
 		std::vector< std::string > stateLabels = builtinAlignment.second;
@@ -741,9 +726,6 @@ std::string eventalign( read &r,
 					else if (label == "I" and evIdx < lastM_ev){ //don't print insertions after the last match because we're going to align these in the next segment
 						out += std::to_string(evPos) + "\t" + kmerRef + "\t" + std::to_string((r.raw[raw_i]- r.scalings.shift) / r.scalings.scale) + "\t" + std::to_string(0) + "\t" + "NNNNNN" + "\t" + "0" + "\t" + "0" + "\n";
 					}
-
-					//PLP checkpoint 7
-					std::cout << out << " checkpoint 7" << std::endl;
 				}
 			}
 			else{
@@ -756,9 +738,6 @@ std::string eventalign( read &r,
 					out += std::to_string(evPos) + "\t" + kmerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(eventLength) + "\t" + "NNNNNN" + "\t" + "0" + "\t" + "0" + "\n";
 				}
 			}
-
-			//PLP checkpoint 8
-			std::cout << out << " checkpoint 8" << std::endl;
 
 	        evIdx ++;
 		}
@@ -781,7 +760,7 @@ std::string eventalign( read &r,
 	unsigned int rev_readHead = (r.eventAlignment).size() - 1;
 	std::vector<std::string> lines;
 	lines.reserve((r.referenceSeqMappedTo.size()) / 2);
-	while ( posOnRef > midpoint - k - 1 ){
+	while ( posOnRef > midpoint - k + 1 ){
 
 		//adjust so we can get the last bit of the read if it doesn't line up with the windows nicely
 		unsigned int basesToEnd = posOnRef - midpoint + k - 1;
@@ -848,7 +827,7 @@ std::string eventalign( read &r,
 			//std::cout << (r.eventAlignment)[j].second << " " << j << " " << (r.refToQuery)[posOnRef] << " " << rev_readHead << std::endl;
 
 			/*if an event has been aligned to a position in the window, add it */
-			if ( (r.eventAlignment)[j].second > (r.refToQuery)[posOnRef - windowLength] and (r.eventAlignment)[j].second <= (r.refToQuery)[posOnRef - k - 1] ){
+			if ( (r.eventAlignment)[j].second > (r.refToQuery)[posOnRef - windowLength] and (r.eventAlignment)[j].second <= (r.refToQuery)[posOnRef - k + 1] ){
 
 				if (firstMatch){
 					rev_readHead = j;
@@ -1019,7 +998,7 @@ std::string eventalign_train( read &r,
 				continue;
 			}
 
-			for (unsigned int i = windowLength; i < 1.5*windowLength - k + 1; i++){
+			for (unsigned int i = windowLength; i < 1.5*windowLength - k - 1; i++){
 
 				std::string kmer = breakSnippet.substr(i,k);
 				std::pair<double,double> meanStd = Pore_Substrate_Config.pore_model[kmer2index(kmer, k)];
@@ -1061,7 +1040,7 @@ std::string eventalign_train( read &r,
 		for ( unsigned int j = readHead; j < (r.eventAlignment).size(); j++ ){
 
 			/*if an event has been aligned to a position in the window, add it */
-			if ( (r.refToQuery)[posOnRef] <= (r.eventAlignment)[j].second and (r.eventAlignment)[j].second < (r.refToQuery)[posOnRef + windowLength - k - 1] ){
+			if ( (r.refToQuery)[posOnRef] <= (r.eventAlignment)[j].second and (r.eventAlignment)[j].second < (r.refToQuery)[posOnRef + windowLength - k + 1] ){
 
 				if (firstMatch){
 					readHead = j;
@@ -1186,7 +1165,7 @@ std::string eventalign_train( read &r,
 	posOnRef = r.referenceSeqMappedTo.size() - 1;
 	unsigned int rev_readHead = (r.eventAlignment).size() - 1;
 	std::vector<std::string> lines;
-	while ( posOnRef > midpoint - k - 1 ){
+	while ( posOnRef > midpoint - k + 1 ){
 
 		//adjust so we can get the last bit of the read if it doesn't line up with the windows nicely
 		unsigned int basesToEnd = posOnRef - midpoint + k - 1;
@@ -1251,7 +1230,7 @@ std::string eventalign_train( read &r,
 			//std::cout << (r.eventAlignment)[j].second << " " << j << " " << (r.refToQuery)[posOnRef] << " " << rev_readHead << std::endl;
 
 			/*if an event has been aligned to a position in the window, add it */
-			if ( (r.eventAlignment)[j].second > (r.refToQuery)[posOnRef - windowLength] and (r.eventAlignment)[j].second <= (r.refToQuery)[posOnRef - k - 1] ){
+			if ( (r.eventAlignment)[j].second > (r.refToQuery)[posOnRef - windowLength] and (r.eventAlignment)[j].second <= (r.refToQuery)[posOnRef - k + 1] ){
 
 				if (firstMatch){
 					rev_readHead = j;
@@ -1381,8 +1360,8 @@ std::string eventalign_train( read &r,
 
 
 std::pair<bool,std::shared_ptr<AlignedRead>> eventalign_detect( read &r,
-							  	  unsigned int totalWindowLength,
-							  	  double signalDilation ){
+							  	unsigned int totalWindowLength,
+							  	double signalDilation ){
 
 	unsigned int k = Pore_Substrate_Config.kmer_len;
 
@@ -1422,7 +1401,7 @@ std::pair<bool,std::shared_ptr<AlignedRead>> eventalign_detect( read &r,
 				continue;
 			}
 
-			for (unsigned int i = windowLength; i < 1.5*windowLength - k + 1; i++){
+			for (unsigned int i = windowLength; i < 1.5*windowLength - k - 1; i++){
 
 				std::string kmer = breakSnippet.substr(i,k);
 				std::pair<double,double> meanStd = Pore_Substrate_Config.pore_model[kmer2index(kmer,k)];
@@ -1472,7 +1451,7 @@ std::cerr << "Out of reference sequence size: " << (r.referenceSeqMappedTo).leng
 		for ( unsigned int j = readHead; j < (r.eventAlignment).size(); j++ ){
 
 			/*if an event has been aligned to a position in the window, add it */
-			if ( (r.refToQuery)[posOnRef] <= (r.eventAlignment)[j].second and (r.eventAlignment)[j].second < (r.refToQuery)[posOnRef + windowLength - k - 1] ){
+			if ( (r.refToQuery)[posOnRef] <= (r.eventAlignment)[j].second and (r.eventAlignment)[j].second < (r.refToQuery)[posOnRef + windowLength - k + 1] ){
 
 				if (firstMatch){
 					readHead = j;
@@ -1488,7 +1467,7 @@ std::cerr << "Out of reference sequence size: " << (r.referenceSeqMappedTo).leng
 			}
 
 			/*stop once we get to the end of the window */
-			if ( (r.eventAlignment)[j].second >= (r.refToQuery)[posOnRef + windowLength - k - 1] ) break;
+			if ( (r.eventAlignment)[j].second >= (r.refToQuery)[posOnRef + windowLength - k + 1] ) break;
 		}
 		
 		//flag large insertions
@@ -1516,9 +1495,7 @@ std::cerr << "Out of reference sequence size: " << (r.referenceSeqMappedTo).leng
 		int globalPosOnRef;
 		if ( r.isReverse ) globalPosOnRef = r.refEnd - posOnRef - k;
 		else globalPosOnRef = r.refStart + posOnRef;
-
 		std::pair< double, std::vector<std::string> > builtinAlignment = builtinViterbi( eventSnippet, readSnippet, r.scalings, false, signalDilation);
-
 		std::vector< std::string > stateLabels = builtinAlignment.second;
 		size_t lastM_ev = 0;
 		size_t lastM_ref = 0;
@@ -1598,7 +1575,7 @@ std::cerr << "Out of reference sequence size: " << (r.referenceSeqMappedTo).leng
 	//REVERSE
 	posOnRef = r.referenceSeqMappedTo.size() - 1;
 	int rev_readHead = (r.eventAlignment).size() - 1;
-	while ( posOnRef > midpoint - k - 1 ){
+	while ( posOnRef > midpoint - k + 1 ){
 
 		//adjust so we can get the last bit of the read if it doesn't line up with the windows nicely
 		unsigned int basesToEnd = posOnRef - midpoint + k - 1;
@@ -1672,7 +1649,7 @@ std::cerr << "Out of reference sequence size: " << (r.referenceSeqMappedTo).leng
 			//std::cout << (r.eventAlignment)[j].second << " " << j << " " << (r.refToQuery)[posOnRef] << " " << rev_readHead << std::endl;
 
 			/*if an event has been aligned to a position in the window, add it */
-			if ( (r.eventAlignment)[j].second > (r.refToQuery)[posOnRef - windowLength] and (r.eventAlignment)[j].second <= (r.refToQuery)[posOnRef - k - 1] ){
+			if ( (r.eventAlignment)[j].second > (r.refToQuery)[posOnRef - windowLength] and (r.eventAlignment)[j].second <= (r.refToQuery)[posOnRef - k + 1] ){
 
 				if (firstMatch){
 					rev_readHead = j;

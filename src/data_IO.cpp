@@ -255,10 +255,6 @@ std::vector< std::pair< double, double > > import_poreModel( std::string poreMod
 
 	std::vector< std::pair< double, double > > indexedPoreModel(pow(4,kmer_len), std::make_pair(0,0));
 	
-	// PLP checkpoint 4
-	// std::cout << pow(4,kmer_len) << "checkpoint 4" << std::endl;
-	// end checkpoint 4
-	
 	for(auto it = kmer2MeanStd.cbegin(); it != kmer2MeanStd.cend(); ++it){
 
 		std::string kmer = it -> first;

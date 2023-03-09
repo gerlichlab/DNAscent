@@ -918,8 +918,8 @@ int detect_main( int argc, char** argv ){
 
 	//get the neural network model path
 	std::string pathExe = getExePath();
-	std::string modelPath = pathExe + "dnn_models/detect_model_BrdUEdU/";
-	std::string input_layer_name = "serving_default_input_1";
+	std::string modelPath = pathExe + Pore_Substrate_Config.fn_dnn_model;
+	std::string input_layer_name = Pore_Substrate_Config.dnn_model_inputLayer;
 
 	std::shared_ptr<ModelSession> session;
 
@@ -967,8 +967,6 @@ int detect_main( int argc, char** argv ){
 	const char *allReads = ".";
 	itr = sam_itr_querys(bam_idx,bam_hdr,allReads);
 
-	unsigned int windowLength_align = 50;
-
 	int result;
 	int failedEvents = 0;
 	unsigned int maxBufferSize;
@@ -1000,7 +998,7 @@ int detect_main( int argc, char** argv ){
 		/*if we've filled up the buffer with short reads, compute them in parallel */
 		if (buffer.size() >= maxBufferSize or (buffer.size() > 0 and result == -1 ) ){
 
-			#pragma omp parallel for schedule(dynamic) shared(buffer,windowLength_align,Pore_Substrate_Config,args,prog,failed,session) num_threads(args.threads)
+			#pragma omp parallel for schedule(dynamic) shared(buffer,Pore_Substrate_Config,args,prog,failed,session) num_threads(args.threads)
 			for (unsigned int i = 0; i < buffer.size(); i++){
 
 				read r;
@@ -1045,7 +1043,7 @@ int detect_main( int argc, char** argv ){
 					continue;
 				}
 
-				std::pair<bool,std::shared_ptr<AlignedRead>> ar = eventalign_detect( r, windowLength_align, args.dilation );
+				std::pair<bool,std::shared_ptr<AlignedRead>> ar = eventalign_detect( r, Pore_Substrate_Config.windowLength_align, args.dilation );
 
 				if (not ar.first){
 					failed++;

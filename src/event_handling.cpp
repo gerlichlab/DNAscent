@@ -262,7 +262,6 @@ void adaptive_banded_simple_event_align( std::vector< double > &raw, read &r, Po
 	PoreParameters rescale;
 
 	size_t k = Pore_Substrate_Config.kmer_len;
-	//const Alphabet* alphabet = pore_model.pmalphabet;
 	size_t n_events = raw.size();
 	size_t n_kmers = sequence.size() - k + 1;
 
@@ -272,11 +271,11 @@ void adaptive_banded_simple_event_align( std::vector< double > &raw, read &r, Po
 	const uint8_t FROM_L = 2;
  
 	// qc
-	double min_average_log_emission = -5.0;
-	int max_gap_threshold = 50;
+	double min_average_log_emission = Pore_Substrate_Config.AdaptiveBanded_config.min_average_log_emission;
+	int max_gap_threshold = Pore_Substrate_Config.AdaptiveBanded_config.max_gap_threshold;
 
 	// banding
-	int bandwidth = 100;
+	int bandwidth = Pore_Substrate_Config.AdaptiveBanded_config.bandwidth;
 
 	int half_bandwidth = bandwidth / 2;
  
@@ -663,6 +662,7 @@ void normaliseEvents( read &r, bool bulkFast5 ){
 		}
 	}
 	*/
+	
 
 	// Precompute k-mer ranks for rough rescaling and banded alignment
 	size_t k = Pore_Substrate_Config.kmer_len;
@@ -679,5 +679,4 @@ void normaliseEvents( read &r, bool bulkFast5 ){
 	/*align 5mers to events using the basecall */
 	adaptive_banded_simple_event_align(r.normalisedEvents, r, s, kmer_ranks);
 	r.scalings.eventsPerBase = std::max(1.25, (double) r.eventAlignment.size() / (double) (r.basecall.size() - k));
-
 }
