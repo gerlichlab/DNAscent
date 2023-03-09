@@ -16,17 +16,18 @@
 #include <libgen.h>
 #include <iostream>
 #include <ctime>
+#include <cmath>
 #include <random>
 #include <algorithm>
 #include <fstream>
 #include <sstream>
 #include "data_IO.h"
 #include "pfasta/pfasta.h"
-#include "poreModels.h"
 #include "gitcommit.h"
 #include "common.h"
 #include "softwarepath.h"
 #include "forkSense.h"
+#include "config.h"
 
 std::string writeDetectHeader(std::string alignmentFilename,
 		                std::string refFilename,
@@ -203,20 +204,20 @@ std::string getGitCommit(void){
 std::map<std::string, int> base2index = {{"A",0}, {"T",1}, {"G",2}, {"C",3}};
 
 
-unsigned int sixMer2index(std::string &sixMer){
+unsigned int kmer2index(std::string &kmer, unsigned int kmer_len){
 
 	unsigned int p = 1;
 	unsigned int r = 0;
-	for (size_t i = 0; i < 6; i++){
+	for (size_t i = 0; i < kmer_len; i++){
 
-		r += base2index[sixMer.substr(6-i-1,1)] * p;
+		r += base2index[kmer.substr(kmer_len-i-1,1)] * p;
 		p *= 4;
 	}
 	return r;
 }
 
 
-std::vector< std::pair< double, double > > import_poreModel( std::string poreModelFilename ){
+std::vector< std::pair< double, double > > import_poreModel( std::string poreModelFilename, unsigned int kmer_len ){
 
 	std::string pathExe = getExePath();
 	std::string modelPath = pathExe + "/pore_models/" + poreModelFilename;
@@ -252,14 +253,18 @@ std::vector< std::pair< double, double > > import_poreModel( std::string poreMod
 		}
 	}
 
-	std::vector< std::pair< double, double > > indexedPoreModel(4096, std::make_pair(0,0));
-
+	std::vector< std::pair< double, double > > indexedPoreModel(pow(4,kmer_len), std::make_pair(0,0));
+	
+	// PLP checkpoint 4
+	// std::cout << pow(4,kmer_len) << "checkpoint 4" << std::endl;
+	// end checkpoint 4
+	
 	for(auto it = kmer2MeanStd.cbegin(); it != kmer2MeanStd.cend(); ++it){
 
-		std::string sixMer = it -> first;
-		kmer2MeanStd[sixMer] = std::make_pair(it->second.first, it->second.second);
+		std::string kmer = it -> first;
+		kmer2MeanStd[kmer] = std::make_pair(it->second.first, it->second.second);
 
-		indexedPoreModel[sixMer2index(sixMer)] = std::make_pair(it->second.first, it->second.second);
+		indexedPoreModel[kmer2index(kmer, kmer_len)] = std::make_pair(it->second.first, it->second.second);
 
 	    //std::cout << it->first << " " << it->second.first << " " << it->second.second << "\n";
 	}

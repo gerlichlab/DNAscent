@@ -10,7 +10,6 @@
 #define ERROR_HANDLING_H
 
 #include "scrappie/event_detection.h"
-#include "poreModels.h"
 #include "common.h"
 #include "data_IO.h"
 #include <math.h>

@@ -16,8 +16,8 @@
 #include "error_handling.h"
 #include "event_handling.h"
 #include "../fast5/include/fast5.hpp"
-#include "poreModels.h"
 #include <chrono>
+#include "config.h"
 
 //extern "C" {
 #include "scrappie/event_detection.h"
@@ -228,9 +228,9 @@ std::vector< double > solveLinearSystem( std::vector< std::vector< double > > A,
 //start: adapted from nanopolish (https://github.com/jts/nanopolish)
 //licensed under MIT
 
-inline float logProbabilityMatch(unsigned int sixMerIndex, double x, double shift, double scale){
+inline float logProbabilityMatch(unsigned int kmerIndex, double x, double shift, double scale){
 
-	std::pair<double,double> meanStd = thymidineModel[sixMerIndex];
+	std::pair<double,double> meanStd = Pore_Substrate_Config.pore_model[kmerIndex]; //PLP&SY: adapt
 	double mu = scale * meanStd.first + shift;
 	double sigma = meanStd.second;
 
@@ -261,7 +261,7 @@ void adaptive_banded_simple_event_align( std::vector< double > &raw, read &r, Po
 	std::vector< double > b(2,0.0);
 	PoreParameters rescale;
 
-	size_t k = 6;
+	size_t k = Pore_Substrate_Config.kmer_len;
 	//const Alphabet* alphabet = pore_model.pmalphabet;
 	size_t n_events = raw.size();
 	size_t n_kmers = sequence.size() - k + 1;
@@ -302,8 +302,8 @@ void adaptive_banded_simple_event_align( std::vector< double > &raw, read &r, Po
 	// Precompute k-mer ranks to avoid doing this in the inner loop
 	//std::vector<unsigned int> kmer_ranks(n_kmers);
 	//for(size_t i = 0; i < n_kmers; i++) {
-	//	std::string sixMer = sequence.substr(i, k);
-	//	kmer_ranks[i] = sixMer2index(sixMer);
+	//	std::string kmer = sequence.substr(i, k);
+	//	kmer_ranks[i] = kmer2index(kmer);
 	//}
 
 	typedef std::vector<float> bandscore;
@@ -478,17 +478,17 @@ void adaptive_banded_simple_event_align( std::vector< double > &raw, read &r, Po
 		r.eventAlignment.push_back(std::make_pair(curr_event_idx, curr_kmer_idx));
 
 		// qc stats
-		//size_t kmer_rank = sixMerRank_nanopolish(sequence.substr(curr_kmer_idx, k).c_str());
+		//size_t kmer_rank = kmerRank_nanopolish(sequence.substr(curr_kmer_idx, k).c_str());
 		//sum_emission += log_probability_match_r9(read, pore_model, kmer_rank, curr_event_idx, strand_idx);
 		unsigned int kmer_rank = kmer_ranks[curr_kmer_idx];
-		std::pair<double,double> meanStd = thymidineModel[kmer_rank];
-		//eventToScore[curr_event_idx] = logProbabilityMatch(sixMer, raw[curr_event_idx], s.shift, s.scale);
+		std::pair<double,double> meanStd = Pore_Substrate_Config.pore_model[kmer_rank];
+		//eventToScore[curr_event_idx] = logProbabilityMatch(kmer, raw[curr_event_idx], s.shift, s.scale);
 		float logProbability = logProbabilityMatch(kmer_rank, raw[curr_event_idx], s.shift, s.scale);
 		sum_emission += logProbability;
 		eventDiffs += meanStd.first - raw[curr_event_idx];
 
 		//update A,b for recomputing shift and scale
-		//only do this for sixmers that don't contain a T
+		//only do this for kmers that don't contain a T
 
 		A[0][0] += 1.0 / pow( meanStd.second, 2.0 );
 		A[0][1] += meanStd.first / pow( meanStd.second, 2.0 );
@@ -548,8 +548,8 @@ void adaptive_banded_simple_event_align( std::vector< double > &raw, read &r, Po
 		for (unsigned int i = 0; i < r.eventAlignment.size(); i++){
 
 			unsigned int kmer_rank = kmer_ranks[r.eventAlignment[i].second];
-			std::pair<double,double> meanStd = thymidineModel[kmer_rank];
-			//if (sixMer.find("T") != std::string::npos) continue;
+			std::pair<double,double> meanStd = Pore_Substrate_Config.pore_model[kmer_rank];
+			//if (kmer.find("T") != std::string::npos) continue;
 			double event = raw[r.eventAlignment[i].first];
 			double mu,stdv;
 			mu = meanStd.first;
@@ -577,8 +577,8 @@ PoreParameters roughRescale( std::vector< double > &means, std::string &basecall
 
 	PoreParameters s;
 
-	size_t k = 6;
-	unsigned int numOfSixMers = basecall.size() - k + 1;
+	size_t k = Pore_Substrate_Config.kmer_len;
+	unsigned int numOfKmers = basecall.size() - k + 1;
 
 	/*get a rough estimate for shift */
 	double event_sum = 0.0;
@@ -587,19 +587,19 @@ PoreParameters roughRescale( std::vector< double > &means, std::string &basecall
 		event_sum += means[i];
 	}
 
-	double sixMer_sum = 0.0;
-	double sixMer_sq_sum = 0.0;
-	std::string sixMer;
-	for ( unsigned int i = 0; i < numOfSixMers; i ++ ){
+	double kmer_sum = 0.0;
+	double kmer_sq_sum = 0.0;
+	std::string kmer;
+	for ( unsigned int i = 0; i < numOfKmers; i ++ ){
 
-		sixMer = basecall.substr(i, 6);
-		std::pair<double,double> meanStd = thymidineModel[kmer_ranks[i]];
-		double sixMer_mean = meanStd.first;
-		sixMer_sum += sixMer_mean;
-		sixMer_sq_sum += pow( sixMer_mean, 2.0 );
+		kmer = basecall.substr(i, k);
+		std::pair<double,double> meanStd = Pore_Substrate_Config.pore_model[kmer_ranks[i]];
+		double kmer_mean = meanStd.first;
+		kmer_sum += kmer_mean;
+		kmer_sq_sum += pow( kmer_mean, 2.0 );
 	}
 
-	s.shift = event_sum / means.size() - sixMer_sum / numOfSixMers;
+	s.shift = event_sum / means.size() - kmer_sum / numOfKmers;
 
 	/*get a rough estimate for scale */
 	double event_sq_sum = 0.0;
@@ -608,7 +608,7 @@ PoreParameters roughRescale( std::vector< double > &means, std::string &basecall
 		event_sq_sum += pow( means[i] - s.shift, 2.0 );
 	}
 
-	s.scale = (event_sq_sum / means.size()) / (sixMer_sq_sum / numOfSixMers ); 
+	s.scale = (event_sq_sum / means.size()) / (kmer_sq_sum / numOfKmers ); 
 	s.drift = 0.0;
 	s.var = 1.0;
 	return s;
@@ -665,12 +665,12 @@ void normaliseEvents( read &r, bool bulkFast5 ){
 	*/
 
 	// Precompute k-mer ranks for rough rescaling and banded alignment
-	size_t k = 6;
+	size_t k = Pore_Substrate_Config.kmer_len;
 	size_t n_kmers = r.basecall.size() - k + 1;
 	std::vector<unsigned int> kmer_ranks(n_kmers);
 	for(size_t i = 0; i < n_kmers; i++) {
-		std::string sixMer = r.basecall.substr(i, k);
-		kmer_ranks[i] = sixMer2index(sixMer);
+		std::string kmer = r.basecall.substr(i, k);
+		kmer_ranks[i] = kmer2index(kmer, k);
 	}
 
 	/*rough calculation of shift and scale so that we can align events */
@@ -678,6 +678,6 @@ void normaliseEvents( read &r, bool bulkFast5 ){
 
 	/*align 5mers to events using the basecall */
 	adaptive_banded_simple_event_align(r.normalisedEvents, r, s, kmer_ranks);
-	r.scalings.eventsPerBase = std::max(1.25, (double) r.eventAlignment.size() / (double) (r.basecall.size() - 5));
+	r.scalings.eventsPerBase = std::max(1.25, (double) r.eventAlignment.size() / (double) (r.basecall.size() - k));
 
 }

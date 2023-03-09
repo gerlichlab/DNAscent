@@ -48,7 +48,7 @@ forkSenseArgs parseSenseArguments( int argc, char** argv ){
  		std::cout << help << std::endl;
 		exit(EXIT_SUCCESS);
 	}
-	else if( argc < 4 ){
+	else if( argc < 4 ){ //PLP&SY: check with Mike
  		std::cout << "Exiting with error.  Insufficient arguments passed to DNAscent forkSense." << std::endl;
 		exit(EXIT_FAILURE);
 	}
@@ -695,7 +695,7 @@ void callForks(DetectedRead &r, std::string analogueOrder){
 		int tipPartners = 0;
 	
 		//left coordinate and index
-		assert( (*analogue1_segments)[p -> first].partners == 1 or (*analogue1_segments)[p -> first].partners == 2);
+		assert( ((*analogue1_segments)[p -> first].partners == 1) or ((*analogue1_segments)[p -> first].partners == 2));
 		int lc = (*analogue1_segments)[p -> first].leftmostCoord;
 		int li = (*analogue1_segments)[p -> first].leftmostIdx;
 		if ( (*analogue1_segments)[p -> first].partners == 2){
@@ -759,7 +759,7 @@ void callForks(DetectedRead &r, std::string analogueOrder){
 		int tipPartners = 0;
 
 		//left coordinate and index
-		assert( (*analogue2_segments)[p -> first].partners == 1 or (*analogue2_segments)[p -> first].partners == 2);
+		assert( ((*analogue2_segments)[p -> first].partners == 1) or ((*analogue2_segments)[p -> first].partners == 2));
 		int lc = (*analogue2_segments)[p -> first].leftmostCoord;
 		int li = (*analogue2_segments)[p -> first].leftmostIdx;
 		if ( (*analogue2_segments)[p -> first].partners == 2){
@@ -1091,7 +1091,7 @@ void callStalls(DetectedRead &r, std::string analogueOrder, KMeansResult analoug
 		}
 
 		if (failOnAlignment){
-			s -> score = -4.0;
+			s -> score = -4.0; //PLP&SY: check with Mike
 			continue;
 		}
 
@@ -1173,7 +1173,7 @@ void callStalls(DetectedRead &r, std::string analogueOrder, KMeansResult analoug
 		}
 
 		if (failOnAlignment){
-			s -> score = -4.0;
+			s -> score = -4.0; //PLP&SY: check with Mike
 			continue;
 		}
 

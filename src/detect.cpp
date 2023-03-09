@@ -21,7 +21,6 @@
 #include "event_handling.h"
 #include "probability.h"
 #include "../fast5/include/fast5.hpp"
-#include "poreModels.h"
 #include "../htslib/htslib/hts.h"
 #include "../htslib/htslib/sam.h"
 #include "../tensorflow/include/tensorflow/c/eager/c_api.h"
@@ -162,7 +161,8 @@ double sequenceProbability( std::vector <double> &observations,
 				PoreParameters scalings,
 				size_t BrdUStart,
 				size_t BrdUEnd ){
-//covered in: tests/detect/hmm_forward
+
+	unsigned int k = Pore_Substrate_Config.kmer_len;
 
 	//Initial transitions within modules (internal transitions)
 	double internalM12I = eln(0.3475);
@@ -205,13 +205,13 @@ double sequenceProbability( std::vector <double> &observations,
 
 		std::string sixMer = sequence.substr(0, 6);
 
-		std::pair<double,double> meanStd = thymidineModel[sixMer2index(sixMer)];
+		std::pair<double,double> meanStd = Pore_Substrate_Config.pore_model[kmer2index(sixMer, k)];
 		level_mu = scalings.shift + scalings.scale * meanStd.first;
 		level_sigma = scalings.var * meanStd.second;
 
 		//uncomment to scale events
-		//level_mu = thymidineModel.at(sixMer).first;
-		//level_sigma = scalings.var / scalings.scale * thymidineModel.at(sixMer).second;
+		//level_mu = Pore_Substrate_Config.pore_model.at(sixMer).first;
+		//level_sigma = scalings.var / scalings.scale * Pore_Substrate_Config.pore_model.at(sixMer).second;
 		//observations[t] = (observations[t] - scalings.shift) / scalings.scale;
 
 		matchProb = eln( normalPDF( level_mu, level_sigma, observations[t] ) );
@@ -239,7 +239,7 @@ double sequenceProbability( std::vector <double> &observations,
 
 			//get model parameters
 			sixMer = sequence.substr(i, 6);
-			std::pair<double,double> analogue_meanStd = analogueModel[sixMer2index(sixMer)];
+			std::pair<double,double> analogue_meanStd = Pore_Substrate_Config.analogue_model[kmer2index(sixMer, k)];
 			insProb = eln( uniformPDF( 0, 250, observations[t] ) );
 			if ( useBrdU and BrdUStart <= i and i <= BrdUEnd and sixMer.find('T') != std::string::npos and analogue_meanStd.first != 0. ){
 
@@ -254,13 +254,13 @@ double sequenceProbability( std::vector <double> &observations,
 			}
 			else{
 
-				std::pair<double,double> meanStd = thymidineModel[sixMer2index(sixMer)];
+				std::pair<double,double> meanStd = Pore_Substrate_Config.pore_model[kmer2index(sixMer, k)];
 				level_mu = scalings.shift + scalings.scale * meanStd.first;
 				level_sigma = scalings.var * meanStd.second;
 
 				//uncomment if you scale events
-				//level_mu = thymidineModel.at(sixMer).first;
-				//level_sigma = scalings.var / scalings.scale * thymidineModel.at(sixMer).second;
+				//level_mu = Pore_Substrate_Config.pore_model.at(sixMer).first;
+				//level_sigma = scalings.var / scalings.scale * Pore_Substrate_Config.pore_model.at(sixMer).second;
 
 				matchProb = eln( normalPDF( level_mu, level_sigma, observations[t] ) );
 			}
@@ -480,7 +480,7 @@ std::string llAcrossRead( read &r,
 		std::cout << readSnippet << std::endl;
 		for ( int pos = 0; pos < readSnippet.length()-5; pos++ ){
 
-			std::cout << readSnippet.substr(pos,6) << "\t" << thymidineModel.at( readSnippet.substr(pos,6) ).first << std::endl;
+			std::cout << readSnippet.substr(pos,6) << "\t" << Pore_Substrate_Config.pore_model.at( readSnippet.substr(pos,6) ).first << std::endl;
 		}
 		for ( auto ev = eventSnippet.begin(); ev < eventSnippet.end(); ev++){
 			double scaledEv =  (*ev - r.scalings.shift) / r.scalings.scale;
@@ -516,7 +516,7 @@ double runningKL = 0.0;
 for (unsigned int s = 0; s < readSnippet.length() - 6; s++){
 	std::string sixMer = readSnippet.substr(s,6);
 	if ( BrdUStart <= s and s <= BrdUEnd and sixMer.find('T') != std::string::npos and analogueModel.count(sixMer) > 0 ){
-		runningKL += KLdivergence( thymidineModel.at(sixMer).first, thymidineModel.at(sixMer).second, analogueModel.at(sixMer).first, analogueModel.at(sixMer).second );
+		runningKL += KLdivergence( Pore_Substrate_Config.pore_model.at(sixMer).first, Pore_Substrate_Config.pore_model.at(sixMer).second, analogueModel.at(sixMer).first, analogueModel.at(sixMer).second );
 	}
 }
 std::cerr << "<-------------------" << std::endl;
@@ -685,7 +685,7 @@ double runningKL = 0.0;
 for (unsigned int s = 0; s < readSnippet.length() - 6; s++){
 	std::string sixMer = readSnippet.substr(s,6);
 	if ( BrdUStart <= s and s <= BrdUEnd and sixMer.find('T') != std::string::npos and analogueModel.count(sixMer) > 0 ){
-		runningKL += KLdivergence( thymidineModel.at(sixMer).first, thymidineModel.at(sixMer).second, analogueModel.at(sixMer).first, analogueModel.at(sixMer).second );
+		runningKL += KLdivergence( Pore_Substrate_Config.pore_model.at(sixMer).first, Pore_Substrate_Config.pore_model.at(sixMer).second, analogueModel.at(sixMer).first, analogueModel.at(sixMer).second );
 	}
 }
 std::cerr << "<-------------------" << std::endl;
@@ -779,7 +779,7 @@ std::string runCNN(std::shared_ptr<AlignedRead> r, std::shared_ptr<ModelSession>
 	//get positions on the read reference to write the output
 	std::vector<unsigned int> positions = r -> getPositions();
 	std::vector<int> alignmentQuality = r -> getAlignmentQuality();
-	std::vector<std::string> sixMers = r -> getSixMers();
+	std::vector<std::string> sixMers = r -> getKmers();
 
 	size_t output_size = TF_TensorByteSize(OutputValues) / sizeof(float);
 	assert(output_size == protoShape[0] * outputFields);
@@ -874,7 +874,7 @@ std::map<unsigned int, std::pair<double,double>> runCNN_training(std::shared_ptr
 
 	//get positions on the read reference to write the output
 	std::vector<unsigned int> positions = r -> getPositions();
-	std::vector<std::string> sixMers = r -> getSixMers();
+	std::vector<std::string> sixMers = r -> getKmers();
 
 	size_t output_size = TF_TensorByteSize(OutputValues) / sizeof(float);
 	assert(output_size == protoShape[0] * outputFields);
@@ -1000,7 +1000,7 @@ int detect_main( int argc, char** argv ){
 		/*if we've filled up the buffer with short reads, compute them in parallel */
 		if (buffer.size() >= maxBufferSize or (buffer.size() > 0 and result == -1 ) ){
 
-			#pragma omp parallel for schedule(dynamic) shared(buffer,windowLength_align,analogueModel,thymidineModel,args,prog,failed,session) num_threads(args.threads)
+			#pragma omp parallel for schedule(dynamic) shared(buffer,windowLength_align,Pore_Substrate_Config,args,prog,failed,session) num_threads(args.threads)
 			for (unsigned int i = 0; i < buffer.size(); i++){
 
 				read r;

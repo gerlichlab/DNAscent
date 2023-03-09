@@ -10,40 +10,34 @@
 #include <iostream>
 #include <map>
 #include <functional>
-#include "detect.h"
-#include "forkSense.h"
-#include "index.h"
-#include "common.h"
-#include "poreModels.h"
-#include "trainCNN.h"
-#include "alignment.h"
-#include "trainGMM.h"
+#include "../detect.h"
+#include "../index.h"
+#include "../common.h"
+#include "../alignment.h"
+#include "../config.h"
 
 /*prototype */
-int show_options( int, char** );
+int show_options_RNAscent( int, char** );
 
 /*map from name of the DNAscent function passed as argument on the command line to the function that it should call */
 static std::map< std::string, std::function< int( int, char** ) > > executables = {
 	{"index", 	index_main},
 	{"detect", 	detect_main},
-	{"forkSense", 	sense_main},
 	{"align", 	align_main},
-	{"trainCNN", 	data_main},
-	{"trainGMM", 	train_main},
-	{"--help",	show_options},
-	{"-h",		show_options},
+	{"--help",	show_options_RNAscent},
+	{"-h",		show_options_RNAscent},
 	{"-v",		show_version},
 	{"--version",	show_version}
 };
 
 
-int show_options( int, char** ){
+int show_options_RNAscent( int, char** ){
 
-	std::cout << "DNAscent is a software tool for detecting regions of base analogue incorporation in Oxford Nanopore reads.\nTo run DNAscent, do: " \
+	std::cout << "RNAscent is a software tool for detecting RNA modifications in Oxford Nanopore reads.\nTo run RNAscent, do: " \
 	<< std::endl \
-	<< "  ./DNAscent [executable] [arguments]" \
+	<< "  ./RNAscent [executable] [arguments]" \
 	<< std::endl \
-	<< "The executables that DNAscent can run are:" \
+	<< "The executables that RNAscent can run are:" \
 	<< std::endl;
 
 	for ( auto &exec : executables ){
@@ -55,18 +49,16 @@ int show_options( int, char** ){
 	return 0;
 }
 
-std::vector< std::pair< double, double > > analogueModel;
-std::vector< std::pair< double, double > > thymidineModel;
+Global_Config Pore_Substrate_Config;
 
 /*main DNAscent executable that will link to other executables */
 int main( int argc, char** argv ){
 
-	//load pore models
-	thymidineModel = import_poreModel("template_median68pA.6mer.model");
-	analogueModel = import_poreModel("BrdU.model");
+	//configure for RNA R9
+	Pore_Substrate_Config.configure_RNA_R9();
 
 	if ( argc < 2 ){
-		std::cout << "Exiting with error.  No DNAscent executable specified." << std::endl <<  show_options( argc, argv );
+		std::cout << "Exiting with error.  No RNAscent executable specified." << std::endl <<  show_options_RNAscent( argc, argv );
 		exit( EXIT_FAILURE );
 	}
 
@@ -74,7 +66,7 @@ int main( int argc, char** argv ){
 	auto iter = executables.find( runThisExecutable );
 
 	if ( iter == executables.end() ){
-		std::cout << "Exiting with error.  Unknown DNAscent executable specified." << std::endl <<  show_options( argc, argv );
+		std::cout << "Exiting with error.  Unknown RNAscent executable specified." << std::endl <<  show_options_RNAscent( argc, argv );
 		exit( EXIT_FAILURE );
 	}
 

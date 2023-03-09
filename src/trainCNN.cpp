@@ -20,7 +20,6 @@
 #include "event_handling.h"
 #include "probability.h"
 #include "../fast5/include/fast5.hpp"
-#include "poreModels.h"
 #include "detect.h"
 #include "alignment.h"
 #include "htsInterface.h"
@@ -75,7 +74,7 @@ Arguments parseDataArguments( int argc, char** argv ){
 		std::cout << help << std::endl;
 		exit(EXIT_SUCCESS);
 	}
-	else if( argc < 4 ){
+	else if( argc < 4 ){ //PLP&SY: check with Mike
 
 		std::cout << "Exiting with error.  Insufficient arguments passed to DNAscent detect." << std::endl;
 		exit(EXIT_FAILURE);
@@ -239,7 +238,7 @@ int data_main( int argc, char** argv ){
 	int failedEvents = 0;
 	unsigned int maxBufferSize;
 	std::vector< bam1_t * > buffer;
-	if ( args.threads <= 4 ) maxBufferSize = args.threads;
+	if ( args.threads <= 4 ) maxBufferSize = args.threads; //PLP&SY: check with Mike
 	else maxBufferSize = 4*(args.threads);
 
 	do {
@@ -264,7 +263,7 @@ int data_main( int argc, char** argv ){
 		/*if we've filled up the buffer with short reads, compute them in parallel */
 		if (buffer.size() >= maxBufferSize or (buffer.size() > 0 and result == -1 ) ){
 
-			#pragma omp parallel for schedule(dynamic) shared(buffer,analogueModel,thymidineModel,args,prog,failed) num_threads(args.threads)
+			#pragma omp parallel for schedule(dynamic) shared(buffer,Pore_Substrate_Config,args,prog,failed) num_threads(args.threads)
 			for (unsigned int i = 0; i < buffer.size(); i++){
 
 				read r; 

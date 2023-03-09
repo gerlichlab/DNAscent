@@ -18,11 +18,11 @@
 #include "common.h"
 #include "event_handling.h"
 #include "../fast5/include/fast5.hpp"
-#include "poreModels.h"
 #include "alignment.h"
 #include "error_handling.h"
 #include "probability.h"
 #include "htsInterface.h"
+#include "config.h"
 
 
 static const char *help=
@@ -69,7 +69,7 @@ Arguments parseAlignArguments( int argc, char** argv ){
 		std::cout << help << std::endl;
 		exit(EXIT_SUCCESS);
 	}
-	else if( argc < 4 ){
+	else if( argc < 4 ){ //PLP&SY: check with Mike
 
 		std::cout << "Exiting with error.  Insufficient arguments passed to DNAscent detect." << std::endl;
 		exit(EXIT_FAILURE);
@@ -200,14 +200,14 @@ inline int lnArgMax(std::vector<double> v){
 }
 
 //Initial transitions between modules (external transitions)
-double externalD2D = eln(0.3);
-double externalD2M1 = eln(0.7);
-double externalI2M1 = eln(0.999);
-double externalM12D = eln(0.0025);
+double externalD2D = eln(Pore_Substrate_Config.HMM_config.externalD2D);
+double externalD2M1 = eln(Pore_Substrate_Config.HMM_config.externalD2M);
+double externalI2M1 = eln(Pore_Substrate_Config.HMM_config.externalI2M);
+double externalM12D = eln(Pore_Substrate_Config.HMM_config.externalM2D);
 
 //Initial transitions within modules (internal transitions)
-double internalM12I = eln(0.001);
-double internalI2I = eln(0.001);
+double internalM12I = eln(Pore_Substrate_Config.HMM_config.internalM2I);
+double internalI2I = eln(Pore_Substrate_Config.HMM_config.internalI2I);
 
 
 std::pair< double, std::vector< std::string > > builtinViterbi( std::vector <double> &observations,
@@ -223,18 +223,23 @@ std::pair< double, std::vector< std::string > > builtinViterbi( std::vector <dou
 	double externalOrInternalM12M1 = lnSum( externalM12M1, internalM12M1 );
 	int maxindex;
 
-	size_t n_states = sequence.length() - 5;
+	unsigned int k = Pore_Substrate_Config.kmer_len;
+
+	size_t n_states = sequence.length() - k - 1;
+	// PLP checkpoint 2:
+	std::cout << k - 1 << " checkpoint 2" << std::endl;
+	// end checkpoint 2
 
 	//pre-compute 6mer indices
-	std::vector<unsigned int> sixMerIndices;
-	sixMerIndices.reserve(n_states);
+	std::vector<unsigned int> kmerIndices;
+	kmerIndices.reserve(n_states);
 	for (size_t i = 0; i < n_states; i++){
-		std::string sixMer = sequence.substr(i, 6);
-		if (flip) std::reverse(sixMer.begin(),sixMer.end());
-		sixMerIndices.push_back(sixMer2index(sixMer));
+		std::string kmer = sequence.substr(i, k);
+		if (flip) std::reverse(kmer.begin(),kmer.end());
+		kmerIndices.push_back(kmer2index(kmer,k));
 	}
 
-	std::vector< std::vector< size_t > > backtraceS( 3*n_states, std::vector< size_t >( observations.size() + 1 ) ); /*stores state indices for the Viterbi backtrace */
+	std::vector< std::vector< size_t > > backtraceS( 3*n_states, std::vector< size_t >( observations.size() + 1 ) ); /*stores state indices for the Viterbi backtrace */ //PLP&SY: check with Mike
 	std::vector< std::vector< size_t > > backtraceT( 3*n_states, std::vector< size_t >( observations.size() + 1 ) ); /*stores observation indices for the Viterbi backtrace */
 
 	//reserve 0 for start
@@ -271,7 +276,7 @@ std::pair< double, std::vector< std::string > > builtinViterbi( std::vector <dou
 		std::fill( M_curr.begin(), M_curr.end(), NAN );
 		std::fill( D_curr.begin(), D_curr.end(), NAN );
 
-		std::pair<double,double> meanStd = thymidineModel[sixMerIndices[0]];
+		std::pair<double,double> meanStd = Pore_Substrate_Config.pore_model[kmerIndices[0]];
 
 		level_mu = (scalings.shift + scalings.scale * meanStd.first);
 		level_sigma = scalings.var * meanStd.second;
@@ -342,14 +347,14 @@ std::pair< double, std::vector< std::string > > builtinViterbi( std::vector <dou
 			insProb = 0.0; //log(1) = 0
 
 			//get model parameters
-			std::pair<double,double> meanStd = thymidineModel[sixMerIndices[i]];
+			std::pair<double,double> meanStd = Pore_Substrate_Config.pore_model[kmerIndices[i]];
 
 			level_mu = scalings.shift + scalings.scale * meanStd.first;
 			level_sigma = scalings.var * meanStd.second;
 
 			//uncomment if you scale events
-			//level_mu = thymidineModel.at(sixMer).first;
-			//level_sigma = scalings.var / scalings.scale * thymidineModel.at(sixMer).second;
+			//level_mu = Pore_Substrate_Config.pore_model.at(x).first;
+			//level_sigma = scalings.var / scalings.scale * Pore_Substrate_Config.pore_model.at(kmer).second;
 
 			matchProb = eln( normalPDF( level_mu*signalDilation, level_sigma, observations[t]*signalDilation ) );
 
@@ -562,6 +567,8 @@ std::string eventalign( read &r,
 	if ( r.isReverse ) strand = "rev";
 	else strand = "fwd";
 
+	unsigned int k = Pore_Substrate_Config.kmer_len;
+
 	out += ">" + r.readID + " " + r.referenceMappedTo + " " + std::to_string(r.refStart) + " " + std::to_string(r.refEnd) + " " + strand + "\n";
 
 	//midpoint for bidirectional alignment
@@ -569,7 +576,6 @@ std::string eventalign( read &r,
 
 	unsigned int posOnRef = 0;
 	while ( posOnRef < midpoint ){
-
 
 		//adjust so we can get the last bit of the read if it doesn't line up with the windows nicely
 		unsigned int basesToEnd = midpoint - posOnRef ;
@@ -588,25 +594,31 @@ std::string eventalign( read &r,
 				continue;
 			}
 
-			for (unsigned int i = windowLength; i < 1.5*windowLength - 7; i++){
+			for (unsigned int i = windowLength; i < 1.5*windowLength - k + 1; i++){
 
-				std::string sixMer = breakSnippet.substr(i,6);
-				std::pair<double,double> meanStd = thymidineModel[sixMer2index(sixMer)];
+				// PLP checkpoint 3
+				std::cout << 1.5*windowLength - k + 1 << " checkpoint 3" << std::endl;
 
-				std::string sixMer_back = breakSnippet.substr(i-1,6);
-				std::pair<double,double> meanStd_back = thymidineModel[sixMer2index(sixMer_back)];
+				std::string kmer = breakSnippet.substr(i,k);
+				std::pair<double,double> meanStd = Pore_Substrate_Config.pore_model[kmer2index(kmer, k)];
 
-				std::string sixMer_front = breakSnippet.substr(i+1,6);
-				std::pair<double,double> meanStd_front = thymidineModel[sixMer2index(sixMer_front)];
+				std::string kmer_back = breakSnippet.substr(i-1,k);
+				std::pair<double,double> meanStd_back = Pore_Substrate_Config.pore_model[kmer2index(kmer_back, k)];
+
+				// PLP checkpoint 5
+				std::cout << kmer_back << " checkpoint 5" << std::endl;
+
+				std::string kmer_front = breakSnippet.substr(i+1,k);
+				std::pair<double,double> meanStd_front = Pore_Substrate_Config.pore_model[kmer2index(kmer_front, k)];
 
 				double gap1 = std::abs(meanStd.first - meanStd_front.first);
 				double gap2 = std::abs(meanStd.first - meanStd_back.first);
 
 				if (gap1 > 20. and gap2 > 20.){
 					//found = true;
-					break1 = breakSnippet.substr(i-1,6);
-					break2 = breakSnippet.substr(i+1,6);
-					windowLength = i+6;
+					break1 = breakSnippet.substr(i-1,k);
+					break2 = breakSnippet.substr(i+1,k);
+					windowLength = i + k;
 					break;
 				}
 			}
@@ -631,7 +643,7 @@ std::string eventalign( read &r,
 		for ( unsigned int j = readHead; j < (r.eventAlignment).size(); j++ ){
 
 			/*if an event has been aligned to a position in the window, add it */
-			if ( (r.refToQuery)[posOnRef] <= (r.eventAlignment)[j].second and (r.eventAlignment)[j].second < (r.refToQuery)[posOnRef + windowLength-5] ){
+			if ( (r.refToQuery)[posOnRef] <= (r.eventAlignment)[j].second and (r.eventAlignment)[j].second < (r.refToQuery)[posOnRef + windowLength - k - 1] ){
 
 				if (firstMatch){
 					readHead = j;
@@ -647,7 +659,7 @@ std::string eventalign( read &r,
 			}
 
 			/*stop once we get to the end of the window */
-			if ( (r.eventAlignment)[j].second >= (r.refToQuery)[posOnRef + windowLength - 5] ) break;
+			if ( (r.eventAlignment)[j].second >= (r.refToQuery)[posOnRef + windowLength - k - 1] ) break;
 		}
 
 		//pass on this window if we have a deletion
@@ -660,8 +672,12 @@ std::string eventalign( read &r,
 
 		//calculate where we are on the assembly - if we're a reverse complement, we're moving backwards down the reference genome
 		int globalPosOnRef;
-		if ( r.isReverse ) globalPosOnRef = r.refEnd - posOnRef - 6;
+		if ( r.isReverse ) globalPosOnRef = r.refEnd - posOnRef - k;
+
 		else globalPosOnRef = r.refStart + posOnRef;
+		
+		// PLP checkpoint 6
+		std::cout << globalPosOnRef << " checkpoint 6" << std::endl;
 
 		std::pair< double, std::vector<std::string> > builtinAlignment = builtinViterbi( eventSnippet, readSnippet, r.scalings, false, signalDilation);
 
@@ -694,7 +710,7 @@ std::string eventalign( read &r,
 
 	        if (label == "D") continue; //silent states don't emit an event
 
-			std::string sixMerStrand = (r.referenceSeqMappedTo).substr(posOnRef + pos, 6);
+			std::string kmerStrand = (r.referenceSeqMappedTo).substr(posOnRef + pos, k);
 
 			double scaledEvent = (eventSnippet[evIdx] - r.scalings.shift) / r.scalings.scale;
 			double eventLength = eventLengthsSnippet[evIdx];
@@ -702,41 +718,47 @@ std::string eventalign( read &r,
 			assert(scaledEvent > 0.0);
 
 			unsigned int evPos;
-			std::string sixMerRef;
+			std::string kmerRef;
 			if (r.isReverse){
-				evPos = globalPosOnRef - pos + 5;
-				sixMerRef = reverseComplement(sixMerStrand);
+				evPos = globalPosOnRef - pos + k - 1;
+				kmerRef = reverseComplement(kmerStrand);
 			}
 			else{
 				evPos = globalPosOnRef + pos;
-				sixMerRef = sixMerStrand;
+				kmerRef = kmerStrand;
 			}
 
 			if (useRaw){
 
 				unsigned int globalEvIdx = eventIndices[evIdx];
-				std::pair<double,double> meanStd = thymidineModel[sixMer2index(sixMerStrand)];
+				std::pair<double,double> meanStd = Pore_Substrate_Config.pore_model[kmer2index(kmerStrand, k)];
 				for (unsigned int raw_i = r.eventIdx2rawIdx[globalEvIdx].first; raw_i <= r.eventIdx2rawIdx[globalEvIdx].second; raw_i++){
 
 
 					if (label == "M"){
-						out += std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string((r.raw[raw_i]- r.scalings.shift) / r.scalings.scale) + "\t" + std::to_string(0) + "\t" + sixMerStrand + "\t" + std::to_string(meanStd.first) + "\t" + std::to_string(meanStd.second) + "\n";
+						out += std::to_string(evPos) + "\t" + kmerRef + "\t" + std::to_string((r.raw[raw_i]- r.scalings.shift) / r.scalings.scale) + "\t" + std::to_string(0) + "\t" + kmerStrand + "\t" + std::to_string(meanStd.first) + "\t" + std::to_string(meanStd.second) + "\n";
 					}
 					else if (label == "I" and evIdx < lastM_ev){ //don't print insertions after the last match because we're going to align these in the next segment
-						out += std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string((r.raw[raw_i]- r.scalings.shift) / r.scalings.scale) + "\t" + std::to_string(0) + "\t" + "NNNNNN" + "\t" + "0" + "\t" + "0" + "\n";
+						out += std::to_string(evPos) + "\t" + kmerRef + "\t" + std::to_string((r.raw[raw_i]- r.scalings.shift) / r.scalings.scale) + "\t" + std::to_string(0) + "\t" + "NNNNNN" + "\t" + "0" + "\t" + "0" + "\n";
 					}
+
+					//PLP checkpoint 7
+					std::cout << out << " checkpoint 7" << std::endl;
 				}
 			}
 			else{
 
 				if (label == "M"){
-					std::pair<double,double> meanStd = thymidineModel[sixMer2index(sixMerStrand)];
-					out += std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(eventLength) + "\t" + sixMerStrand + "\t" + std::to_string(meanStd.first) + "\t" + std::to_string(meanStd.second) + "\n";
+					std::pair<double,double> meanStd = Pore_Substrate_Config.pore_model[kmer2index(kmerStrand, k)];
+					out += std::to_string(evPos) + "\t" + kmerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(eventLength) + "\t" + kmerStrand + "\t" + std::to_string(meanStd.first) + "\t" + std::to_string(meanStd.second) + "\n";
 				}
 				else if (label == "I" and evIdx < lastM_ev){ //don't print insertions after the last match because we're going to align these in the next segment
-					out += std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(eventLength) + "\t" + "NNNNNN" + "\t" + "0" + "\t" + "0" + "\n";
+					out += std::to_string(evPos) + "\t" + kmerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(eventLength) + "\t" + "NNNNNN" + "\t" + "0" + "\t" + "0" + "\n";
 				}
 			}
+
+			//PLP checkpoint 8
+			std::cout << out << " checkpoint 8" << std::endl;
 
 	        evIdx ++;
 		}
@@ -759,10 +781,10 @@ std::string eventalign( read &r,
 	unsigned int rev_readHead = (r.eventAlignment).size() - 1;
 	std::vector<std::string> lines;
 	lines.reserve((r.referenceSeqMappedTo.size()) / 2);
-	while ( posOnRef > midpoint - 5 ){
+	while ( posOnRef > midpoint - k - 1 ){
 
 		//adjust so we can get the last bit of the read if it doesn't line up with the windows nicely
-		unsigned int basesToEnd = posOnRef - midpoint + 5;
+		unsigned int basesToEnd = posOnRef - midpoint + k - 1;
 		unsigned int windowLength = std::min(basesToEnd, totalWindowLength);
 
 		//find good breakpoints
@@ -780,14 +802,14 @@ std::string eventalign( read &r,
 
 			for (unsigned int i = 1.5*windowLength; i > windowLength; i--){
 
-				std::string sixMer = (r.referenceSeqMappedTo).substr(posOnRef-i,6);
-				std::pair<double,double> meanStd = thymidineModel[sixMer2index(sixMer)];
+				std::string kmer = (r.referenceSeqMappedTo).substr(posOnRef-i,k);
+				std::pair<double,double> meanStd = Pore_Substrate_Config.pore_model[kmer2index(kmer, k)];
 
-				std::string sixMer_back = (r.referenceSeqMappedTo).substr(posOnRef-i+1,6);
-				std::pair<double,double> meanStd_back = thymidineModel[sixMer2index(sixMer_back)];
+				std::string kmer_back = (r.referenceSeqMappedTo).substr(posOnRef-i+1,k);
+				std::pair<double,double> meanStd_back = Pore_Substrate_Config.pore_model[kmer2index(kmer_back, k)];
 
-				std::string sixMer_front = (r.referenceSeqMappedTo).substr(posOnRef-i-1,6);
-				std::pair<double,double> meanStd_front = thymidineModel[sixMer2index(sixMer_front)];
+				std::string kmer_front = (r.referenceSeqMappedTo).substr(posOnRef-i-1,k);
+				std::pair<double,double> meanStd_front = Pore_Substrate_Config.pore_model[kmer2index(kmer_front, k)];
 
 				double gap1 = std::abs(meanStd.first - meanStd_front.first);
 				double gap2 = std::abs(meanStd.first - meanStd_back.first);
@@ -795,8 +817,8 @@ std::string eventalign( read &r,
 
 				if (gap1 > 20. and gap2 > 20.){
 					//found = true;
-					break1 = (r.referenceSeqMappedTo).substr(posOnRef-i-1,6);
-					break2 = (r.referenceSeqMappedTo).substr(posOnRef-i+1,6);
+					break1 = (r.referenceSeqMappedTo).substr(posOnRef-i-1,k);
+					break2 = (r.referenceSeqMappedTo).substr(posOnRef-i+1,k);
 					windowLength = i;
 					break;
 				}
@@ -826,7 +848,7 @@ std::string eventalign( read &r,
 			//std::cout << (r.eventAlignment)[j].second << " " << j << " " << (r.refToQuery)[posOnRef] << " " << rev_readHead << std::endl;
 
 			/*if an event has been aligned to a position in the window, add it */
-			if ( (r.eventAlignment)[j].second > (r.refToQuery)[posOnRef - windowLength] and (r.eventAlignment)[j].second <= (r.refToQuery)[posOnRef - 5] ){
+			if ( (r.eventAlignment)[j].second > (r.refToQuery)[posOnRef - windowLength] and (r.eventAlignment)[j].second <= (r.refToQuery)[posOnRef - k - 1] ){
 
 				if (firstMatch){
 					rev_readHead = j;
@@ -856,7 +878,7 @@ std::string eventalign( read &r,
 		//calculate where we are on the assembly - if we're a reverse complement, we're moving backwards down the reference genome
 		int globalPosOnRef;
 		if ( r.isReverse ) globalPosOnRef = r.refEnd - posOnRef;
-		else globalPosOnRef = r.refStart + posOnRef - 6;
+		else globalPosOnRef = r.refStart + posOnRef - k;
 
 		std::pair< double, std::vector<std::string> > builtinAlignment = builtinViterbi( eventSnippet, readSnippet, r.scalings, true, signalDilation);
 
@@ -889,7 +911,7 @@ std::string eventalign( read &r,
 
 	        if (label == "D") continue; //silent states don't emit an event
 
-			std::string sixMerStrand = (r.referenceSeqMappedTo).substr(posOnRef - pos - 6, 6);
+			std::string kmerStrand = (r.referenceSeqMappedTo).substr(posOnRef - pos - k, k);
 
 			double scaledEvent = (eventSnippet[evIdx] - r.scalings.shift) / r.scalings.scale;
 			double eventLength = eventLengthsSnippet[evIdx];
@@ -897,39 +919,39 @@ std::string eventalign( read &r,
 			assert(scaledEvent > 0.0);
 
 			unsigned int evPos;
-			std::string sixMerRef;
+			std::string kmerRef;
 			if (r.isReverse){
-				evPos = globalPosOnRef + pos + 5;
-				sixMerRef = reverseComplement(sixMerStrand);
+				evPos = globalPosOnRef + pos + k - 1;
+				kmerRef = reverseComplement(kmerStrand);
 			}
 			else{
 				evPos = globalPosOnRef - pos;
-				sixMerRef = sixMerStrand;
+				kmerRef = kmerStrand;
 			}
 
 			if (useRaw){
 
 				unsigned int globalEvIdx = eventIndices[evIdx];
-				std::pair<double,double> meanStd = thymidineModel[sixMer2index(sixMerStrand)];
+				std::pair<double,double> meanStd = Pore_Substrate_Config.pore_model[kmer2index(kmerStrand, k)];
 				for (unsigned int raw_i = r.eventIdx2rawIdx[globalEvIdx].first; raw_i <= r.eventIdx2rawIdx[globalEvIdx].second; raw_i++){
 
 
 					if (label == "M"){
-						out += std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string((r.raw[raw_i]- r.scalings.shift) / r.scalings.scale) + "\t" + std::to_string(0) + "\t" + sixMerStrand + "\t" + std::to_string(meanStd.first) + "\t" + std::to_string(meanStd.second) + "\n";
+						out += std::to_string(evPos) + "\t" + kmerRef + "\t" + std::to_string((r.raw[raw_i]- r.scalings.shift) / r.scalings.scale) + "\t" + std::to_string(0) + "\t" + kmerStrand + "\t" + std::to_string(meanStd.first) + "\t" + std::to_string(meanStd.second) + "\n";
 					}
 					else if (label == "I" and evIdx < lastM_ev){ //don't print insertions after the last match because we're going to align these in the next segment
-						out += std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string((r.raw[raw_i]- r.scalings.shift) / r.scalings.scale) + "\t" + std::to_string(0) + "\t" + "NNNNNN" + "\t" + "0" + "\t" + "0" + "\n";
+						out += std::to_string(evPos) + "\t" + kmerRef + "\t" + std::to_string((r.raw[raw_i]- r.scalings.shift) / r.scalings.scale) + "\t" + std::to_string(0) + "\t" + "NNNNNN" + "\t" + "0" + "\t" + "0" + "\n";
 					}
 				}
 			}
 			else{
 
 				if (label == "M"){
-					std::pair<double,double> meanStd = thymidineModel[sixMer2index(sixMerStrand)];
-					lines.push_back(std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(eventLength) + "\t" + sixMerStrand + "\t" + std::to_string(meanStd.first) + "\t" + std::to_string(meanStd.second) + "\n");
+					std::pair<double,double> meanStd = Pore_Substrate_Config.pore_model[kmer2index(kmerStrand, k)];
+					lines.push_back(std::to_string(evPos) + "\t" + kmerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(eventLength) + "\t" + kmerStrand + "\t" + std::to_string(meanStd.first) + "\t" + std::to_string(meanStd.second) + "\n");
 				}
 				else if (label == "I" and evIdx < lastM_ev){ //don't print insertions after the last match because we're going to align these in the next segment
-					lines.push_back(std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(eventLength) + "\t" + "NNNNNN" + "\t" + "0" + "\t" + "0" + "\n");
+					lines.push_back(std::to_string(evPos) + "\t" + kmerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(eventLength) + "\t" + "NNNNNN" + "\t" + "0" + "\t" + "0" + "\n");
 				}
 			}
 
@@ -960,6 +982,8 @@ std::string eventalign_train( read &r,
 		std::map<unsigned int, std::pair<double,double>> &BrdULikelihood,
 		double signalDilation,
 		bool useRaw){
+
+	unsigned int k = Pore_Substrate_Config.kmer_len;
 
 	std::string out;
 	//get the positions on the reference subsequence where we could attempt to make a call
@@ -995,25 +1019,25 @@ std::string eventalign_train( read &r,
 				continue;
 			}
 
-			for (unsigned int i = windowLength; i < 1.5*windowLength - 7; i++){
+			for (unsigned int i = windowLength; i < 1.5*windowLength - k + 1; i++){
 
-				std::string sixMer = breakSnippet.substr(i,6);
-				std::pair<double,double> meanStd = thymidineModel[sixMer2index(sixMer)];
+				std::string kmer = breakSnippet.substr(i,k);
+				std::pair<double,double> meanStd = Pore_Substrate_Config.pore_model[kmer2index(kmer, k)];
 
-				std::string sixMer_back = breakSnippet.substr(i-1,6);
-				std::pair<double,double> meanStd_back = thymidineModel[sixMer2index(sixMer_back)];
+				std::string kmer_back = breakSnippet.substr(i-1,k);
+				std::pair<double,double> meanStd_back = Pore_Substrate_Config.pore_model[kmer2index(kmer_back, k)];
 
-				std::string sixMer_front = breakSnippet.substr(i+1,6);
-				std::pair<double,double> meanStd_front = thymidineModel[sixMer2index(sixMer_front)];
+				std::string kmer_front = breakSnippet.substr(i+1,k);
+				std::pair<double,double> meanStd_front = Pore_Substrate_Config.pore_model[kmer2index(kmer_front, k)];
 
 				double gap1 = std::abs(meanStd.first - meanStd_front.first);
 				double gap2 = std::abs(meanStd.first - meanStd_back.first);
 
 				if (gap1 > 20. and gap2 > 20.){
 					//found = true;
-					break1 = breakSnippet.substr(i-1,6);
-					break2 = breakSnippet.substr(i+1,6);
-					windowLength = i+6;
+					break1 = breakSnippet.substr(i-1,k);
+					break2 = breakSnippet.substr(i+1,k);
+					windowLength = i+k;
 					break;
 				}
 			}
@@ -1037,7 +1061,7 @@ std::string eventalign_train( read &r,
 		for ( unsigned int j = readHead; j < (r.eventAlignment).size(); j++ ){
 
 			/*if an event has been aligned to a position in the window, add it */
-			if ( (r.refToQuery)[posOnRef] <= (r.eventAlignment)[j].second and (r.eventAlignment)[j].second < (r.refToQuery)[posOnRef + windowLength-5] ){
+			if ( (r.refToQuery)[posOnRef] <= (r.eventAlignment)[j].second and (r.eventAlignment)[j].second < (r.refToQuery)[posOnRef + windowLength - k - 1] ){
 
 				if (firstMatch){
 					readHead = j;
@@ -1053,7 +1077,7 @@ std::string eventalign_train( read &r,
 			}
 
 			/*stop once we get to the end of the window */
-			if ( (r.eventAlignment)[j].second >= (r.refToQuery)[posOnRef + windowLength - 5] ) break;
+			if ( (r.eventAlignment)[j].second >= (r.refToQuery)[posOnRef + windowLength - k - 1] ) break;
 		}
 
 		//pass on this window if we have a deletion
@@ -1066,7 +1090,7 @@ std::string eventalign_train( read &r,
 
 		//calculate where we are on the assembly - if we're a reverse complement, we're moving backwards down the reference genome
 		int globalPosOnRef;
-		if ( r.isReverse ) globalPosOnRef = r.refEnd - posOnRef - 6;
+		if ( r.isReverse ) globalPosOnRef = r.refEnd - posOnRef - k;
 		else globalPosOnRef = r.refStart + posOnRef;
 
 		std::pair< double, std::vector<std::string> > builtinAlignment = builtinViterbi( eventSnippet, readSnippet, r.scalings, false, signalDilation);
@@ -1100,7 +1124,7 @@ std::string eventalign_train( read &r,
 
 	        if (label == "D") continue; //silent states don't emit an event
 
-			std::string sixMerStrand = (r.referenceSeqMappedTo).substr(posOnRef + pos, 6);
+			std::string kmerStrand = (r.referenceSeqMappedTo).substr(posOnRef + pos, k);
 
 			double scaledEvent = (eventSnippet[evIdx] - r.scalings.shift) / r.scalings.scale;
 			double eventLength = eventLengthsSnippet[evIdx];
@@ -1108,17 +1132,17 @@ std::string eventalign_train( read &r,
 			assert(scaledEvent > 0.0);
 
 			unsigned int evPos;
-			std::string sixMerRef;
+			std::string kmerRef;
 			if (r.isReverse){
-				evPos = globalPosOnRef - pos + 5;
-				sixMerRef = reverseComplement(sixMerStrand);
+				evPos = globalPosOnRef - pos + k - 1;
+				kmerRef = reverseComplement(kmerStrand);
 			}
 			else{
 				evPos = globalPosOnRef + pos;
-				sixMerRef = sixMerStrand;
+				kmerRef = kmerStrand;
 			}
 
-			std::pair<double,double> meanStd = thymidineModel[sixMer2index(sixMerStrand)];
+			std::pair<double,double> meanStd = Pore_Substrate_Config.pore_model[kmer2index(kmerStrand, k)];
 
 			if (useRaw){
 
@@ -1126,26 +1150,26 @@ std::string eventalign_train( read &r,
 				for (unsigned int raw_i = r.eventIdx2rawIdx[globalEvIdx].first; raw_i <= r.eventIdx2rawIdx[globalEvIdx].second; raw_i++){
 
 					if (label == "M" and BrdULikelihood.count(evPos) > 0){
-						out += std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string((r.raw[raw_i]- r.scalings.shift) / r.scalings.scale) + "\t" + std::to_string(0) + "\t" + sixMerStrand + "\t" + std::to_string(meanStd.first) + "\t" + std::to_string(meanStd.second) + "\t" + std::to_string(BrdULikelihood[evPos].first) + "\t" + std::to_string(BrdULikelihood[evPos].second) + "\n";
+						out += std::to_string(evPos) + "\t" + kmerRef + "\t" + std::to_string((r.raw[raw_i]- r.scalings.shift) / r.scalings.scale) + "\t" + std::to_string(0) + "\t" + kmerStrand + "\t" + std::to_string(meanStd.first) + "\t" + std::to_string(meanStd.second) + "\t" + std::to_string(BrdULikelihood[evPos].first) + "\t" + std::to_string(BrdULikelihood[evPos].second) + "\n";
 					}
 					else if (label == "M"){
-						out += std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string((r.raw[raw_i]- r.scalings.shift) / r.scalings.scale) + "\t" + std::to_string(0) + "\t" + sixMerStrand + "\t" + std::to_string(meanStd.first) + "\t" + std::to_string(meanStd.second) + "\n";
+						out += std::to_string(evPos) + "\t" + kmerRef + "\t" + std::to_string((r.raw[raw_i]- r.scalings.shift) / r.scalings.scale) + "\t" + std::to_string(0) + "\t" + kmerStrand + "\t" + std::to_string(meanStd.first) + "\t" + std::to_string(meanStd.second) + "\n";
 					}
 					else if (label == "I" and evIdx < lastM_ev){ //don't print insertions after the last match because we're going to align these in the next segment
-						out += std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string((r.raw[raw_i]- r.scalings.shift) / r.scalings.scale) + "\t" + std::to_string(0) + "\t" + "NNNNNN" + "\t" + "0" + "\t" + "0" + "\n";
+						out += std::to_string(evPos) + "\t" + kmerRef + "\t" + std::to_string((r.raw[raw_i]- r.scalings.shift) / r.scalings.scale) + "\t" + std::to_string(0) + "\t" + "NNNNNN" + "\t" + "0" + "\t" + "0" + "\n";
 					}
 				}
 			}
 			else{
 
 				if (label == "M" and BrdULikelihood.count(evPos) > 0){
-					out += std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(eventLength) + "\t" + sixMerStrand + "\t" + std::to_string(meanStd.first) + "\t" + std::to_string(meanStd.second) + "\t" + std::to_string(BrdULikelihood[evPos].first)+ "\t" + std::to_string(BrdULikelihood[evPos].second) + "\n";
+					out += std::to_string(evPos) + "\t" + kmerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(eventLength) + "\t" + kmerStrand + "\t" + std::to_string(meanStd.first) + "\t" + std::to_string(meanStd.second) + "\t" + std::to_string(BrdULikelihood[evPos].first)+ "\t" + std::to_string(BrdULikelihood[evPos].second) + "\n";
 				}
 				else if (label == "M"){
-					out += std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(eventLength) + "\t" + sixMerStrand + "\t" + std::to_string(meanStd.first) + "\t" + std::to_string(meanStd.second) + "\n";
+					out += std::to_string(evPos) + "\t" + kmerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(eventLength) + "\t" + kmerStrand + "\t" + std::to_string(meanStd.first) + "\t" + std::to_string(meanStd.second) + "\n";
 				}
 				else if (label == "I" and evIdx < lastM_ev){ //don't print insertions after the last match because we're going to align these in the next segment
-					out += std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(eventLength) + "\t" + "NNNNNN" + "\t" + "0" + "\t" + "0" + "\n";
+					out += std::to_string(evPos) + "\t" + kmerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(eventLength) + "\t" + "NNNNNN" + "\t" + "0" + "\t" + "0" + "\n";
 				}
 			}
 
@@ -1162,10 +1186,10 @@ std::string eventalign_train( read &r,
 	posOnRef = r.referenceSeqMappedTo.size() - 1;
 	unsigned int rev_readHead = (r.eventAlignment).size() - 1;
 	std::vector<std::string> lines;
-	while ( posOnRef > midpoint - 5 ){
+	while ( posOnRef > midpoint - k - 1 ){
 
 		//adjust so we can get the last bit of the read if it doesn't line up with the windows nicely
-		unsigned int basesToEnd = posOnRef - midpoint + 5;
+		unsigned int basesToEnd = posOnRef - midpoint + k - 1;
 		unsigned int windowLength = std::min(basesToEnd, totalWindowLength);
 
 		//find good breakpoints
@@ -1183,22 +1207,22 @@ std::string eventalign_train( read &r,
 
 			for (unsigned int i = 1.5*windowLength; i > windowLength; i--){
 
-				std::string sixMer = (r.referenceSeqMappedTo).substr(posOnRef-i,6);
-				std::pair<double,double> meanStd = thymidineModel[sixMer2index(sixMer)];
+				std::string kmer = (r.referenceSeqMappedTo).substr(posOnRef-i,k);
+				std::pair<double,double> meanStd = Pore_Substrate_Config.pore_model[kmer2index(kmer, k)];
 
-				std::string sixMer_back = (r.referenceSeqMappedTo).substr(posOnRef-i+1,6);
-				std::pair<double,double> meanStd_back = thymidineModel[sixMer2index(sixMer_back)];
+				std::string kmer_back = (r.referenceSeqMappedTo).substr(posOnRef-i+1,k);
+				std::pair<double,double> meanStd_back = Pore_Substrate_Config.pore_model[kmer2index(kmer_back, k)];
 
-				std::string sixMer_front = (r.referenceSeqMappedTo).substr(posOnRef-i-1,6);
-				std::pair<double,double> meanStd_front = thymidineModel[sixMer2index(sixMer_front)];
+				std::string kmer_front = (r.referenceSeqMappedTo).substr(posOnRef-i-1,k);
+				std::pair<double,double> meanStd_front = Pore_Substrate_Config.pore_model[kmer2index(kmer_front, k)];
 
 				double gap1 = std::abs(meanStd.first - meanStd_front.first);
 				double gap2 = std::abs(meanStd.first - meanStd_back.first);
 
 				if (gap1 > 20. and gap2 > 20.){
 					//found = true;
-					break1 = (r.referenceSeqMappedTo).substr(posOnRef-i-1,6);
-					break2 = (r.referenceSeqMappedTo).substr(posOnRef-i+1,6);
+					break1 = (r.referenceSeqMappedTo).substr(posOnRef-i-1,k);
+					break2 = (r.referenceSeqMappedTo).substr(posOnRef-i+1,k);
 					windowLength = i;
 					break;
 				}
@@ -1227,7 +1251,7 @@ std::string eventalign_train( read &r,
 			//std::cout << (r.eventAlignment)[j].second << " " << j << " " << (r.refToQuery)[posOnRef] << " " << rev_readHead << std::endl;
 
 			/*if an event has been aligned to a position in the window, add it */
-			if ( (r.eventAlignment)[j].second > (r.refToQuery)[posOnRef - windowLength] and (r.eventAlignment)[j].second <= (r.refToQuery)[posOnRef - 5] ){
+			if ( (r.eventAlignment)[j].second > (r.refToQuery)[posOnRef - windowLength] and (r.eventAlignment)[j].second <= (r.refToQuery)[posOnRef - k - 1] ){
 
 				if (firstMatch){
 					rev_readHead = j;
@@ -1257,7 +1281,7 @@ std::string eventalign_train( read &r,
 		//calculate where we are on the assembly - if we're a reverse complement, we're moving backwards down the reference genome
 		int globalPosOnRef;
 		if ( r.isReverse ) globalPosOnRef = r.refEnd - posOnRef;
-		else globalPosOnRef = r.refStart + posOnRef - 6;
+		else globalPosOnRef = r.refStart + posOnRef - k;
 
 		std::pair< double, std::vector<std::string> > builtinAlignment = builtinViterbi( eventSnippet, readSnippet, r.scalings, true, signalDilation);
 
@@ -1290,7 +1314,7 @@ std::string eventalign_train( read &r,
 
 			if (label == "D") continue; //silent states don't emit an event
 
-			std::string sixMerStrand = (r.referenceSeqMappedTo).substr(posOnRef - pos - 6, 6);
+			std::string kmerStrand = (r.referenceSeqMappedTo).substr(posOnRef - pos - k, k);
 
 			double scaledEvent = (eventSnippet[evIdx] - r.scalings.shift) / r.scalings.scale;
 			double eventLength = eventLengthsSnippet[evIdx];
@@ -1298,17 +1322,17 @@ std::string eventalign_train( read &r,
 			assert(scaledEvent > 0.0);
 
 			unsigned int evPos;
-			std::string sixMerRef;
+			std::string kmerRef;
 			if (r.isReverse){
-				evPos = globalPosOnRef + pos + 5;
-				sixMerRef = reverseComplement(sixMerStrand);
+				evPos = globalPosOnRef + pos + k - 1;
+				kmerRef = reverseComplement(kmerStrand);
 			}
 			else{
 				evPos = globalPosOnRef - pos;
-				sixMerRef = sixMerStrand;
+				kmerRef = kmerStrand;
 			}
 
-			std::pair<double,double> meanStd = thymidineModel[sixMer2index(sixMerStrand)];
+			std::pair<double,double> meanStd = Pore_Substrate_Config.pore_model[kmer2index(kmerStrand, k)];
 
 			if (useRaw){
 
@@ -1316,26 +1340,26 @@ std::string eventalign_train( read &r,
 				for (unsigned int raw_i = r.eventIdx2rawIdx[globalEvIdx].first; raw_i <= r.eventIdx2rawIdx[globalEvIdx].second; raw_i++){
 
 					if (label == "M" and BrdULikelihood.count(evPos) > 0){
-						out += std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string((r.raw[raw_i]- r.scalings.shift) / r.scalings.scale) + "\t" + std::to_string(0) + "\t" + sixMerStrand + "\t" + std::to_string(meanStd.first) + "\t" + std::to_string(meanStd.second) + "\t" + std::to_string(BrdULikelihood[evPos].first) + "\t" + std::to_string(BrdULikelihood[evPos].second) + "\n";
+						out += std::to_string(evPos) + "\t" + kmerRef + "\t" + std::to_string((r.raw[raw_i]- r.scalings.shift) / r.scalings.scale) + "\t" + std::to_string(0) + "\t" + kmerStrand + "\t" + std::to_string(meanStd.first) + "\t" + std::to_string(meanStd.second) + "\t" + std::to_string(BrdULikelihood[evPos].first) + "\t" + std::to_string(BrdULikelihood[evPos].second) + "\n";
 					}
 					else if (label == "M"){
-						out += std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string((r.raw[raw_i]- r.scalings.shift) / r.scalings.scale) + "\t" + std::to_string(0) + "\t" + sixMerStrand + "\t" + std::to_string(meanStd.first) + "\t" + std::to_string(meanStd.second) + "\n";
+						out += std::to_string(evPos) + "\t" + kmerRef + "\t" + std::to_string((r.raw[raw_i]- r.scalings.shift) / r.scalings.scale) + "\t" + std::to_string(0) + "\t" + kmerStrand + "\t" + std::to_string(meanStd.first) + "\t" + std::to_string(meanStd.second) + "\n";
 					}
 					else if (label == "I" and evIdx < lastM_ev){ //don't print insertions after the last match because we're going to align these in the next segment
-						out += std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string((r.raw[raw_i]- r.scalings.shift) / r.scalings.scale) + "\t" + std::to_string(0) + "\t" + "NNNNNN" + "\t" + "0" + "\t" + "0" + "\n";
+						out += std::to_string(evPos) + "\t" + kmerRef + "\t" + std::to_string((r.raw[raw_i]- r.scalings.shift) / r.scalings.scale) + "\t" + std::to_string(0) + "\t" + "NNNNNN" + "\t" + "0" + "\t" + "0" + "\n";
 					}
 				}
 			}
 			else{
 
 				if (label == "M" and BrdULikelihood.count(evPos) > 0){
-					out += std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(eventLength) + "\t" + sixMerStrand + "\t" + std::to_string(meanStd.first) + "\t" + std::to_string(meanStd.second) + "\t" + std::to_string(BrdULikelihood[evPos].first) + "\t" + std::to_string(BrdULikelihood[evPos].second) + "\n";
+					out += std::to_string(evPos) + "\t" + kmerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(eventLength) + "\t" + kmerStrand + "\t" + std::to_string(meanStd.first) + "\t" + std::to_string(meanStd.second) + "\t" + std::to_string(BrdULikelihood[evPos].first) + "\t" + std::to_string(BrdULikelihood[evPos].second) + "\n";
 				}
 				else if (label == "M"){
-					out += std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(eventLength) + "\t" + sixMerStrand + "\t" + std::to_string(meanStd.first) + "\t" + std::to_string(meanStd.second) + "\n";
+					out += std::to_string(evPos) + "\t" + kmerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(eventLength) + "\t" + kmerStrand + "\t" + std::to_string(meanStd.first) + "\t" + std::to_string(meanStd.second) + "\n";
 				}
 				else if (label == "I" and evIdx < lastM_ev){ //don't print insertions after the last match because we're going to align these in the next segment
-					out += std::to_string(evPos) + "\t" + sixMerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(eventLength) + "\t" + "NNNNNN" + "\t" + "0" + "\t" + "0" + "\n";
+					out += std::to_string(evPos) + "\t" + kmerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(eventLength) + "\t" + "NNNNNN" + "\t" + "0" + "\t" + "0" + "\n";
 				}
 			}
 
@@ -1359,6 +1383,8 @@ std::string eventalign_train( read &r,
 std::pair<bool,std::shared_ptr<AlignedRead>> eventalign_detect( read &r,
 							  	  unsigned int totalWindowLength,
 							  	  double signalDilation ){
+
+	unsigned int k = Pore_Substrate_Config.kmer_len;
 
 	//bool useRaw = true;
 	bool useRaw = false;
@@ -1396,25 +1422,25 @@ std::pair<bool,std::shared_ptr<AlignedRead>> eventalign_detect( read &r,
 				continue;
 			}
 
-			for (unsigned int i = windowLength; i < 1.5*windowLength - 7; i++){
+			for (unsigned int i = windowLength; i < 1.5*windowLength - k + 1; i++){
 
-				std::string sixMer = breakSnippet.substr(i,6);
-				std::pair<double,double> meanStd = thymidineModel[sixMer2index(sixMer)];
+				std::string kmer = breakSnippet.substr(i,k);
+				std::pair<double,double> meanStd = Pore_Substrate_Config.pore_model[kmer2index(kmer,k)];
 
-				std::string sixMer_back = breakSnippet.substr(i-1,6);
-				std::pair<double,double> meanStd_back = thymidineModel[sixMer2index(sixMer_back)];
+				std::string kmer_back = breakSnippet.substr(i-1,k);
+				std::pair<double,double> meanStd_back = Pore_Substrate_Config.pore_model[kmer2index(kmer_back,k)];
 
-				std::string sixMer_front = breakSnippet.substr(i+1,6);
-				std::pair<double,double> meanStd_front = thymidineModel[sixMer2index(sixMer_front)];
+				std::string kmer_front = breakSnippet.substr(i+1,k);
+				std::pair<double,double> meanStd_front = Pore_Substrate_Config.pore_model[kmer2index(kmer_front,k)];
 
 				double gap1 = std::abs(meanStd.first - meanStd_front.first);
 				double gap2 = std::abs(meanStd.first - meanStd_back.first);
 
 				if (gap1 > 20. and gap2 > 20.){
 					//found = true;
-					break1 = breakSnippet.substr(i-1,6);
-					break2 = breakSnippet.substr(i+1,6);
-					windowLength = i+6;
+					break1 = breakSnippet.substr(i-1,k);
+					break2 = breakSnippet.substr(i+1,k);
+					windowLength = i+k;
 					break;
 				}
 			}
@@ -1446,7 +1472,7 @@ std::cerr << "Out of reference sequence size: " << (r.referenceSeqMappedTo).leng
 		for ( unsigned int j = readHead; j < (r.eventAlignment).size(); j++ ){
 
 			/*if an event has been aligned to a position in the window, add it */
-			if ( (r.refToQuery)[posOnRef] <= (r.eventAlignment)[j].second and (r.eventAlignment)[j].second < (r.refToQuery)[posOnRef + windowLength-5] ){
+			if ( (r.refToQuery)[posOnRef] <= (r.eventAlignment)[j].second and (r.eventAlignment)[j].second < (r.refToQuery)[posOnRef + windowLength - k - 1] ){
 
 				if (firstMatch){
 					readHead = j;
@@ -1462,7 +1488,7 @@ std::cerr << "Out of reference sequence size: " << (r.referenceSeqMappedTo).leng
 			}
 
 			/*stop once we get to the end of the window */
-			if ( (r.eventAlignment)[j].second >= (r.refToQuery)[posOnRef + windowLength - 5] ) break;
+			if ( (r.eventAlignment)[j].second >= (r.refToQuery)[posOnRef + windowLength - k - 1] ) break;
 		}
 		
 		//flag large insertions
@@ -1488,7 +1514,7 @@ std::cerr << "Out of reference sequence size: " << (r.referenceSeqMappedTo).leng
 
 		//calculate where we are on the assembly - if we're a reverse complement, we're moving backwards down the reference genome
 		int globalPosOnRef;
-		if ( r.isReverse ) globalPosOnRef = r.refEnd - posOnRef - 6;
+		if ( r.isReverse ) globalPosOnRef = r.refEnd - posOnRef - k;
 		else globalPosOnRef = r.refStart + posOnRef;
 
 		std::pair< double, std::vector<std::string> > builtinAlignment = builtinViterbi( eventSnippet, readSnippet, r.scalings, false, signalDilation);
@@ -1528,7 +1554,7 @@ std::cerr << "Out of reference sequence size: " << (r.referenceSeqMappedTo).leng
 
 			if (label == "D") continue; //silent states don't emit an event
 
-			std::string sixMerStrand = (r.referenceSeqMappedTo).substr(posOnRef + pos, 6);
+			std::string kmerStrand = (r.referenceSeqMappedTo).substr(posOnRef + pos, k);
 
 			double scaledEvent = (eventSnippet[evIdx] - r.scalings.shift) / r.scalings.scale;
 			double eventLength = eventLengthsSnippet[evIdx];
@@ -1536,14 +1562,14 @@ std::cerr << "Out of reference sequence size: " << (r.referenceSeqMappedTo).leng
 			assert(scaledEvent > 0.0);
 
 			unsigned int evPos;
-			std::string sixMerRef;
+			std::string kmerRef;
 			if (r.isReverse){
-				evPos = globalPosOnRef - pos  + 5;
-				sixMerRef = reverseComplement(sixMerStrand);
+				evPos = globalPosOnRef - pos  + k - 1;
+				kmerRef = reverseComplement(kmerStrand);
 			}
 			else{
 				evPos = globalPosOnRef + pos;
-				sixMerRef = sixMerStrand;
+				kmerRef = kmerStrand;
 			}
 
 			if (label == "M"){
@@ -1553,11 +1579,11 @@ std::cerr << "Out of reference sequence size: " << (r.referenceSeqMappedTo).leng
 					unsigned int globalEvIdx = eventIndices[evIdx];
 					for (unsigned int raw_i = r.eventIdx2rawIdx[globalEvIdx].first; raw_i <= r.eventIdx2rawIdx[globalEvIdx].second; raw_i++){
 
-						ar -> addEvent(sixMerStrand, evPos, (r.raw[raw_i]- r.scalings.shift) / r.scalings.scale, 0.,indelScore);
+						ar -> addEvent(kmerStrand, evPos, (r.raw[raw_i]- r.scalings.shift) / r.scalings.scale, 0.,indelScore);
 					}
 				}
 				else{
-					ar -> addEvent(sixMerStrand, evPos, scaledEvent, eventLength,indelScore);
+					ar -> addEvent(kmerStrand, evPos, scaledEvent, eventLength,indelScore);
 				}
 			}
 			evIdx ++;
@@ -1572,10 +1598,10 @@ std::cerr << "Out of reference sequence size: " << (r.referenceSeqMappedTo).leng
 	//REVERSE
 	posOnRef = r.referenceSeqMappedTo.size() - 1;
 	int rev_readHead = (r.eventAlignment).size() - 1;
-	while ( posOnRef > midpoint - 5 ){
+	while ( posOnRef > midpoint - k - 1 ){
 
 		//adjust so we can get the last bit of the read if it doesn't line up with the windows nicely
-		unsigned int basesToEnd = posOnRef - midpoint + 5;
+		unsigned int basesToEnd = posOnRef - midpoint + k - 1;
 		unsigned int windowLength = std::min(basesToEnd, totalWindowLength);
 
 		//find good breakpoints
@@ -1593,22 +1619,22 @@ std::cerr << "Out of reference sequence size: " << (r.referenceSeqMappedTo).leng
 
 			for (unsigned int i = 1.5*windowLength; i > windowLength; i--){
 
-				std::string sixMer = (r.referenceSeqMappedTo).substr(posOnRef-i,6);
-				std::pair<double,double> meanStd = thymidineModel[sixMer2index(sixMer)];
+				std::string kmer = (r.referenceSeqMappedTo).substr(posOnRef-i,k);
+				std::pair<double,double> meanStd = Pore_Substrate_Config.pore_model[kmer2index(kmer,k)];
 
-				std::string sixMer_back = (r.referenceSeqMappedTo).substr(posOnRef-i+1,6);
-				std::pair<double,double> meanStd_back = thymidineModel[sixMer2index(sixMer_back)];
+				std::string kmer_back = (r.referenceSeqMappedTo).substr(posOnRef-i+1,k);
+				std::pair<double,double> meanStd_back = Pore_Substrate_Config.pore_model[kmer2index(kmer_back,k)];
 
-				std::string sixMer_front = (r.referenceSeqMappedTo).substr(posOnRef-i-1,6);
-				std::pair<double,double> meanStd_front = thymidineModel[sixMer2index(sixMer_front)];
+				std::string kmer_front = (r.referenceSeqMappedTo).substr(posOnRef-i-1,k);
+				std::pair<double,double> meanStd_front = Pore_Substrate_Config.pore_model[kmer2index(kmer_front,k)];
 
 				double gap1 = std::abs(meanStd.first - meanStd_front.first);
 				double gap2 = std::abs(meanStd.first - meanStd_back.first);
 
 				if (gap1 > 20. and gap2 > 20.){
 					//found = true;
-					break1 = (r.referenceSeqMappedTo).substr(posOnRef-i-1,6);
-					break2 = (r.referenceSeqMappedTo).substr(posOnRef-i+1,6);
+					break1 = (r.referenceSeqMappedTo).substr(posOnRef-i-1,k);
+					break2 = (r.referenceSeqMappedTo).substr(posOnRef-i+1,k);
 					windowLength = i;
 					break;
 				}
@@ -1646,7 +1672,7 @@ std::cerr << "Out of reference sequence size: " << (r.referenceSeqMappedTo).leng
 			//std::cout << (r.eventAlignment)[j].second << " " << j << " " << (r.refToQuery)[posOnRef] << " " << rev_readHead << std::endl;
 
 			/*if an event has been aligned to a position in the window, add it */
-			if ( (r.eventAlignment)[j].second > (r.refToQuery)[posOnRef - windowLength] and (r.eventAlignment)[j].second <= (r.refToQuery)[posOnRef - 5] ){
+			if ( (r.eventAlignment)[j].second > (r.refToQuery)[posOnRef - windowLength] and (r.eventAlignment)[j].second <= (r.refToQuery)[posOnRef - k - 1] ){
 
 				if (firstMatch){
 					rev_readHead = j;
@@ -1688,7 +1714,7 @@ std::cerr << "Out of reference sequence size: " << (r.referenceSeqMappedTo).leng
 		//calculate where we are on the assembly - if we're a reverse complement, we're moving backwards down the reference genome
 		int globalPosOnRef;
 		if ( r.isReverse ) globalPosOnRef = r.refEnd - posOnRef;
-		else globalPosOnRef = r.refStart + posOnRef - 6;
+		else globalPosOnRef = r.refStart + posOnRef - k;
 
 		std::pair< double, std::vector<std::string> > builtinAlignment = builtinViterbi( eventSnippet, readSnippet, r.scalings, true, signalDilation);
 
@@ -1727,7 +1753,7 @@ std::cerr << "Out of reference sequence size: " << (r.referenceSeqMappedTo).leng
 
 			if (label == "D") continue; //silent states don't emit an event
 
-			std::string sixMerStrand = (r.referenceSeqMappedTo).substr(posOnRef - pos - 6, 6);
+			std::string kmerStrand = (r.referenceSeqMappedTo).substr(posOnRef - pos - k, k);
 
 			double scaledEvent = (eventSnippet[evIdx] - r.scalings.shift) / r.scalings.scale;
 			double eventLength = eventLengthsSnippet[evIdx];
@@ -1735,14 +1761,14 @@ std::cerr << "Out of reference sequence size: " << (r.referenceSeqMappedTo).leng
 			assert(scaledEvent > 0.0);
 
 			unsigned int evPos;
-			std::string sixMerRef;
+			std::string kmerRef;
 			if (r.isReverse){
-				evPos = globalPosOnRef + pos + 5;
-				sixMerRef = reverseComplement(sixMerStrand);
+				evPos = globalPosOnRef + pos + k - 1;
+				kmerRef = reverseComplement(kmerStrand);
 			}
 			else{
 				evPos = globalPosOnRef - pos;
-				sixMerRef = sixMerStrand;
+				kmerRef = kmerStrand;
 			}
 
 			if (label == "M"){
@@ -1751,11 +1777,11 @@ std::cerr << "Out of reference sequence size: " << (r.referenceSeqMappedTo).leng
 					unsigned int globalEvIdx = eventIndices[evIdx];
 					for (unsigned int raw_i = r.eventIdx2rawIdx[globalEvIdx].first; raw_i <= r.eventIdx2rawIdx[globalEvIdx].second; raw_i++){
 
-						ar -> addEvent(sixMerStrand, evPos, (r.raw[raw_i]- r.scalings.shift) / r.scalings.scale, 0.,indelScore);
+						ar -> addEvent(kmerStrand, evPos, (r.raw[raw_i]- r.scalings.shift) / r.scalings.scale, 0.,indelScore);
 					}
 				}
 				else{
-					ar -> addEvent(sixMerStrand, evPos, scaledEvent, eventLength,indelScore);
+					ar -> addEvent(kmerStrand, evPos, scaledEvent, eventLength,indelScore);
 				}
 			}
 
@@ -1768,7 +1794,7 @@ std::cerr << "Out of reference sequence size: " << (r.referenceSeqMappedTo).leng
 	}
 
 	//the two alignments should meet in the middle - fail the read if they don't
-	if (abs(readHead - rev_readHead) > 6){
+	if (abs(readHead - rev_readHead) > k){
 		return std::make_pair(false,ar);
 	}
 
@@ -1821,12 +1847,12 @@ int align_main( int argc, char** argv ){
 	const char *allReads = ".";
 	itr = sam_itr_querys(bam_idx,bam_hdr,allReads);
 
-	unsigned int windowLength = 50;
+	unsigned int windowLength = 50; //PLP&SY check with Mike
 	int result;
 	int failedEvents = 0;
 	unsigned int maxBufferSize;
 	std::vector< bam1_t * > buffer;
-	if ( args.threads <= 4 ) maxBufferSize = args.threads;
+	if ( args.threads <= 4 ) maxBufferSize = args.threads; //PLP&SY: check with Mike
 	else maxBufferSize = 4*(args.threads);
 
 	do {
@@ -1851,7 +1877,7 @@ int align_main( int argc, char** argv ){
 		/*if we've filled up the buffer with short reads, compute them in parallel */
 		if (buffer.size() >= maxBufferSize or (buffer.size() > 0 and result == -1 ) ){
 
-			#pragma omp parallel for schedule(dynamic) shared(buffer,windowLength,analogueModel,thymidineModel,args,prog,failed) num_threads(args.threads)
+			#pragma omp parallel for schedule(dynamic) shared(buffer,windowLength,Pore_Substrate_Config,args,prog,failed) num_threads(args.threads)
 			for (unsigned int i = 0; i < buffer.size(); i++){
 
 				read r;

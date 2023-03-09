@@ -17,10 +17,10 @@
 #include "common.h"
 #include "event_handling.h"
 #include "../fast5/include/fast5.hpp"
-#include "poreModels.h"
 #include "common.h"
 #include <memory>
 #include <utility>
+#include "config.h"
 
 #define NFEATURES 8
 
@@ -30,16 +30,16 @@ class AlignedPosition{
 	private:
 
 		bool forTraining = false;
-		std::string sixMer;
+		std::string kmer;
 		unsigned int refPos;
 		std::vector<double> events;
 		std::vector<double> lengths;
 		double eventAlignQuality;
 
 	public:
-		AlignedPosition(std::string sixMer, unsigned int refPos, int quality){
+		AlignedPosition(std::string kmer, unsigned int refPos, int quality){
 
-			this -> sixMer = sixMer;
+			this -> kmer = kmer;
 			this -> refPos = refPos;
 			this -> eventAlignQuality = quality;
 		}
@@ -49,9 +49,9 @@ class AlignedPosition{
 			events.push_back(ev);
 			lengths.push_back(len);
 		}
-		std::string getSixMer(void){
+		std::string getKmer(void){
 
-			return sixMer;
+			return kmer;
 		}
 		unsigned int getRefPos(void){
 
@@ -64,17 +64,17 @@ class AlignedPosition{
 		std::vector<float> makeFeature(void){
 
 			assert(events.size() > 0 && events.size() == lengths.size());
-			assert(sixMer.substr(0,1) == "A" || sixMer.substr(0,1) == "T" || sixMer.substr(0,1) == "G" || sixMer.substr(0,1) == "C");
+			assert(kmer.substr(0,1) == "A" || kmer.substr(0,1) == "T" || kmer.substr(0,1) == "G" || kmer.substr(0,1) == "C");
 
 
 			//one-hot encode bases
 			std::vector<float> feature = {0., 0., 0., 0.};
-			if (sixMer.substr(0,1) == "A") feature[0] = 1.;
-			else if (sixMer.substr(0,1) == "T") feature[1] = 1.;
-			else if (sixMer.substr(0,1) == "G") feature[2] = 1.;
-			else if (sixMer.substr(0,1) == "C") feature[3] = 1.;
+			if (kmer.substr(0,1) == "A") feature[0] = 1.;
+			else if (kmer.substr(0,1) == "T") feature[1] = 1.;
+			else if (kmer.substr(0,1) == "G") feature[2] = 1.;
+			else if (kmer.substr(0,1) == "C") feature[3] = 1.;
 			
-			std::pair<double,double> meanStd = thymidineModel[sixMer2index(sixMer)];
+			std::pair<double,double> meanStd = Pore_Substrate_Config.pore_model[kmer2index(kmer, Pore_Substrate_Config.kmer_len)];
 			
 			//event means
 			double eventMean = vectorMean(events);
@@ -116,11 +116,11 @@ class AlignedRead{
 			this -> positions = ar.positions;
 		}
 		~AlignedRead(){}
-		void addEvent(std::string sixMer, unsigned int refPos, double ev, double len, int quality){
+		void addEvent(std::string kmer, unsigned int refPos, double ev, double len, int quality){
 
 			if (positions.count(refPos) == 0){
 
-				std::shared_ptr<AlignedPosition> ap( new AlignedPosition(sixMer, refPos, quality));
+				std::shared_ptr<AlignedPosition> ap( new AlignedPosition(kmer, refPos, quality));
 				ap -> addEvent(ev,len);
 				positions[refPos] = ap;
 			}
@@ -260,20 +260,20 @@ class AlignedRead{
 
 			return cigarString;
 		}
-		std::vector<std::string> getSixMers(void){
+		std::vector<std::string> getKmers(void){
 
 			std::vector<std::string> out;
 			out.reserve(positions.size());
 			if (strand == "fwd"){
 
 				for (auto p = positions.begin(); p != positions.end(); p++){
-					out.push_back((p -> second) -> getSixMer());
+					out.push_back((p -> second) -> getKmer());
 				}
 			}
 			else{
 
 				for (auto p = positions.rbegin(); p != positions.rend(); p++){
-					out.push_back((p -> second) -> getSixMer());
+					out.push_back((p -> second) -> getKmer());
 				}
 			}
 			return out;

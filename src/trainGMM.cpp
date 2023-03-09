@@ -12,13 +12,14 @@
 #include <vector>
 #include <iostream>
 #include <fstream>
+#include <cmath>
 #include "common.h"
 #include "data_IO.h"
 #include "error_handling.h"
 #include "event_handling.h"
 #include "probability.h"
-#include "poreModels.h"
 #include "trainGMM.h"
+#include "config.h"
 
 static const char *help=
 "trainGMM: DNAscent executable that determines the mean and standard deviation of a base analogue's current.\n"
@@ -382,20 +383,23 @@ int train_main( int argc, char** argv ){
 
 	/*fudge for openmp */
 	char set1[] = {'A', 'T', 'G', 'C'};
-	int k = 6;
-	std::vector<std::string> allSixMers;
-	printAllKLength(set1, k, 4, allSixMers);
-	std::map< int, std::string > intToSixmer;
-	std::map< std::string, int > sixmerToInt;
+	unsigned int k = Pore_Substrate_Config.kmer_len;
+	std::vector<std::string> allKmers;
+	printAllKLength(set1, k, 4, allKmers); //PLP&SY: check with Mike
+	std::map< int, std::string > intToKmer;
+	std::map< std::string, int > kmerToInt;
 	int index = 0;
-	for ( unsigned int i = 0; i < allSixMers.size(); i++ ){
+	for ( unsigned int i = 0; i < allKmers.size(); i++ ){
 
-		intToSixmer[index] = allSixMers[i];
-		sixmerToInt[allSixMers[i]] = index;
+		intToKmer[index] = allKmers[i];
+		kmerToInt[allKmers[i]] = index;
 		index++;
 	}
 
-	std::vector< std::vector< double > > importedEvents( 4096 );
+	std::vector< std::vector< double > > importedEvents( pow(4,k) );
+	//PLP checkpoint 1:
+	std::cout << pow(4,k) << "checkpoint 1" << std::endl;
+	//end checkpoint 1
 
 	//get a read count
 	unsigned int readCount = 0;
@@ -424,7 +428,7 @@ int train_main( int argc, char** argv ){
 		}
 
 		std::istringstream ss( line );
-		std::string sixMer, entry;
+		std::string kmer, entry;
 		double eventMean = 0.0;
 
 		int col = 0;
@@ -432,7 +436,7 @@ int train_main( int argc, char** argv ){
 
 			if ( col == 4 ){
 
-				sixMer = entry;
+				kmer = entry;
 				break;
 			}
 			else if ( col == 2 ){
@@ -444,9 +448,9 @@ int train_main( int argc, char** argv ){
 
 		assert (eventMean != 0.0);
 
-		if ( importedEvents[sixMer2index(sixMer)].size() < trainArgs.maxEvents ){
+		if ( importedEvents[kmer2index(kmer, k)].size() < trainArgs.maxEvents ){
 
-			importedEvents[sixMer2index(sixMer)].push_back( eventMean );
+			importedEvents[kmer2index(kmer, k)].push_back( eventMean );
 		}
 		if (readsRead > trainArgs.maxReads) break;
 	}
@@ -458,7 +462,7 @@ int train_main( int argc, char** argv ){
 	outFile << "6mer" << '\t' << "ONT_mean" << '\t' << "ONT_stdv" << '\t' << "pi_1" << '\t' << "mean_1" << '\t' << "stdv_1" << '\t' << "pi_2" << '\t' << "mean_2" << '\t' << "stdv_2" << '\t' << "imported_events" << '\t' << "filtered_events" << std::endl;
 	progressBar pb_fit( importedEvents.size(),true );
 
-	#pragma omp parallel for schedule(dynamic) shared(pb_fit, thymidineModel, prog, failed, outFile, importedEvents, trainArgs) num_threads(trainArgs.threads)
+	#pragma omp parallel for schedule(dynamic) shared(pb_fit, Pore_Substrate_Config, prog, failed, outFile, importedEvents, trainArgs) num_threads(trainArgs.threads)
 	for ( unsigned int i = 0; i < importedEvents.size(); i++ ){
 
 		/*don't train if we have less than 200 events for this 6mer */
@@ -482,11 +486,11 @@ int train_main( int argc, char** argv ){
 			continue;
 		}
 
-		std::string sixMer = intToSixmer[i];
+		std::string kmer = intToKmer[i];
 		double mu1, stdv1, mu2, stdv2;
 
 		/*get the ONT distribution for the mixture */
-		std::pair<double,double> meanStd = thymidineModel[sixMer2index(sixMer)];
+		std::pair<double,double> meanStd = Pore_Substrate_Config.pore_model[kmer2index(kmer, k)];
 		mu1 = meanStd.first;
 		stdv1 = meanStd.second;
 
@@ -508,7 +512,7 @@ int train_main( int argc, char** argv ){
 		}
 		#pragma omp critical
 		{	
-			outFile << sixMer << '\t' << meanStd.first << '\t' << meanStd.second << '\t' << fitParameters[0] << '\t' << fitParameters[1] << '\t' << fitParameters[2] << '\t' << fitParameters[3] << '\t' << fitParameters[4] << '\t' << fitParameters[5] << '\t' << (importedEvents[i]).size() << "\t" << filteredEvents.size() << std::endl;
+			outFile << kmer << '\t' << meanStd.first << '\t' << meanStd.second << '\t' << fitParameters[0] << '\t' << fitParameters[1] << '\t' << fitParameters[2] << '\t' << fitParameters[3] << '\t' << fitParameters[4] << '\t' << fitParameters[5] << '\t' << (importedEvents[i]).size() << "\t" << filteredEvents.size() << std::endl;
 			pb_fit.displayProgress( prog, failed, 0 );
 		}
 		prog++;
