@@ -60,8 +60,8 @@ Global_Config Pore_Substrate_Config;
 /*main DNAscent executable that will link to other executables */
 int main( int argc, char** argv ){
 
-	//configure for DNA R9
-	Pore_Substrate_Config.configure_DNA_R9();
+	//configure for DNA R10
+	Pore_Substrate_Config.configure_DNA_R10();
 
 	if ( argc < 2 ){
 		std::cout << "Exiting with error.  No DNAscent executable specified." << std::endl <<  show_options_DNAscent( argc, argv );

@@ -236,7 +236,7 @@ std::vector< std::pair< double, double > > import_poreModel( std::string poreMod
 	while ( std::getline( file, line ) ){
 
 		/*and the line isn't part of the header */
-		if ( line.substr(0,4) != "kmer" && line[0] != '#' ){ 
+		if ( line.substr(0,4) != "kmer" || line[0] != '#' ){ 
 
 			/*the kmer, mean, and standard deviation are the first, second, and third columns, respectively. */
 			/*take the line up to the delimiter (\t), erase that bit, and then move to the next one */
