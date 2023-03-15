@@ -58,7 +58,7 @@ class Global_Config{
 			windowLength_align = 50;
 			
 			fn_pore_model = "r10.4.1_400bps.nucleotide.9mer.template.model"; //from: https://github.com/hasindu2008/f5c/tree/r10/test/r10-models
-			fn_analogue_model = "DNA_R9.4.1_BrdU.model"; 
+			//fn_analogue_model = "DNA_R9.4.1_BrdU.model"; 
 			pore_model = import_poreModel(fn_pore_model, kmer_len);
 			//analogue_model = import_poreModel(fn_analogue_model, kmer_len); //placeholder
 			
