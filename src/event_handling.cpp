@@ -25,7 +25,6 @@
 //}
 
 #define _USE_MATH_DEFINES
-#define DEBUG_FAST5_IO
 
 //from scrappie
 float fast5_read_float_attribute(hid_t group, const char *attribute) {
@@ -66,6 +65,11 @@ void bulk_getEvents( std::string fast5Filename, std::string readID, std::vector<
 	float offset = fast5_read_float_attribute(scaling_group, "offset");
 	float range = fast5_read_float_attribute(scaling_group, "range");
 	sample_rate = fast5_read_float_attribute(scaling_group, "sampling_rate");
+
+	//PLP checkpoint 02
+	std::cout << digitisation << " - " << offset << " - " << range << " - " << sample_rate << std::endl;
+	//end checkpoint 02
+
 	H5Gclose(scaling_group);
 
 	//get the raw signal
