@@ -65,11 +65,6 @@ void bulk_getEvents( std::string fast5Filename, std::string readID, std::vector<
 	float offset = fast5_read_float_attribute(scaling_group, "offset");
 	float range = fast5_read_float_attribute(scaling_group, "range");
 	sample_rate = fast5_read_float_attribute(scaling_group, "sampling_rate");
-
-	//PLP checkpoint 02
-	std::cout << digitisation << " - " << offset << " - " << range << " - " << sample_rate << std::endl;
-	//end checkpoint 02
-
 	H5Gclose(scaling_group);
 
 	//get the raw signal
@@ -100,13 +95,6 @@ void bulk_getEvents( std::string fast5Filename, std::string readID, std::vector<
 
 		raw.push_back( (rawptr[i] + offset) * raw_unit );
 	}
-
-	//PLP checkpoint 01
-    for (size_t k = 0; k < nsample; ++k){
-		std::cout << readID << std::endl;
-		std::cout << raw[k] << " " << std::endl;
-	}
-	//end checkpoint 01
 
 	free(rawptr);
 	H5Fclose(hdf5_file);
@@ -244,7 +232,7 @@ std::vector< double > solveLinearSystem( std::vector< std::vector< double > > A,
 
 inline float logProbabilityMatch(unsigned int kmerIndex, double x, double shift, double scale){
 
-	std::pair<double,double> meanStd = Pore_Substrate_Config.pore_model[kmerIndex]; //PLP&SY: adapt
+	std::pair<double,double> meanStd = Pore_Substrate_Config.pore_model[kmerIndex]; 
 	double mu = scale * meanStd.first + shift;
 	double sigma = meanStd.second;
 
@@ -632,10 +620,6 @@ void normaliseEvents( read &r, bool bulkFast5 ){
 
 
 	float sample_rate;
-	//PLP checkpoint 03:
-	std::cout << sample_rate << std::endl;
-	//end checkpoint 03
-	
 	try{
 
 		if (bulkFast5) bulk_getEvents(r.filename, r.readID, r.raw, sample_rate);
