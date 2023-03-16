@@ -265,5 +265,9 @@ std::vector< std::pair< double, double > > import_poreModel( std::string poreMod
 	    //std::cout << it->first << " " << it->second.first << " " << it->second.second << "\n";
 	}
 
+	// PLP checkpoint 02:
+	std::cout << "checkpoint 02: " << indexedPoreModel << " ---- kmer_len: " << kmer_len << std::endl;
+	//end checkpoint 02
+
 	return indexedPoreModel;
 }
