@@ -261,7 +261,7 @@ std::vector< std::pair< double, double > > import_poreModel( std::string poreMod
 		kmer2MeanStd[kmer] = std::make_pair(it->second.first, it->second.second);
 
 		//PLP checkpoint 03
-		std::cout << "checkpoint 03: " << kmer << " ---- kmer_len: " << kmer << std::endl;
+		std::cout << "checkpoint 03: " << kmer2MeanStd[kmer] << " ---- kmer_len: " << kmer << std::endl;
 		//end checkpoint 03
 
 		indexedPoreModel[kmer2index(kmer, kmer_len)] = std::make_pair(it->second.first, it->second.second);
@@ -270,7 +270,7 @@ std::vector< std::pair< double, double > > import_poreModel( std::string poreMod
 	}
 
 	// PLP checkpoint 02:
-	std::cout << "checkpoint 02: " << kmer << " ---- kmer_len: " << kmer_len << std::endl;
+	std::cout << "checkpoint 02: " << key << " ---- kmer_len: " << kmer_len << std::endl;
 	//end checkpoint 02
 
 	return indexedPoreModel;
