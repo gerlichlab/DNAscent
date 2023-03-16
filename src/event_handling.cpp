@@ -632,6 +632,10 @@ void normaliseEvents( read &r, bool bulkFast5 ){
 
 
 	float sample_rate;
+	//PLP checkpoint 03:
+	std::cout << sample_rate << std::endl;
+	//end checkpoint 03
+	
 	try{
 
 		if (bulkFast5) bulk_getEvents(r.filename, r.readID, r.raw, sample_rate);
