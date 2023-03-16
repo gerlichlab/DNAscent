@@ -236,7 +236,7 @@ std::vector< std::pair< double, double > > import_poreModel( std::string poreMod
 	while ( std::getline( file, line ) ){
 
 		/*and the line isn't part of the header */
-		if ( line.substr(0,4) != "kmer" || line[0] != '#' ){ 
+		if ( line[0] != '#' ){ 
 
 			//PLP checkpoint 04:
 			std::cout << "line: " << line << std::endl;
