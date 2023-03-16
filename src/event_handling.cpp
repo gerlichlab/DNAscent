@@ -81,6 +81,14 @@ void bulk_getEvents( std::string fast5Filename, std::string readID, std::vector<
 	H5Sget_simple_extent_dims(space, &nsample, NULL);
    	rawptr = (float*)calloc(nsample, sizeof(float));
     	herr_t status = H5Dread(dset, H5T_NATIVE_FLOAT, H5S_ALL, H5S_ALL, H5P_DEFAULT, rawptr);
+	
+	//PLP checkpoint 01
+    for (size_t k = 0; k < nsample; ++k){
+		std::cout << readID << std::endl;
+		std::cout << rawptr[k] << " " << std::endl;
+	}
+	//end checkpoint 01
+
 	if ( status < 0 ){
 		free(rawptr);
 		H5Dclose(dset);

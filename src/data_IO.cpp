@@ -238,10 +238,6 @@ std::vector< std::pair< double, double > > import_poreModel( std::string poreMod
 		/*and the line isn't part of the header */
 		if ( line[0] != '#' ){ 
 
-			//PLP checkpoint 04:
-			std::cout << "line: " << line << std::endl;
-			// end checkpoint 04
-
 			/*the kmer, mean, and standard deviation are the first, second, and third columns, respectively. */
 			/*take the line up to the delimiter (\t), erase that bit, and then move to the next one */
 			key = line.substr( 0, line.find( delim ) );
@@ -264,18 +260,10 @@ std::vector< std::pair< double, double > > import_poreModel( std::string poreMod
 		std::string kmer = it -> first;
 		kmer2MeanStd[kmer] = std::make_pair(it->second.first, it->second.second);
 
-		//PLP checkpoint 03
-		std::cout << "checkpoint 03: " << kmer << " ---- kmer_len: " << kmer_len << std::endl;
-		//end checkpoint 03
-
 		indexedPoreModel[kmer2index(kmer, kmer_len)] = std::make_pair(it->second.first, it->second.second);
 
 	    //std::cout << it->first << " " << it->second.first << " " << it->second.second << "\n";
 	}
-
-	// PLP checkpoint 02:
-	std::cout << "checkpoint 02: " << key << std::endl;
-	//end checkpoint 02
 
 	return indexedPoreModel;
 }
