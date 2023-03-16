@@ -1,4 +1,4 @@
-kmer	level_mean	level_stdv	sd_mean	sd_stdv	weight
+#kmer	level_mean	level_stdv	sd_mean	sd_stdv	weight
 AAAAAA	86.486336	1.517846	0.941478	0.609357	4739.559092
 AAAAAC	83.948838	1.517846	1.077051	0.745608	3403.762207
 AAAAAG	85.475368	1.517846	0.953434	0.621001	3553.658043
