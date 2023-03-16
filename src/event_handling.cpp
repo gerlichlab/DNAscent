@@ -25,6 +25,7 @@
 //}
 
 #define _USE_MATH_DEFINES
+#define DEBUG_FAST5_IO
 
 //from scrappie
 float fast5_read_float_attribute(hid_t group, const char *attribute) {
