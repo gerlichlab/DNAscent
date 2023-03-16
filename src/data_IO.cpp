@@ -222,6 +222,10 @@ std::vector< std::pair< double, double > > import_poreModel( std::string poreMod
 	std::string pathExe = getExePath();
 	std::string modelPath = pathExe + "/pore_models/" + poreModelFilename;
 
+	// PLP checkpoint 01:
+	std::cout << "checkpoint 01: " << modelPath << " ---- kmer_len: " << kmer_len << std::endl;
+	//end checkpoint 01
+
 	/*map that sends a 5mer or 6mer to the characteristic mean and standard deviation (a pair) */
 	std::map< std::string, std::pair< double, double > > kmer2MeanStd;
 
