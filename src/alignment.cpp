@@ -667,6 +667,10 @@ std::string eventalign( read &r,
 			continue;
 		}
 
+		//PLP checkpoint 08
+		std::cout << "checkpoint 08: " << posOnRef << std::endl;
+		//end checkpoint 08
+
 		//calculate where we are on the assembly - if we're a reverse complement, we're moving backwards down the reference genome
 		int globalPosOnRef;
 		if ( r.isReverse ) globalPosOnRef = r.refEnd - posOnRef - k;
