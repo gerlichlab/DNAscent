@@ -659,6 +659,11 @@ std::string eventalign( read &r,
 				}
 			}
 
+			//PLP checkpoint 10
+			std::cout << "checkpoint 10: " << r.eventLengths << std::endl;
+			//end checkpoint 10
+
+
 			/*stop once we get to the end of the window */
 			if ( (r.eventAlignment)[j].second >= (r.refToQuery)[posOnRef + windowLength - k + 1] ) break;
 		}
