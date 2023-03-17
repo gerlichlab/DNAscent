@@ -1784,10 +1784,6 @@ int align_main( int argc, char** argv ){
 	Arguments args = parseAlignArguments( argc, argv );
 	bool bulkFast5;
 
-	//PLP checkpoint 05
-	std::cout << "checkpoint 05" << std::endl;
-	//end checkpoint 05
-
 	//load DNAscent index
 	std::map< std::string, std::string > readID2path;
 	parseIndex( args.indexFilename, readID2path, bulkFast5 );
@@ -1908,6 +1904,10 @@ int align_main( int argc, char** argv ){
 				}
 
 				std::string out = eventalign( r, windowLength, args.dilation, args.useRaw);
+
+				//PLP checkpoint 05
+				std::cout << "checkpoint 05: " << out.size() << std::endl;
+				//end checkpoint 05
 
 				#pragma omp critical
 				{
