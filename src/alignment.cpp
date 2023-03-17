@@ -617,6 +617,10 @@ std::string eventalign( read &r,
 			}
 		}
 
+		//PLP checkpoint 07
+		std::cout << "checkpoint 07: " << break1 << std::endl;
+		//end checkpoint 07
+
 		std::string readSnippet = (r.referenceSeqMappedTo).substr(posOnRef, windowLength);
 
 		bool isDefined = referenceDefined(readSnippet);
