@@ -660,7 +660,7 @@ std::string eventalign( read &r,
 			}
 
 			//PLP checkpoint 10
-			std::cout << "checkpoint 10: " << r.eventLengths << std::endl;
+			std::cout << "checkpoint 10: " << ev << std::endl;
 			//end checkpoint 10
 
 
