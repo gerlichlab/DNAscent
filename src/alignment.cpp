@@ -663,7 +663,7 @@ std::string eventalign( read &r,
 					eventLengthsSnippet.push_back( (r.eventLengths)[(r.eventAlignment)[j].first] );
 
 					//PLP checkpoint 12
-					std::cout << "checkpoint 12: " << eventSnippet << std::endl;
+					std::cout << "checkpoint 12: " << std::endl;
 					//end checkpoint 12
 				}
 
