@@ -654,9 +654,8 @@ void normaliseEvents( read &r, bool bulkFast5 ){
 	free(et.event);
 
 	*/
-	event_table et = detect_events(&(r.raw)[0], (r.raw).size(), event_detection_defaults);
-	assert(et.n > 0);
-	r.normalisedEvents.reserve(et.n);
+
+	r.normalisedEvents.reserve((r.raw).size());
 	r.normalisedEvents = r.raw;
 
 	//testing - print the event and the raw signals that were used to make it
