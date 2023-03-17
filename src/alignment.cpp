@@ -652,6 +652,11 @@ std::string eventalign( read &r,
 				//end checkpoint 09
 
 				double ev = (r.normalisedEvents)[(r.eventAlignment)[j].first];
+
+				//PLP checkpoint 11
+				std::cout << "checkpoint 11: " << ev << std::endl;
+				//end checkpoint 11
+
 				if (ev > r.scalings.shift + 1.0 and ev < 250.0){
 					eventSnippet.push_back( ev );
 					eventIndices.push_back( (r.eventAlignment)[j].first );
