@@ -1896,7 +1896,7 @@ int align_main( int argc, char** argv ){
 				normaliseEvents(r, bulkFast5);
 
 				//PLP checkpoint 04
-				std::cout << "checkpoint 04: " << r.size() << std::endl;
+				std::cout << "checkpoint 04: " << (r.basecall).size() << std::endl;
 				//end checkpoint 04
 
 				//catch reads with rough event alignments that fail the QC
