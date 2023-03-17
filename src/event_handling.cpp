@@ -694,4 +694,10 @@ void normaliseEvents( read &r, bool bulkFast5 ){
 	/*align 5mers to events using the basecall */
 	adaptive_banded_simple_event_align(r.normalisedEvents, r, s, kmer_ranks);
 	r.scalings.eventsPerBase = std::max(1.25, (double) r.eventAlignment.size() / (double) (r.basecall.size() - k));
+
+	//PLP checkpoint 03
+	std::cout << "checkpoint 03: " << (r.normalisedEvents).size() << std::endl;
+	//end checkpoint 03
+
+
 }
