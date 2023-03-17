@@ -656,6 +656,11 @@ void normaliseEvents( read &r, bool bulkFast5 ){
 	*/
 
 	r.normalisedEvents.reserve((r.raw).size());
+
+	//PLP checkpoint 01
+	std::cout << "checkpoint 01: " << (r.raw).size() << std::endl;
+	//end checkpoint 01
+
 	r.normalisedEvents = r.raw;
 
 	//testing - print the event and the raw signals that were used to make it
