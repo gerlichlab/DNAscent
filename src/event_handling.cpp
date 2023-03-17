@@ -630,10 +630,9 @@ void normaliseEvents( read &r, bool bulkFast5 ){
 		return;
 	}
 
-
+	/* PLP commented out
 	event_table et = detect_events(&(r.raw)[0], (r.raw).size(), event_detection_defaults);
 	assert(et.n > 0);
-
 
 	//get the event mean and length
 	r.normalisedEvents.reserve(et.n);
@@ -653,6 +652,10 @@ void normaliseEvents( read &r, bool bulkFast5 ){
 	}
 	r.eventIdx2rawIdx[et.n-1] = std::make_pair(rawStart,r.raw.size()-1);
 	free(et.event);
+
+	*/
+
+	r.normalisedEvents = r.raw
 
 	//testing - print the event and the raw signals that were used to make it
 	/*
