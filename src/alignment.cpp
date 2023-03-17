@@ -1785,7 +1785,7 @@ int align_main( int argc, char** argv ){
 	bool bulkFast5;
 
 	//PLP checkpoint 05
-	std::cout << "checkpoint 05: " << bulkFast5 << std::endl;
+	std::cout << "checkpoint 05" << std::endl;
 	//end checkpoint 05
 
 	//load DNAscent index
