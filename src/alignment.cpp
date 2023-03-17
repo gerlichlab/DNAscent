@@ -657,11 +657,14 @@ std::string eventalign( read &r,
 					eventIndices.push_back( (r.eventAlignment)[j].first );
 					eventLengthsSnippet.push_back( (r.eventLengths)[(r.eventAlignment)[j].first] );
 				}
-			}
 
 			//PLP checkpoint 10
 			std::cout << "checkpoint 10: " << ev << std::endl;
 			//end checkpoint 10
+
+			}
+
+
 
 
 			/*stop once we get to the end of the window */
