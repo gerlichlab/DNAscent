@@ -655,7 +655,7 @@ void normaliseEvents( read &r, bool bulkFast5 ){
 
 	*/
 
-	r.normalisedEvents = r.raw
+	r.normalisedEvents = r.raw;
 
 	//testing - print the event and the raw signals that were used to make it
 	/*
