@@ -647,6 +647,10 @@ std::string eventalign( read &r,
 					firstMatch = false;
 				}
 
+				//PLP checkpoint 09
+				std::cout << "checkpoint 09: " << readHead << std::endl;
+				//end checkpoint 09
+
 				double ev = (r.normalisedEvents)[(r.eventAlignment)[j].first];
 				if (ev > r.scalings.shift + 1.0 and ev < 250.0){
 					eventSnippet.push_back( ev );
