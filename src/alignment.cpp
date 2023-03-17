@@ -569,6 +569,10 @@ std::string eventalign( read &r,
 	//midpoint for bidirectional alignment
 	size_t midpoint = (r.referenceSeqMappedTo.size()) / 2;
 
+	//PLP checkpoint 06
+	std::cout << "checkpoint 06: " << midpoint << std::endl;
+	//end checkpoint 06
+
 	unsigned int posOnRef = 0;
 	while ( posOnRef < midpoint ){
 
