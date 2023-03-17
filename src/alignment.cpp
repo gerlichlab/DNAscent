@@ -1784,6 +1784,10 @@ int align_main( int argc, char** argv ){
 	Arguments args = parseAlignArguments( argc, argv );
 	bool bulkFast5;
 
+	//PLP checkpoint 05
+	std::cout << "checkpoint 05: " << bulkFast5 << std::endl;
+	//end checkpoint 05
+
 	//load DNAscent index
 	std::map< std::string, std::string > readID2path;
 	parseIndex( args.indexFilename, readID2path, bulkFast5 );
@@ -1892,7 +1896,7 @@ int align_main( int argc, char** argv ){
 				normaliseEvents(r, bulkFast5);
 
 				//PLP checkpoint 04
-				std::cout << "checkpoint 04: " << r.size() << " ---- " << bulkFast5.size() << std::endl;
+				std::cout << "checkpoint 04: " << r.size() << std::endl;
 				//end checkpoint 04
 
 				//catch reads with rough event alignments that fail the QC
