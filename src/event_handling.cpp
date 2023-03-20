@@ -661,8 +661,11 @@ void normaliseEvents( read &r, bool bulkFast5 ){
 	std::cout << "checkpoint 01: " << (r.raw).size() << std::endl;
 	//end checkpoint 01
 
+	// PLP to do: if R10 then do:
 	r.normalisedEvents = r.raw;
-
+	std::vector<double> zerosVec(r.raw.size(), 0.); //initialise a vector of zeros the same size as r.rawr.eventLengths = zerosVec;
+	// end to do
+	
 	//PLP checkpoint 02
 	std::cout << "checkpoint 02: " << (r.raw).size() << std::endl;
 	//end checkpoint 02
