@@ -630,7 +630,7 @@ void normaliseEvents( read &r, bool bulkFast5 ){
 		return;
 	}
 
-	/* PLP commented out
+	// PLP commented out
 	event_table et = detect_events(&(r.raw)[0], (r.raw).size(), event_detection_defaults);
 	assert(et.n > 0);
 
@@ -653,7 +653,7 @@ void normaliseEvents( read &r, bool bulkFast5 ){
 	r.eventIdx2rawIdx[et.n-1] = std::make_pair(rawStart,r.raw.size()-1);
 	free(et.event);
 
-	*/
+	// end commented out
 
 	r.normalisedEvents.reserve((r.raw).size());
 
@@ -665,7 +665,7 @@ void normaliseEvents( read &r, bool bulkFast5 ){
 	r.normalisedEvents = r.raw;
 	std::vector<double> zerosVec(r.raw.size(), 0.); //initialise a vector of zeros the same size as r.rawr.eventLengths = zerosVec;
 	// end to do
-	
+
 	//PLP checkpoint 02
 	std::cout << "checkpoint 02: " << (r.raw).size() << std::endl;
 	//end checkpoint 02
