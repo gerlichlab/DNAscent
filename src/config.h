@@ -56,6 +56,8 @@ class Global_Config{
 		void configure_DNA_R10(void){
 			kmer_len = 9;
 			windowLength_align = 50;
+
+			//PLP To Do: add in parameter (boolean?) to indicate whether it should be events or not
 			
 			fn_pore_model = "r10.4.1_400bps.nucleotide.9mer.template.model"; //from: https://github.com/hasindu2008/f5c/tree/r10/test/r10-models
 			fn_analogue_model = "DNA_R9.4.1_BrdU.model"; 
