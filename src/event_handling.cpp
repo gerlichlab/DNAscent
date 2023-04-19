@@ -663,7 +663,8 @@ void normaliseEvents( read &r, bool bulkFast5 ){
 
 	// PLP to do: if R10 then do:
 	r.normalisedEvents = r.raw;
-	std::vector<double> zerosVec(r.raw.size(), 0.); //initialise a vector of zeros the same size as r.rawr.eventLengths = zerosVec;
+	std::vector<double> zerosVec(r.raw.size(), 0.); //initialise a vector of zeros the same size as r.raw
+	r.eventLengths = zerosVec;
 	// end to do
 
 	//PLP checkpoint 02
