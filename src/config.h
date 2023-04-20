@@ -60,9 +60,9 @@ class Global_Config{
 			//PLP To Do: add in parameter (boolean?) to indicate whether it should be events or not
 			
 			fn_pore_model = "r10.4.1_400bps.nucleotide.9mer.template.model"; //from: https://github.com/hasindu2008/f5c/tree/r10/test/r10-models
-			fn_analogue_model = "DNA_R9.4.1_BrdU.model"; 
+			fn_analogue_model = "BrdU.model"; 
 			pore_model = import_poreModel(fn_pore_model, kmer_len);
-			//analogue_model = import_poreModel(fn_analogue_model, 6); //placeholder
+			analogue_model = import_poreModel(fn_analogue_model, kmer_len); //placeholder
 			
 			fn_dnn_model = "dnn_models/detect_model_BrdUEdU/";
 			dnn_model_inputLayer = "serving_default_input_1";
