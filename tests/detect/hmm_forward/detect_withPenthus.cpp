@@ -207,12 +207,12 @@ double sequenceProbability( std::vector <double> &observations,
 
 		std::string kmer = sequence.substr(0, k);
 
-		level_mu = scalings.shift + scalings.scale * thymidineModel.at(kmer).first;
-		level_sigma = scalings.var * thymidineModel.at(kmer).second;
+		level_mu = scalings.shift + scalings.scale * Pore_Substrate_Config.pore_model.at(kmer).first;
+		level_sigma = scalings.var * Pore_Substrate_Config.pore_model.at(kmer).second;
 
 		//uncomment to scale events
-		//level_mu = thymidineModel.at(kmer).first;
-		//level_sigma = scalings.var / scalings.scale * thymidineModel.at(kmer).second;
+		//level_mu = Pore_Substrate_Config.pore_model.at(kmer).first;
+		//level_sigma = scalings.var / scalings.scale * Pore_Substrate_Config.pore_model.at(kmer).second;
 		//observations[t] = (observations[t] - scalings.shift) / scalings.scale;
 
 		matchProb = eln( normalPDF( level_mu, level_sigma, observations[t] ) );
@@ -241,25 +241,25 @@ double sequenceProbability( std::vector <double> &observations,
 			//get model parameters
 			kmer = sequence.substr(i, k); 
 			insProb = eln( uniformPDF( 0, 250, observations[t] ) );
-			if ( useBrdU and BrdUStart - 5 <= i and i <= BrdUEnd and kmer.find('T') != std::string::npos and analogueModel.count(kmer) > 0 ){
+			if ( useBrdU and BrdUStart - 5 <= i and i <= BrdUEnd and kmer.find('T') != std::string::npos and Pore_Substrate_Config.analogue_model.count(kmer) > 0 ){
 
-				level_mu = scalings.shift + scalings.scale * analogueModel.at(kmer).first;
-				level_sigma = scalings.var * analogueModel.at(kmer).second;
+				level_mu = scalings.shift + scalings.scale * Pore_Substrate_Config.analogue_model.at(kmer).first;
+				level_sigma = scalings.var * Pore_Substrate_Config.analogue_model.at(kmer).second;
 
 				//uncomment if you scale events
-				//level_mu = analogueModel.at(kmer).first;
-				//level_sigma = scalings.var / scalings.scale * analogueModel.at(kmer).second;
+				//level_mu = Pore_Substrate_Config.analogue_model.at(kmer).first;
+				//level_sigma = scalings.var / scalings.scale * Pore_Substrate_Config.analogue_model.at(kmer).second;
 
 				matchProb = eln( normalPDF( level_mu, level_sigma, observations[t] ) );
 			}
 			else{
 
-				level_mu = scalings.shift + scalings.scale * thymidineModel.at(kmer).first;
-				level_sigma = scalings.var * thymidineModel.at(kmer).second;
+				level_mu = scalings.shift + scalings.scale * Pore_Substrate_Config.pore_model.at(kmer).first;
+				level_sigma = scalings.var * Pore_Substrate_Config.pore_model.at(kmer).second;
 
 				//uncomment if you scale events				
-				//level_mu = thymidineModel.at(kmer).first;
-				//level_sigma = scalings.var / scalings.scale * thymidineModel.at(kmer).second;
+				//level_mu = Pore_Substrate_Config.pore_model.at(kmer).first;
+				//level_sigma = scalings.var / scalings.scale * Pore_Substrate_Config.pore_model.at(kmer).second;
 
 				matchProb = eln( normalPDF( level_mu, level_sigma, observations[t] ) );
 			}
@@ -341,13 +341,13 @@ double sequenceProbability_Penthus( std::vector <double> &observations,
 
 		kmer = sequence.substr( i, k );
 
-		if ( useBrdU and BrdUStart - k-1 <= i and i <= BrdUEnd and kmer.find('T') != std::string::npos and analogueModel.count(kmer) > 0 ){
+		if ( useBrdU and BrdUStart - k-1 <= i and i <= BrdUEnd and kmer.find('T') != std::string::npos and Pore_Substrate_Config.analogue_model.count(kmer) > 0 ){
 
-			nd.push_back( NormalDistribution( scalings.shift + scalings.scale * analogueModel.at(kmer).first, scalings.var * analogueModel.at(kmer).second ) );
+			nd.push_back( NormalDistribution( scalings.shift + scalings.scale * Pore_Substrate_Config.analogue_model.at(kmer).first, scalings.var * Pore_Substrate_Config.analogue_model.at(kmer).second ) );
 		}
 		else {
 
-			nd.push_back( NormalDistribution( scalings.shift + scalings.scale * thymidineModel.at(kmer).first, scalings.var * thymidineModel.at(kmer).second ) );
+			nd.push_back( NormalDistribution( scalings.shift + scalings.scale * Pore_Substrate_Config.pore_model.at(kmer).first, scalings.var * Pore_Substrate_Config.pore_model.at(kmer).second ) );
 		}
 	}
 
@@ -463,13 +463,13 @@ double sequenceProbability_methyl( std::vector <double> &observations,
 		}
 		else {
 
-			level_mu = scalings.shift + scalings.scale * thymidineModel.at(kmer).first;
-			level_sigma = scalings.var * thymidineModel.at(kmer).second;
+			level_mu = scalings.shift + scalings.scale * Pore_Substrate_Config.pore_model.at(kmer).first;
+			level_sigma = scalings.var * Pore_Substrate_Config.pore_model.at(kmer).second;
 		}
 
 		//uncomment to scale events
-		//level_mu = thymidineModel.at(kmer).first;
-		//level_sigma = scalings.var / scalings.scale * thymidineModel.at(kmer).second;
+		//level_mu = Pore_Substrate_Config.pore_model.at(kmer).first;
+		//level_sigma = scalings.var / scalings.scale * Pore_Substrate_Config.pore_model.at(kmer).second;
 		//observations[t] = (observations[t] - scalings.shift) / scalings.scale;
 
 		matchProb = eln( normalPDF( level_mu, level_sigma, observations[t] ) );
@@ -505,18 +505,18 @@ double sequenceProbability_methyl( std::vector <double> &observations,
 				level_sigma = scalings.var * methyl5mCModel.at(kmer_methyl).second;
 
 				//uncomment if you scale events
-				//level_mu = analogueModel.at(kmer).first;
-				//level_sigma = scalings.var / scalings.scale * analogueModel.at(kmer).second;
+				//level_mu = Pore_Substrate_Config.analogue_model.at(kmer).first;
+				//level_sigma = scalings.var / scalings.scale * Pore_Substrate_Config.analogue_model.at(kmer).second;
 
 				matchProb = eln( normalPDF( level_mu, level_sigma, observations[t] ) );
 			}
 			else{
-				level_mu = scalings.shift + scalings.scale * thymidineModel.at(kmer).first;
-				level_sigma = scalings.var * thymidineModel.at(kmer).second;
+				level_mu = scalings.shift + scalings.scale * Pore_Substrate_Config.pore_model.at(kmer).first;
+				level_sigma = scalings.var * Pore_Substrate_Config.pore_model.at(kmer).second;
 
 				//uncomment if you scale events				
-				//level_mu = thymidineModel.at(kmer).first;
-				//level_sigma = scalings.var / scalings.scale * thymidineModel.at(kmer).second;
+				//level_mu = Pore_Substrate_Config.pore_model.at(kmer).first;
+				//level_sigma = scalings.var / scalings.scale * Pore_Substrate_Config.pore_model.at(kmer).second;
 
 				matchProb = eln( normalPDF( level_mu, level_sigma, observations[t] ) );
 			}
@@ -932,7 +932,7 @@ std::string llAcrossRead( read &r,
 		std::cout << readSnippet << std::endl;
 		for ( int pos = 0; pos < readSnippet.length()-5; pos++ ){
 		
-			std::cout << readSnippet.substr(pos,6) << "\t" << thymidineModel.at( readSnippet.substr(pos,6) ).first << std::endl;
+			std::cout << readSnippet.substr(pos,6) << "\t" << Pore_Substrate_Config.pore_model.at( readSnippet.substr(pos,6) ).first << std::endl;
 		}
 		for ( auto ev = eventSnippet.begin(); ev < eventSnippet.end(); ev++){
 			double scaledEv =  (*ev - r.scalings.shift) / r.scalings.scale;
@@ -1077,7 +1077,7 @@ int detect_main( int argc, char** argv ){
 		/*if we've filled up the buffer with short reads, compute them in parallel */
 		if (buffer.size() >= maxBufferSize or (buffer.size() > 0 and result == -1 ) ){
 
-			#pragma omp parallel for schedule(dynamic) shared(buffer,windowLength,analogueModel,thymidineModel,methyl5mCModel,args,prog,failed) num_threads(args.threads)
+			#pragma omp parallel for schedule(dynamic) shared(buffer,windowLength,Pore_Substrate_Config.analogue_model,Pore_Substrate_Config.pore_model,methyl5mCModel,args,prog,failed) num_threads(args.threads)
 			for (unsigned int i = 0; i < buffer.size(); i++){
 
 				read r; 

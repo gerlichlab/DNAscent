@@ -248,8 +248,8 @@ double sequenceProbability( std::vector <double> &observations,
 				level_sigma = scalings.var * analogue_meanStd.second;
 
 				//uncomment if you scale events
-				//level_mu = analogueModel.at(kmer).first;
-				//level_sigma = scalings.var / scalings.scale * analogueModel.at(kmer).second;
+				//level_mu = Pore_Substrate_Config.analogue_model.at(kmer).first;
+				//level_sigma = scalings.var / scalings.scale * Pore_Substrate_Config.analogue_model.at(kmer).second;
 
 				matchProb = eln( normalPDF( level_mu, level_sigma, observations[t] ) );
 			}
@@ -518,8 +518,8 @@ std::string llAcrossRead( read &r,
 double runningKL = 0.0;
 for (unsigned int s = 0; s < readSnippet.length() - k; s++){
 	std::string kmer = readSnippet.substr(s,Pore_Substrate_Config.kmer_len);
-	if ( BrdUStart <= s and s <= BrdUEnd and kmer.find('T') != std::string::npos and analogueModel.count(kmer) > 0 ){
-		runningKL += KLdivergence( Pore_Substrate_Config.pore_model.at(kmer).first, Pore_Substrate_Config.pore_model.at(kmer).second, analogueModel.at(kmer).first, analogueModel.at(kmer).second );
+	if ( BrdUStart <= s and s <= BrdUEnd and kmer.find('T') != std::string::npos and Pore_Substrate_Config.analogue_model.count(kmer) > 0 ){
+		runningKL += KLdivergence( Pore_Substrate_Config.pore_model.at(kmer).first, Pore_Substrate_Config.pore_model.at(kmer).second, Pore_Substrate_Config.analogue_model.at(kmer).first, Pore_Substrate_Config.analogue_model.at(kmer).second );
 	}
 }
 std::cerr << "<-------------------" << std::endl;
@@ -689,8 +689,8 @@ std::map<unsigned int, double> llAcrossRead_forTraining( read &r, unsigned int w
 double runningKL = 0.0;
 for (unsigned int s = 0; s < readSnippet.length() - k; s++){
 	std::string kmer = readSnippet.substr(s,k);
-	if ( BrdUStart <= s and s <= BrdUEnd and kmer.find('T') != std::string::npos and analogueModel.count(kmer) > 0 ){
-		runningKL += KLdivergence( Pore_Substrate_Config.pore_model.at(kmer).first, Pore_Substrate_Config.pore_model.at(kmer).second, analogueModel.at(kmer).first, analogueModel.at(kmer).second );
+	if ( BrdUStart <= s and s <= BrdUEnd and kmer.find('T') != std::string::npos and Pore_Substrate_Config.analogue_model.count(kmer) > 0 ){
+		runningKL += KLdivergence( Pore_Substrate_Config.pore_model.at(kmer).first, Pore_Substrate_Config.pore_model.at(kmer).second, Pore_Substrate_Config.analogue_model.at(kmer).first, Pore_Substrate_Config.analogue_model.at(kmer).second );
 	}
 }
 std::cerr << "<-------------------" << std::endl;
