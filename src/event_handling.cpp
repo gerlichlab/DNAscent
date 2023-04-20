@@ -658,7 +658,7 @@ void normaliseEvents( read &r, bool bulkFast5 ){
 	r.normalisedEvents.reserve((r.raw).size());
 
 	//PLP checkpoint 01
-	std::cout << "checkpoint 01: " << (r.raw).size() << std::endl;
+	//std::cout << "checkpoint 01: " << (r.raw).size() << std::endl;
 	//end checkpoint 01
 
 	// PLP to do: if R10 then do:
@@ -668,7 +668,7 @@ void normaliseEvents( read &r, bool bulkFast5 ){
 	// end to do
 
 	//PLP checkpoint 02
-	std::cout << "checkpoint 02: " << (r.raw).size() << std::endl;
+	//std::cout << "checkpoint 02: " << (r.raw).size() << std::endl;
 	//end checkpoint 02
 
 	//testing - print the event and the raw signals that were used to make it
@@ -700,7 +700,7 @@ void normaliseEvents( read &r, bool bulkFast5 ){
 	r.scalings.eventsPerBase = std::max(1.25, (double) r.eventAlignment.size() / (double) (r.basecall.size() - k));
 
 	//PLP checkpoint 03
-	std::cout << "checkpoint 03: " << (r.normalisedEvents).size() << std::endl;
+	//std::cout << "checkpoint 03: " << (r.normalisedEvents).size() << std::endl;
 	//end checkpoint 03
 
 

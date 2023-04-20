@@ -69,7 +69,7 @@ Arguments parseAlignArguments( int argc, char** argv ){
 		std::cout << help << std::endl;
 		exit(EXIT_SUCCESS);
 	}
-	else if( argc < 4 ){ //PLP&SY: check with Mike
+	else if( argc < 4 ){
 
 		std::cout << "Exiting with error.  Insufficient arguments passed to DNAscent detect." << std::endl;
 		exit(EXIT_FAILURE);
@@ -234,7 +234,7 @@ std::pair< double, std::vector< std::string > > builtinViterbi( std::vector <dou
 		kmerIndices.push_back(kmer2index(kmer,k));
 	}
 
-	std::vector< std::vector< size_t > > backtraceS( 3*n_states, std::vector< size_t >( observations.size() + 1 ) ); /*stores state indices for the Viterbi backtrace */ //PLP&SY: check with Mike
+	std::vector< std::vector< size_t > > backtraceS( 3*n_states, std::vector< size_t >( observations.size() + 1 ) ); /*stores state indices for the Viterbi backtrace */
 	std::vector< std::vector< size_t > > backtraceT( 3*n_states, std::vector< size_t >( observations.size() + 1 ) ); /*stores observation indices for the Viterbi backtrace */
 
 	//reserve 0 for start
@@ -570,7 +570,7 @@ std::string eventalign( read &r,
 	size_t midpoint = (r.referenceSeqMappedTo.size()) / 2;
 
 	//PLP checkpoint 06
-	std::cout << "checkpoint 06: " << midpoint << std::endl;
+	//std::cout << "checkpoint 06: " << midpoint << std::endl;
 	//end checkpoint 06
 
 	unsigned int posOnRef = 0;
@@ -618,7 +618,7 @@ std::string eventalign( read &r,
 		}
 
 		//PLP checkpoint 07
-		std::cout << "checkpoint 07: " << break1 << std::endl;
+		//std::cout << "checkpoint 07: " << break1 << std::endl;
 		//end checkpoint 07
 
 		std::string readSnippet = (r.referenceSeqMappedTo).substr(posOnRef, windowLength);
@@ -648,13 +648,13 @@ std::string eventalign( read &r,
 				}
 
 				//PLP checkpoint 09
-				std::cout << "checkpoint 09: " << readHead << std::endl;
+				//std::cout << "checkpoint 09: " << readHead << std::endl;
 				//end checkpoint 09
 
 				double ev = (r.normalisedEvents)[(r.eventAlignment)[j].first];
 
 				//PLP checkpoint 11
-				std::cout << "checkpoint 11: " << ev << std::endl;
+				//std::cout << "checkpoint 11: " << ev << std::endl;
 				//end checkpoint 11
 
 				if (ev > r.scalings.shift + 1.0 and ev < 250.0){
@@ -663,12 +663,12 @@ std::string eventalign( read &r,
 					eventLengthsSnippet.push_back( (r.eventLengths)[(r.eventAlignment)[j].first] );
 
 					//PLP checkpoint 12
-					std::cout << "checkpoint 12: " << std::endl;
+					//std::cout << "checkpoint 12: " << std::endl;
 					//end checkpoint 12
 				}
 
 			//PLP checkpoint 10
-			std::cout << "checkpoint 10: " << ev << std::endl;
+			//std::cout << "checkpoint 10: " << ev << std::endl;
 			//end checkpoint 10
 
 			}
@@ -689,7 +689,7 @@ std::string eventalign( read &r,
 		}
 
 		//PLP checkpoint 08
-		std::cout << "checkpoint 08: " << posOnRef << std::endl;
+		//std::cout << "checkpoint 08: " << posOnRef << std::endl;
 		//end checkpoint 08
 
 		//calculate where we are on the assembly - if we're a reverse complement, we're moving backwards down the reference genome
@@ -757,7 +757,7 @@ std::string eventalign( read &r,
 						out += std::to_string(evPos) + "\t" + kmerRef + "\t" + std::to_string((r.raw[raw_i]- r.scalings.shift) / r.scalings.scale) + "\t" + std::to_string(0) + "\t" + kmerStrand + "\t" + std::to_string(meanStd.first) + "\t" + std::to_string(meanStd.second) + "\n";
 					}
 					else if (label == "I" and evIdx < lastM_ev){ //don't print insertions after the last match because we're going to align these in the next segment
-						out += std::to_string(evPos) + "\t" + kmerRef + "\t" + std::to_string((r.raw[raw_i]- r.scalings.shift) / r.scalings.scale) + "\t" + std::to_string(0) + "\t" + "NNNNNN" + "\t" + "0" + "\t" + "0" + "\n";
+						out += std::to_string(evPos) + "\t" + kmerRef + "\t" + std::to_string((r.raw[raw_i]- r.scalings.shift) / r.scalings.scale) + "\t" + std::to_string(0) + "\t" + std::string(k, 'N') + "\t" + "0" + "\t" + "0" + "\n";
 					}
 				}
 			}
@@ -768,7 +768,7 @@ std::string eventalign( read &r,
 					out += std::to_string(evPos) + "\t" + kmerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(eventLength) + "\t" + kmerStrand + "\t" + std::to_string(meanStd.first) + "\t" + std::to_string(meanStd.second) + "\n";
 				}
 				else if (label == "I" and evIdx < lastM_ev){ //don't print insertions after the last match because we're going to align these in the next segment
-					out += std::to_string(evPos) + "\t" + kmerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(eventLength) + "\t" + "NNNNNN" + "\t" + "0" + "\t" + "0" + "\n";
+					out += std::to_string(evPos) + "\t" + kmerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(eventLength) + "\t" + std::string(k, 'N') + "\t" + "0" + "\t" + "0" + "\n";
 				}
 			}
 
@@ -952,7 +952,7 @@ std::string eventalign( read &r,
 						out += std::to_string(evPos) + "\t" + kmerRef + "\t" + std::to_string((r.raw[raw_i]- r.scalings.shift) / r.scalings.scale) + "\t" + std::to_string(0) + "\t" + kmerStrand + "\t" + std::to_string(meanStd.first) + "\t" + std::to_string(meanStd.second) + "\n";
 					}
 					else if (label == "I" and evIdx < lastM_ev){ //don't print insertions after the last match because we're going to align these in the next segment
-						out += std::to_string(evPos) + "\t" + kmerRef + "\t" + std::to_string((r.raw[raw_i]- r.scalings.shift) / r.scalings.scale) + "\t" + std::to_string(0) + "\t" + "NNNNNN" + "\t" + "0" + "\t" + "0" + "\n";
+						out += std::to_string(evPos) + "\t" + kmerRef + "\t" + std::to_string((r.raw[raw_i]- r.scalings.shift) / r.scalings.scale) + "\t" + std::to_string(0) + "\t" + std::string(k, 'N') + "\t" + "0" + "\t" + "0" + "\n";
 					}
 				}
 			}
@@ -963,7 +963,7 @@ std::string eventalign( read &r,
 					lines.push_back(std::to_string(evPos) + "\t" + kmerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(eventLength) + "\t" + kmerStrand + "\t" + std::to_string(meanStd.first) + "\t" + std::to_string(meanStd.second) + "\n");
 				}
 				else if (label == "I" and evIdx < lastM_ev){ //don't print insertions after the last match because we're going to align these in the next segment
-					lines.push_back(std::to_string(evPos) + "\t" + kmerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(eventLength) + "\t" + "NNNNNN" + "\t" + "0" + "\t" + "0" + "\n");
+					lines.push_back(std::to_string(evPos) + "\t" + kmerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(eventLength) + "\t" + std::string(k, 'N') + "\t" + "0" + "\t" + "0" + "\n");
 				}
 			}
 
@@ -1168,7 +1168,7 @@ std::string eventalign_train( read &r,
 						out += std::to_string(evPos) + "\t" + kmerRef + "\t" + std::to_string((r.raw[raw_i]- r.scalings.shift) / r.scalings.scale) + "\t" + std::to_string(0) + "\t" + kmerStrand + "\t" + std::to_string(meanStd.first) + "\t" + std::to_string(meanStd.second) + "\n";
 					}
 					else if (label == "I" and evIdx < lastM_ev){ //don't print insertions after the last match because we're going to align these in the next segment
-						out += std::to_string(evPos) + "\t" + kmerRef + "\t" + std::to_string((r.raw[raw_i]- r.scalings.shift) / r.scalings.scale) + "\t" + std::to_string(0) + "\t" + "NNNNNN" + "\t" + "0" + "\t" + "0" + "\n";
+						out += std::to_string(evPos) + "\t" + kmerRef + "\t" + std::to_string((r.raw[raw_i]- r.scalings.shift) / r.scalings.scale) + "\t" + std::to_string(0) + "\t" + std::string(k, 'N') + "\t" + "0" + "\t" + "0" + "\n";
 					}
 				}
 			}
@@ -1181,7 +1181,7 @@ std::string eventalign_train( read &r,
 					out += std::to_string(evPos) + "\t" + kmerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(eventLength) + "\t" + kmerStrand + "\t" + std::to_string(meanStd.first) + "\t" + std::to_string(meanStd.second) + "\n";
 				}
 				else if (label == "I" and evIdx < lastM_ev){ //don't print insertions after the last match because we're going to align these in the next segment
-					out += std::to_string(evPos) + "\t" + kmerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(eventLength) + "\t" + "NNNNNN" + "\t" + "0" + "\t" + "0" + "\n";
+					out += std::to_string(evPos) + "\t" + kmerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(eventLength) + "\t" + std::string(k, 'N') + "\t" + "0" + "\t" + "0" + "\n";
 				}
 			}
 
@@ -1358,7 +1358,7 @@ std::string eventalign_train( read &r,
 						out += std::to_string(evPos) + "\t" + kmerRef + "\t" + std::to_string((r.raw[raw_i]- r.scalings.shift) / r.scalings.scale) + "\t" + std::to_string(0) + "\t" + kmerStrand + "\t" + std::to_string(meanStd.first) + "\t" + std::to_string(meanStd.second) + "\n";
 					}
 					else if (label == "I" and evIdx < lastM_ev){ //don't print insertions after the last match because we're going to align these in the next segment
-						out += std::to_string(evPos) + "\t" + kmerRef + "\t" + std::to_string((r.raw[raw_i]- r.scalings.shift) / r.scalings.scale) + "\t" + std::to_string(0) + "\t" + "NNNNNN" + "\t" + "0" + "\t" + "0" + "\n";
+						out += std::to_string(evPos) + "\t" + kmerRef + "\t" + std::to_string((r.raw[raw_i]- r.scalings.shift) / r.scalings.scale) + "\t" + std::to_string(0) + "\t" + std::string(k, 'N') + "\t" + "0" + "\t" + "0" + "\n";
 					}
 				}
 			}
@@ -1371,7 +1371,7 @@ std::string eventalign_train( read &r,
 					out += std::to_string(evPos) + "\t" + kmerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(eventLength) + "\t" + kmerStrand + "\t" + std::to_string(meanStd.first) + "\t" + std::to_string(meanStd.second) + "\n";
 				}
 				else if (label == "I" and evIdx < lastM_ev){ //don't print insertions after the last match because we're going to align these in the next segment
-					out += std::to_string(evPos) + "\t" + kmerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(eventLength) + "\t" + "NNNNNN" + "\t" + "0" + "\t" + "0" + "\n";
+					out += std::to_string(evPos) + "\t" + kmerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::to_string(eventLength) + "\t" + std::string(k, 'N') + "\t" + "0" + "\t" + "0" + "\n";
 				}
 			}
 
@@ -1857,12 +1857,12 @@ int align_main( int argc, char** argv ){
 	const char *allReads = ".";
 	itr = sam_itr_querys(bam_idx,bam_hdr,allReads);
 
-	unsigned int windowLength = 50; //PLP&SY check with Mike
+	unsigned int windowLength = 50;
 	int result;
 	int failedEvents = 0;
 	unsigned int maxBufferSize;
 	std::vector< bam1_t * > buffer;
-	if ( args.threads <= 4 ) maxBufferSize = args.threads; //PLP&SY: check with Mike
+	if ( args.threads <= 4 ) maxBufferSize = args.threads;
 	else maxBufferSize = 4*(args.threads);
 
 	do {
@@ -1925,7 +1925,7 @@ int align_main( int argc, char** argv ){
 				normaliseEvents(r, bulkFast5);
 
 				//PLP checkpoint 04
-				std::cout << "checkpoint 04: " << (r.basecall).size() << std::endl;
+				//std::cout << "checkpoint 04: " << (r.basecall).size() << std::endl;
 				//end checkpoint 04
 
 				//catch reads with rough event alignments that fail the QC
@@ -1939,7 +1939,7 @@ int align_main( int argc, char** argv ){
 				std::string out = eventalign( r, windowLength, args.dilation, args.useRaw);
 
 				//PLP checkpoint 05
-				std::cout << "checkpoint 05: " << out.size() << std::endl;
+				//std::cout << "checkpoint 05: " << out.size() << std::endl;
 				//end checkpoint 05
 
 				#pragma omp critical
