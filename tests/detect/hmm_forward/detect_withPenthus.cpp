@@ -19,7 +19,7 @@
 #include "probability.h"
 #include "../fast5/include/fast5.hpp"
 #include "poreModels.h"
-
+#include "config.h"
 
 #include "../Penthus/src/hmm.h"
 #include "../Penthus/src/probability.h"
@@ -176,6 +176,8 @@ double sequenceProbability( std::vector <double> &observations,
 				size_t BrdUStart,
 				size_t BrdUEnd ){
 
+	unsigned int k = Pore_Substrate_Config.kmer_len;
+
 	std::vector< double > I_curr(2*windowSize+1, NAN), D_curr(2*windowSize+1, NAN), M_curr(2*windowSize+1, NAN), I_prev(2*windowSize+1, NAN), D_prev(2*windowSize+1, NAN), M_prev(2*windowSize+1, NAN);
 	double firstI_curr = NAN, firstI_prev = NAN;
 	double start_curr = NAN, start_prev = 0.0;
@@ -203,14 +205,14 @@ double sequenceProbability( std::vector <double> &observations,
 		std::fill( D_curr.begin(), D_curr.end(), NAN );
 		firstI_curr = NAN;
 
-		std::string sixMer = sequence.substr(0, 6);
+		std::string kmer = sequence.substr(0, k);
 
-		level_mu = scalings.shift + scalings.scale * thymidineModel.at(sixMer).first;
-		level_sigma = scalings.var * thymidineModel.at(sixMer).second;
+		level_mu = scalings.shift + scalings.scale * thymidineModel.at(kmer).first;
+		level_sigma = scalings.var * thymidineModel.at(kmer).second;
 
 		//uncomment to scale events
-		//level_mu = thymidineModel.at(sixMer).first;
-		//level_sigma = scalings.var / scalings.scale * thymidineModel.at(sixMer).second;
+		//level_mu = thymidineModel.at(kmer).first;
+		//level_sigma = scalings.var / scalings.scale * thymidineModel.at(kmer).second;
 		//observations[t] = (observations[t] - scalings.shift) / scalings.scale;
 
 		matchProb = eln( normalPDF( level_mu, level_sigma, observations[t] ) );
@@ -237,27 +239,27 @@ double sequenceProbability( std::vector <double> &observations,
 		for ( unsigned int i = 1; i < I_curr.size(); i++ ){
 
 			//get model parameters
-			sixMer = sequence.substr(i, 6); 
+			kmer = sequence.substr(i, k); 
 			insProb = eln( uniformPDF( 0, 250, observations[t] ) );
-			if ( useBrdU and BrdUStart - 5 <= i and i <= BrdUEnd and sixMer.find('T') != std::string::npos and analogueModel.count(sixMer) > 0 ){
+			if ( useBrdU and BrdUStart - 5 <= i and i <= BrdUEnd and kmer.find('T') != std::string::npos and analogueModel.count(kmer) > 0 ){
 
-				level_mu = scalings.shift + scalings.scale * analogueModel.at(sixMer).first;
-				level_sigma = scalings.var * analogueModel.at(sixMer).second;
+				level_mu = scalings.shift + scalings.scale * analogueModel.at(kmer).first;
+				level_sigma = scalings.var * analogueModel.at(kmer).second;
 
 				//uncomment if you scale events
-				//level_mu = analogueModel.at(sixMer).first;
-				//level_sigma = scalings.var / scalings.scale * analogueModel.at(sixMer).second;
+				//level_mu = analogueModel.at(kmer).first;
+				//level_sigma = scalings.var / scalings.scale * analogueModel.at(kmer).second;
 
 				matchProb = eln( normalPDF( level_mu, level_sigma, observations[t] ) );
 			}
 			else{
 
-				level_mu = scalings.shift + scalings.scale * thymidineModel.at(sixMer).first;
-				level_sigma = scalings.var * thymidineModel.at(sixMer).second;
+				level_mu = scalings.shift + scalings.scale * thymidineModel.at(kmer).first;
+				level_sigma = scalings.var * thymidineModel.at(kmer).second;
 
 				//uncomment if you scale events				
-				//level_mu = thymidineModel.at(sixMer).first;
-				//level_sigma = scalings.var / scalings.scale * thymidineModel.at(sixMer).second;
+				//level_mu = thymidineModel.at(kmer).first;
+				//level_sigma = scalings.var / scalings.scale * thymidineModel.at(kmer).second;
 
 				matchProb = eln( normalPDF( level_mu, level_sigma, observations[t] ) );
 			}
@@ -318,6 +320,8 @@ double sequenceProbability_Penthus( std::vector <double> &observations,
 				size_t BrdUStart,
 				size_t BrdUEnd ){
 
+	unsigned int k = Pore_Substrate_Config.kmer_len;
+
 	HiddenMarkovModel hmm = HiddenMarkovModel();
 
 	/*STATES - vector (of vectors) to hold the states at each position on the reference - fill with dummy values */
@@ -330,20 +334,20 @@ double sequenceProbability_Penthus( std::vector <double> &observations,
 	SilentDistribution sd( 0.0, 0.0 );
 	UniformDistribution ud( 0, 250.0 );
 
-	std::string loc, sixMer;
+	std::string loc, kmer;
 		
 	/*create make normal distributions for each reference position using the ONT 6mer model */
-	for ( unsigned int i = 0; i < sequence.length() - 5; i++ ){
+	for ( unsigned int i = 0; i < sequence.length() - k-1; i++ ){
 
-		sixMer = sequence.substr( i, 6 );
+		kmer = sequence.substr( i, k );
 
-		if ( useBrdU and BrdUStart - 5 <= i and i <= BrdUEnd and sixMer.find('T') != std::string::npos and analogueModel.count(sixMer) > 0 ){
+		if ( useBrdU and BrdUStart - k-1 <= i and i <= BrdUEnd and kmer.find('T') != std::string::npos and analogueModel.count(kmer) > 0 ){
 
-			nd.push_back( NormalDistribution( scalings.shift + scalings.scale * analogueModel.at(sixMer).first, scalings.var * analogueModel.at(sixMer).second ) );
+			nd.push_back( NormalDistribution( scalings.shift + scalings.scale * analogueModel.at(kmer).first, scalings.var * analogueModel.at(kmer).second ) );
 		}
 		else {
 
-			nd.push_back( NormalDistribution( scalings.shift + scalings.scale * thymidineModel.at(sixMer).first, scalings.var * thymidineModel.at(sixMer).second ) );
+			nd.push_back( NormalDistribution( scalings.shift + scalings.scale * thymidineModel.at(kmer).first, scalings.var * thymidineModel.at(kmer).second ) );
 		}
 	}
 
@@ -355,16 +359,16 @@ double sequenceProbability_Penthus( std::vector <double> &observations,
 	for ( unsigned int i = 0; i < sequence.length() - 5; i++ ){
 
 		loc = std::to_string( i );
-		sixMer = sequence.substr( i, 6 );
+		kmer = sequence.substr( i, k );
 
-		states[ 0 ][ i ] = State( &sd,		loc + "_D", 	sixMer,	"", 		1.0 );		
-		states[ 1 ][ i ] = State( &ud,		loc + "_I", 	sixMer,	"", 		1.0 );
-		states[ 2 ][ i ] = State( &nd[i], 	loc + "_M1", 	sixMer,	loc + "_match", 1.0 );
+		states[ 0 ][ i ] = State( &sd,		loc + "_D", 	kmer,	"", 		1.0 );		
+		states[ 1 ][ i ] = State( &ud,		loc + "_I", 	kmer,	"", 		1.0 );
+		states[ 2 ][ i ] = State( &nd[i], 	loc + "_M1", 	kmer,	loc + "_match", 1.0 );
 
 		/*add state to the model */
 		for ( unsigned int j = 0; j < 3; j++ ){
 
-			states[ j ][ i ].meta = sixMer;
+			states[ j ][ i ].meta = kmer;
 			hmm.add_state( states[ j ][ i ] );
 		}
 
@@ -378,7 +382,7 @@ double sequenceProbability_Penthus( std::vector <double> &observations,
 	}
 
 	/*add transitions between modules (external transitions) */
-	for ( unsigned int i = 0; i < sequence.length() - 6; i++ ){
+	for ( unsigned int i = 0; i < sequence.length() - k; i++ ){
 
 		/*from D */
 		hmm.add_transition( states[0][i], states[0][i + 1], externalD2D );
@@ -403,9 +407,9 @@ double sequenceProbability_Penthus( std::vector <double> &observations,
 	hmm.add_transition( firstI, states[2][0], 0.5 );
 
 	/*handle end states */
-	hmm.add_transition( states[0][sequence.length() - 6], hmm.end, 1.0 );
-	hmm.add_transition( states[1][sequence.length() - 6], hmm.end, externalI2M1 );
-	hmm.add_transition( states[2][sequence.length() - 6], hmm.end, externalM12M1 + externalM12D );
+	hmm.add_transition( states[0][sequence.length() - k], hmm.end, 1.0 );
+	hmm.add_transition( states[1][sequence.length() - k], hmm.end, externalI2M1 );
+	hmm.add_transition( states[2][sequence.length() - k], hmm.end, externalM12M1 + externalM12D );
 
 	hmm.finalise();
 	//std::pair<double, std::vector<std::vector<double> > > dummy = hmm.forward( observations );
@@ -419,6 +423,8 @@ double sequenceProbability_methyl( std::vector <double> &observations,
 				PoreParameters scalings,
 				size_t MethylStart,
 				size_t MethylEnd ){
+
+	unsigned int k = Pore_Substrate_Config.kmer_len;
 
 	std::vector< double > I_curr(2*windowSize, NAN), D_curr(2*windowSize, NAN), M_curr(2*windowSize, NAN), I_prev(2*windowSize, NAN), D_prev(2*windowSize, NAN), M_prev(2*windowSize, NAN);
 	double firstI_curr = NAN, firstI_prev = NAN;
@@ -447,23 +453,23 @@ double sequenceProbability_methyl( std::vector <double> &observations,
 		std::fill( D_curr.begin(), D_curr.end(), NAN );
 		firstI_curr = NAN;
 
-		std::string sixMer = sequence.substr(0, 6);
-		std::string sixMer_methyl = sequence_methylated.substr(0,6);
+		std::string kmer = sequence.substr(0, k);
+		std::string kmer_methyl = sequence_methylated.substr(0,k);
 
-		if ( sixMer_methyl.find('M') != std::string::npos and methyl5mCModel.count(sixMer_methyl) > 0 ){
+		if ( kmer_methyl.find('M') != std::string::npos and methyl5mCModel.count(kmer_methyl) > 0 ){
 
-			level_mu = scalings.shift + scalings.scale * methyl5mCModel.at(sixMer_methyl).first;
-			level_sigma = scalings.var * methyl5mCModel.at(sixMer_methyl).second;
+			level_mu = scalings.shift + scalings.scale * methyl5mCModel.at(kmer_methyl).first;
+			level_sigma = scalings.var * methyl5mCModel.at(kmer_methyl).second;
 		}
 		else {
 
-			level_mu = scalings.shift + scalings.scale * thymidineModel.at(sixMer).first;
-			level_sigma = scalings.var * thymidineModel.at(sixMer).second;
+			level_mu = scalings.shift + scalings.scale * thymidineModel.at(kmer).first;
+			level_sigma = scalings.var * thymidineModel.at(kmer).second;
 		}
 
 		//uncomment to scale events
-		//level_mu = thymidineModel.at(sixMer).first;
-		//level_sigma = scalings.var / scalings.scale * thymidineModel.at(sixMer).second;
+		//level_mu = thymidineModel.at(kmer).first;
+		//level_sigma = scalings.var / scalings.scale * thymidineModel.at(kmer).second;
 		//observations[t] = (observations[t] - scalings.shift) / scalings.scale;
 
 		matchProb = eln( normalPDF( level_mu, level_sigma, observations[t] ) );
@@ -490,27 +496,27 @@ double sequenceProbability_methyl( std::vector <double> &observations,
 		for ( unsigned int i = 1; i < I_curr.size(); i++ ){
 
 			//get model parameters
-			sixMer = sequence.substr(i, 6);
-			sixMer_methyl = sequence_methylated.substr(i,6);
+			kmer = sequence.substr(i, k);
+			kmer_methyl = sequence_methylated.substr(i,k);
 			insProb = eln( uniformPDF( 0, 250, observations[t] ) );
-			if ( methyl5mCModel.count(sixMer_methyl) > 0 and MethylStart - 5 <= i and i <= MethylEnd ){
+			if ( methyl5mCModel.count(kmer_methyl) > 0 and MethylStart - 5 <= i and i <= MethylEnd ){
 
-				level_mu = scalings.shift + scalings.scale * methyl5mCModel.at(sixMer_methyl).first;
-				level_sigma = scalings.var * methyl5mCModel.at(sixMer_methyl).second;
+				level_mu = scalings.shift + scalings.scale * methyl5mCModel.at(kmer_methyl).first;
+				level_sigma = scalings.var * methyl5mCModel.at(kmer_methyl).second;
 
 				//uncomment if you scale events
-				//level_mu = analogueModel.at(sixMer).first;
-				//level_sigma = scalings.var / scalings.scale * analogueModel.at(sixMer).second;
+				//level_mu = analogueModel.at(kmer).first;
+				//level_sigma = scalings.var / scalings.scale * analogueModel.at(kmer).second;
 
 				matchProb = eln( normalPDF( level_mu, level_sigma, observations[t] ) );
 			}
 			else{
-				level_mu = scalings.shift + scalings.scale * thymidineModel.at(sixMer).first;
-				level_sigma = scalings.var * thymidineModel.at(sixMer).second;
+				level_mu = scalings.shift + scalings.scale * thymidineModel.at(kmer).first;
+				level_sigma = scalings.var * thymidineModel.at(kmer).second;
 
 				//uncomment if you scale events				
-				//level_mu = thymidineModel.at(sixMer).first;
-				//level_sigma = scalings.var / scalings.scale * thymidineModel.at(sixMer).second;
+				//level_mu = thymidineModel.at(kmer).first;
+				//level_sigma = scalings.var / scalings.scale * thymidineModel.at(kmer).second;
 
 				matchProb = eln( normalPDF( level_mu, level_sigma, observations[t] ) );
 			}
@@ -803,6 +809,8 @@ std::string llAcrossRead( read &r,
                           int &failedEvents,
                           bool methylAware ){
 
+	unsigned int k = Pore_Substrate_Config.kmer_len;
+
 	std::string out;
 	//get the positions on the reference subsequence where we could attempt to make a call
 	std::vector< unsigned int > POIs = getPOIs( r.referenceSeqMappedTo, windowLength );
@@ -827,7 +835,7 @@ std::string llAcrossRead( read &r,
 		int posOnRef = POIs[i];
 		int posOnQuery = (r.refToQuery).at(posOnRef);
 
-		std::string readSnippet = (r.referenceSeqMappedTo).substr(posOnRef - windowLength, 2*windowLength+6);
+		std::string readSnippet = (r.referenceSeqMappedTo).substr(posOnRef - windowLength, 2*windowLength+k);
 
 		//make sure the read snippet is fully defined as A/T/G/C in reference
 		unsigned int As = 0, Ts = 0, Cs = 0, Gs = 0;
@@ -853,7 +861,7 @@ std::string llAcrossRead( read &r,
 		std::vector< double > eventSnippet;
 
 		//catch spans with lots of insertions or deletions (this QC was set using results of tests/detect/hmm_falsePositives)
-		int spanOnQuery = (r.refToQuery)[posOnRef + windowLength+6] - (r.refToQuery)[posOnRef - windowLength];
+		int spanOnQuery = (r.refToQuery)[posOnRef + windowLength+k] - (r.refToQuery)[posOnRef - windowLength];
 		if ( spanOnQuery > 3.5*windowLength or spanOnQuery < 2*windowLength ) continue;
 
 		/*get the events that correspond to the read snippet */
@@ -934,13 +942,13 @@ std::string llAcrossRead( read &r,
 
 		//calculate where we are on the assembly - if we're a reverse complement, we're moving backwards down the reference genome
 		int globalPosOnRef;
-		std::string sixMerQuery = (r.basecall).substr(posOnQuery, 6);
-		std::string sixMerRef = (r.referenceSeqMappedTo).substr(posOnRef, 6);
+		std::string kmerQuery = (r.basecall).substr(posOnQuery, k);
+		std::string kmerRef = (r.referenceSeqMappedTo).substr(posOnRef, k);
 		if ( r.isReverse ){
 
-			globalPosOnRef = r.refEnd - posOnRef - 6;
-			sixMerQuery = reverseComplement( sixMerQuery );
-			sixMerRef = reverseComplement( sixMerRef );
+			globalPosOnRef = r.refEnd - posOnRef - k;
+			kmerQuery = reverseComplement( kmerQuery );
+			kmerRef = reverseComplement( kmerRef );
 		}
 		else{
 
@@ -948,9 +956,9 @@ std::string llAcrossRead( read &r,
 		}
 
 		//make the BrdU call
-		std::string sixOI = (r.referenceSeqMappedTo).substr(posOnRef,6);
-		size_t BrdUStart = sixOI.find('T') + windowLength;
-		size_t BrdUEnd = sixOI.rfind('T') + windowLength;
+		std::string kOI = (r.referenceSeqMappedTo).substr(posOnRef,k);
+		size_t BrdUStart = kOI.find('T') + windowLength;
+		size_t BrdUEnd = kOI.rfind('T') + windowLength;
 		double logProbAnalogue = sequenceProbability( eventSnippet, readSnippet, windowLength, true, r.scalings, BrdUStart, BrdUEnd );
 		double logProbThymidine = sequenceProbability( eventSnippet, readSnippet, windowLength, false, r.scalings, 0, 0 );
 		double logLikelihoodRatio = logProbAnalogue - logProbThymidine;
@@ -971,27 +979,29 @@ std::cerr << logLikelihoodRatio << std::endl;
 
 		if ( methylAware) {
 
+			unsigned int k = Pore_Substrate_Config.kmer_len;
+
 			std::string readSnippetMethylated = methylateSequence( readSnippet );
-			std::string conflictSubseq = readSnippetMethylated.substr(BrdUStart-5,BrdUEnd+11-BrdUStart);
+			std::string conflictSubseq = readSnippetMethylated.substr(BrdUStart-k-1,BrdUEnd+(2*k)-1-BrdUStart); //PLP:check with Mike: 5->k-1, 11= (2*k)-1
 
 			if (conflictSubseq.find("M") == std::string::npos){
 
-				out += std::to_string(globalPosOnRef) + "\t" + std::to_string(logLikelihoodRatio) + "\t" + sixMerRef + "\t" + sixMerQuery + "\n";
+				out += std::to_string(globalPosOnRef) + "\t" + std::to_string(logLikelihoodRatio) + "\t" + kmerRef + "\t" + kmerQuery + "\n";
 			}
 			else{
 
-				size_t MethylStart = conflictSubseq.find('M') + BrdUStart-5;
-				size_t MethylEnd = conflictSubseq.rfind('M') + BrdUStart-5;
+				size_t MethylStart = conflictSubseq.find('M') + BrdUStart-k-1;
+				size_t MethylEnd = conflictSubseq.rfind('M') + BrdUStart-k-1;
 
 				double logProbMethylated = sequenceProbability_methyl( eventSnippet, readSnippet, readSnippetMethylated, windowLength, r.scalings, MethylStart, MethylEnd );
 				double logLikelihood_BrdUvsMethyl = logProbAnalogue - logProbMethylated;
 				double logLikelihood_MethylvsThym = logProbMethylated - logProbThymidine;
-				out +=  std::to_string(globalPosOnRef) + "\t" + std::to_string(logLikelihoodRatio) + "\t" + std::to_string(logLikelihood_BrdUvsMethyl) + "\t" + std::to_string(logLikelihood_MethylvsThym) + "\t" + sixMerRef + "\t" + sixMerQuery + "\n";
+				out +=  std::to_string(globalPosOnRef) + "\t" + std::to_string(logLikelihoodRatio) + "\t" + std::to_string(logLikelihood_BrdUvsMethyl) + "\t" + std::to_string(logLikelihood_MethylvsThym) + "\t" + kmerRef + "\t" + kmerQuery + "\n";
 			}
 		}
 		else{
 
-			out += std::to_string(globalPosOnRef) + "\t" + std::to_string(logLikelihoodRatio) + "\t" + sixMerRef + "\t" + sixMerQuery + "\n";
+			out += std::to_string(globalPosOnRef) + "\t" + std::to_string(logLikelihoodRatio) + "\t" + kmerRef + "\t" + kmerQuery + "\n";
 		}
 	}
 	return out;
