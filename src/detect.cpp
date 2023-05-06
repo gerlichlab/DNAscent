@@ -481,7 +481,7 @@ std::string llAcrossRead( read &r,
 		/*
 		TESTING - print out the read snippet, the ONT model, and the aligned events
 		std::cout << readSnippet << std::endl;
-		for ( int pos = 0; pos < readSnippet.length()-5; pos++ ){
+		for ( int pos = 0; pos < readSnippet.length()-k - 1; pos++ ){
 
 			std::cout << readSnippet.substr(pos,6) << "\t" << Pore_Substrate_Config.pore_model.at( readSnippet.substr(pos,6) ).first << std::endl;
 		}
@@ -508,7 +508,7 @@ std::string llAcrossRead( read &r,
 
 		//make the BrdU call
 		std::string kOI = (r.referenceSeqMappedTo).substr(posOnRef,k);
-		size_t BrdUStart = kOI.find('T') + windowLength - k-1;
+		size_t BrdUStart = kOI.find('T') + windowLength - k - 1;
 		size_t BrdUEnd = windowLength;//kOI.rfind('T') + windowLength;
 		double logProbAnalogue = sequenceProbability( eventSnippet, readSnippet, windowLength, true, r.scalings, BrdUStart, BrdUEnd );
 		double logProbThymidine = sequenceProbability( eventSnippet, readSnippet, windowLength, false, r.scalings, 0, 0 );
@@ -672,7 +672,7 @@ std::map<unsigned int, double> llAcrossRead_forTraining( read &r, unsigned int w
 
 		//make the BrdU call
 		std::string kOI = (r.referenceSeqMappedTo).substr(posOnRef,k);
-		size_t BrdUStart = kOI.find('T') + windowLength - k-1;
+		size_t BrdUStart = kOI.find('T') + windowLength - k - 1;
 		size_t BrdUEnd = windowLength;//kOI.rfind('T') + windowLength;
 		double logProbAnalogue = sequenceProbability( eventSnippet, readSnippet, windowLength, true, r.scalings, BrdUStart, BrdUEnd );
 		double logProbThymidine = sequenceProbability( eventSnippet, readSnippet, windowLength, false, r.scalings, 0, 0 );
