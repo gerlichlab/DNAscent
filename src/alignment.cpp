@@ -223,7 +223,7 @@ std::pair< double, std::vector< std::string > > builtinViterbi( std::vector <dou
 
 	unsigned int k = Pore_Substrate_Config.kmer_len;
 
-	size_t n_states = sequence.length() - k - 1;
+	size_t n_states = sequence.length() - k + 1;
 
 	//pre-compute 6mer indices
 	std::vector<unsigned int> kmerIndices;
@@ -593,7 +593,7 @@ std::string eventalign( read &r,
 				continue;
 			}
 
-			for (unsigned int i = windowLength; i < 1.5*windowLength - k + 1; i++){
+			for (unsigned int i = windowLength; i < 1.5*windowLength - k - 1; i++){
 
 				std::string kmer = breakSnippet.substr(i,k);
 				std::pair<double,double> meanStd = Pore_Substrate_Config.pore_model[kmer2index(kmer, k)];
@@ -640,7 +640,7 @@ std::string eventalign( read &r,
 		for ( unsigned int j = readHead; j < (r.eventAlignment).size(); j++ ){
 
 			/*if an event has been aligned to a position in the window, add it */
-			if ( (r.refToQuery)[posOnRef] <= (r.eventAlignment)[j].second and (r.eventAlignment)[j].second < (r.refToQuery)[posOnRef + windowLength - k - 1] ){
+			if ( (r.refToQuery)[posOnRef] <= (r.eventAlignment)[j].second and (r.eventAlignment)[j].second < (r.refToQuery)[posOnRef + windowLength - k + 1] ){
 
 				if (firstMatch){
 					readHead = j;
@@ -677,7 +677,7 @@ std::string eventalign( read &r,
 
 
 			/*stop once we get to the end of the window */
-			if ( (r.eventAlignment)[j].second >= (r.refToQuery)[posOnRef + windowLength - k - 1] ) break;
+			if ( (r.eventAlignment)[j].second >= (r.refToQuery)[posOnRef + windowLength - k + 1] ) break;
 		}
 
 		//pass on this window if we have a deletion
@@ -793,7 +793,7 @@ std::string eventalign( read &r,
 	unsigned int rev_readHead = (r.eventAlignment).size() - 1;
 	std::vector<std::string> lines;
 	lines.reserve((r.referenceSeqMappedTo.size()) / 2);
-	while ( posOnRef > midpoint - k - 1 ){
+	while ( posOnRef > midpoint - k + 1 ){
 
 		//adjust so we can get the last bit of the read if it doesn't line up with the windows nicely
 		unsigned int basesToEnd = posOnRef - midpoint + k - 1;
@@ -860,7 +860,7 @@ std::string eventalign( read &r,
 			//std::cout << (r.eventAlignment)[j].second << " " << j << " " << (r.refToQuery)[posOnRef] << " " << rev_readHead << std::endl;
 
 			/*if an event has been aligned to a position in the window, add it */
-			if ( (r.eventAlignment)[j].second > (r.refToQuery)[posOnRef - windowLength] and (r.eventAlignment)[j].second <= (r.refToQuery)[posOnRef - k - 1] ){
+			if ( (r.eventAlignment)[j].second > (r.refToQuery)[posOnRef - windowLength] and (r.eventAlignment)[j].second <= (r.refToQuery)[posOnRef - k + 1] ){
 
 				if (firstMatch){
 					rev_readHead = j;
@@ -1031,7 +1031,7 @@ std::string eventalign_train( read &r,
 				continue;
 			}
 
-			for (unsigned int i = windowLength; i < 1.5*windowLength - k + 1; i++){
+			for (unsigned int i = windowLength; i < 1.5*windowLength - k - 1; i++){
 
 				std::string kmer = breakSnippet.substr(i,k);
 				std::pair<double,double> meanStd = Pore_Substrate_Config.pore_model[kmer2index(kmer, k)];
@@ -1073,7 +1073,7 @@ std::string eventalign_train( read &r,
 		for ( unsigned int j = readHead; j < (r.eventAlignment).size(); j++ ){
 
 			/*if an event has been aligned to a position in the window, add it */
-			if ( (r.refToQuery)[posOnRef] <= (r.eventAlignment)[j].second and (r.eventAlignment)[j].second < (r.refToQuery)[posOnRef + windowLength - k - 1] ){
+			if ( (r.refToQuery)[posOnRef] <= (r.eventAlignment)[j].second and (r.eventAlignment)[j].second < (r.refToQuery)[posOnRef + windowLength - k + 1] ){
 
 				if (firstMatch){
 					readHead = j;
@@ -1198,7 +1198,7 @@ std::string eventalign_train( read &r,
 	posOnRef = r.referenceSeqMappedTo.size() - 1;
 	unsigned int rev_readHead = (r.eventAlignment).size() - 1;
 	std::vector<std::string> lines;
-	while ( posOnRef > midpoint - k - 1 ){
+	while ( posOnRef > midpoint - k + 1 ){
 
 		//adjust so we can get the last bit of the read if it doesn't line up with the windows nicely
 		unsigned int basesToEnd = posOnRef - midpoint + k - 1;
@@ -1263,7 +1263,7 @@ std::string eventalign_train( read &r,
 			//std::cout << (r.eventAlignment)[j].second << " " << j << " " << (r.refToQuery)[posOnRef] << " " << rev_readHead << std::endl;
 
 			/*if an event has been aligned to a position in the window, add it */
-			if ( (r.eventAlignment)[j].second > (r.refToQuery)[posOnRef - windowLength] and (r.eventAlignment)[j].second <= (r.refToQuery)[posOnRef - k - 1] ){
+			if ( (r.eventAlignment)[j].second > (r.refToQuery)[posOnRef - windowLength] and (r.eventAlignment)[j].second <= (r.refToQuery)[posOnRef - k + 1] ){
 
 				if (firstMatch){
 					rev_readHead = j;
@@ -1434,7 +1434,7 @@ std::pair<bool,std::shared_ptr<AlignedRead>> eventalign_detect( read &r,
 				continue;
 			}
 
-			for (unsigned int i = windowLength; i < 1.5*windowLength - k + 1; i++){
+			for (unsigned int i = windowLength; i < 1.5*windowLength - k - 1; i++){
 
 				std::string kmer = breakSnippet.substr(i,k);
 				std::pair<double,double> meanStd = Pore_Substrate_Config.pore_model[kmer2index(kmer,k)];
@@ -1484,7 +1484,7 @@ std::cerr << "Out of reference sequence size: " << (r.referenceSeqMappedTo).leng
 		for ( unsigned int j = readHead; j < (r.eventAlignment).size(); j++ ){
 
 			/*if an event has been aligned to a position in the window, add it */
-			if ( (r.refToQuery)[posOnRef] <= (r.eventAlignment)[j].second and (r.eventAlignment)[j].second < (r.refToQuery)[posOnRef + windowLength - k - 1] ){
+			if ( (r.refToQuery)[posOnRef] <= (r.eventAlignment)[j].second and (r.eventAlignment)[j].second < (r.refToQuery)[posOnRef + windowLength - k + 1] ){
 
 				if (firstMatch){
 					readHead = j;
@@ -1500,7 +1500,7 @@ std::cerr << "Out of reference sequence size: " << (r.referenceSeqMappedTo).leng
 			}
 
 			/*stop once we get to the end of the window */
-			if ( (r.eventAlignment)[j].second >= (r.refToQuery)[posOnRef + windowLength - k - 1] ) break;
+			if ( (r.eventAlignment)[j].second >= (r.refToQuery)[posOnRef + windowLength - k + 1] ) break;
 		}
 		
 		//flag large insertions
@@ -1608,7 +1608,7 @@ std::cerr << "Out of reference sequence size: " << (r.referenceSeqMappedTo).leng
 	//REVERSE
 	posOnRef = r.referenceSeqMappedTo.size() - 1;
 	int rev_readHead = (r.eventAlignment).size() - 1;
-	while ( posOnRef > midpoint - k - 1 ){
+	while ( posOnRef > midpoint - k + 1 ){
 
 		//adjust so we can get the last bit of the read if it doesn't line up with the windows nicely
 		unsigned int basesToEnd = posOnRef - midpoint + k - 1;
@@ -1682,7 +1682,7 @@ std::cerr << "Out of reference sequence size: " << (r.referenceSeqMappedTo).leng
 			//std::cout << (r.eventAlignment)[j].second << " " << j << " " << (r.refToQuery)[posOnRef] << " " << rev_readHead << std::endl;
 
 			/*if an event has been aligned to a position in the window, add it */
-			if ( (r.eventAlignment)[j].second > (r.refToQuery)[posOnRef - windowLength] and (r.eventAlignment)[j].second <= (r.refToQuery)[posOnRef - k - 1] ){
+			if ( (r.eventAlignment)[j].second > (r.refToQuery)[posOnRef - windowLength] and (r.eventAlignment)[j].second <= (r.refToQuery)[posOnRef - k + 1] ){
 
 				if (firstMatch){
 					rev_readHead = j;
