@@ -20,7 +20,7 @@ struct eventDataForRead {
 	double qualityScore;
 };
 
-void normaliseEvents( read &, bool );
+void normaliseEvents( read & );
 void bulk_getEvents( std::string fast5Filename, std::string readID, std::vector<double> &raw );
 void getEvents( std::string fast5Filename, std::vector<double> &raw );
 

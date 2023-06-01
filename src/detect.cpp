@@ -165,17 +165,17 @@ double sequenceProbability( std::vector <double> &observations,
 
 	unsigned int k = Pore_Substrate_Config.kmer_len;
 
-	//Initial transitions within modules (internal transitions)
-	double internalM12I = eln(0.3475);
-	double internalI2I = eln(0.5);
-	double internalM12M1 = eln(0.4);
+	//HMM transition probabilities	
+	double externalD2D = eln(Pore_Substrate_Config.HMM_config.externalD2D);
+	double externalD2M1 = eln(Pore_Substrate_Config.HMM_config.externalD2M);
+	double externalI2M1 = eln(Pore_Substrate_Config.HMM_config.externalI2M);
+	double externalM12D = eln(Pore_Substrate_Config.HMM_config.externalM2D);
+	double internalM12I = eln(Pore_Substrate_Config.HMM_config.internalM2I);
+	double internalI2I = eln(Pore_Substrate_Config.HMM_config.internalI2I);
 
-	//Initial transitions between modules (external transitions)
-	double externalD2D = eln(0.3);
-	double externalD2M1 = eln(0.7);
-	double externalI2M1 = eln(0.5);
-	double externalM12D = eln(0.0025);
-	double externalM12M1 = eln(0.25);
+	//transition probabilities that change on a per-read basis
+	double internalM12M1 = eln(1. - (1./scalings.eventsPerBase));
+	double externalM12M1 = eln(1.0 - externalM12D - internalM12I - internalM12M1);
 
 	std::vector< double > I_curr(2*windowSize+1, NAN), D_curr(2*windowSize+1, NAN), M_curr(2*windowSize+1, NAN), I_prev(2*windowSize+1, NAN), D_prev(2*windowSize+1, NAN), M_prev(2*windowSize+1, NAN);
 	double firstI_curr = NAN, firstI_prev = NAN;
@@ -207,16 +207,12 @@ double sequenceProbability( std::vector <double> &observations,
 		std::string kmer = sequence.substr(0, k);
 
 		std::pair<double,double> meanStd = Pore_Substrate_Config.pore_model[kmer2index(kmer, k)];
-		level_mu = scalings.shift + scalings.scale * meanStd.first;
-		level_sigma = scalings.var * meanStd.second;
+		
+		level_mu = meanStd.first;
+		level_sigma = meanStd.second;
 
-		//uncomment to scale events
-		//level_mu = Pore_Substrate_Config.pore_model.at(kmer).first;
-		//level_sigma = scalings.var / scalings.scale * Pore_Substrate_Config.pore_model.at(kmer).second;
-		//observations[t] = (observations[t] - scalings.shift) / scalings.scale;
-
-		matchProb = eln( normalPDF( level_mu, level_sigma, observations[t] ) );
-		insProb = eln( uniformPDF( 0, 250, observations[t] ) );
+		matchProb = eln( normalPDF( level_mu, level_sigma, (observations[t] - scalings.shift)/scalings.scale ) );
+		insProb = 0.0; //log(1) = 0; set probability equal to 1 and use transition probability as weighting
 
 		//first insertion
 		firstI_curr = lnSum( firstI_curr, lnProd( lnProd( start_prev, eln( 0.25 ) ), insProb ) ); //start to first I
@@ -241,29 +237,22 @@ double sequenceProbability( std::vector <double> &observations,
 			//get model parameters
 			kmer = sequence.substr(i, k);
 			std::pair<double,double> analogue_meanStd = Pore_Substrate_Config.analogue_model[kmer2index(kmer, k)];
-			insProb = eln( uniformPDF( 0, 250, observations[t] ) );
+			insProb = 0.0; //log(1) = 0; set probability equal to 1 and use transition probability as weighting
 			if ( useBrdU and BrdUStart <= i and i <= BrdUEnd and kmer.find('T') != std::string::npos and analogue_meanStd.first != 0. ){
 
-				level_mu = scalings.shift + scalings.scale * analogue_meanStd.first;
-				level_sigma = scalings.var * analogue_meanStd.second;
+				level_mu = meanStd.first;
+				level_sigma = meanStd.second;
 
-				//uncomment if you scale events
-				//level_mu = Pore_Substrate_Config.analogue_model.at(kmer).first;
-				//level_sigma = scalings.var / scalings.scale * Pore_Substrate_Config.analogue_model.at(kmer).second;
-
-				matchProb = eln( normalPDF( level_mu, level_sigma, observations[t] ) );
+				matchProb = eln( normalPDF( level_mu, level_sigma, (observations[t] - scalings.shift)/scalings.scale ) );
 			}
 			else{
 
 				std::pair<double,double> meanStd = Pore_Substrate_Config.pore_model[kmer2index(kmer, k)];
-				level_mu = scalings.shift + scalings.scale * meanStd.first;
-				level_sigma = scalings.var * meanStd.second;
 
-				//uncomment if you scale events
-				//level_mu = Pore_Substrate_Config.pore_model.at(kmer).first;
-				//level_sigma = scalings.var / scalings.scale * Pore_Substrate_Config.pore_model.at(kmer).second;
+				level_mu = meanStd.first;
+				level_sigma = meanStd.second;
 
-				matchProb = eln( normalPDF( level_mu, level_sigma, observations[t] ) );
+				matchProb = eln( normalPDF( level_mu, level_sigma, (observations[t] - scalings.shift)/scalings.scale ) );
 			}
 
 			//to the insertion
@@ -302,7 +291,7 @@ double sequenceProbability( std::vector <double> &observations,
 #if TEST_HMM
 std::cerr << "<-------------------" << std::endl;
 std::cerr << useBrdU << std::endl;
-std::cerr << scalings.shift << " " << scalings.scale << " " << scalings.var << std::endl;
+std::cerr << scalings.shift << " " << scalings.scale << std::endl;
 std::cerr << sequence << std::endl;
 for (auto ob = observations.begin(); ob < observations.end(); ob++){
 	std::cerr << *ob << " ";
@@ -312,30 +301,6 @@ std::cerr << forwardProb << std::endl;
 #endif
 
 	return forwardProb;
-}
-
-
-void parseIndex( std::string indexFilename, std::map< std::string, std::string > &readID2path, bool &bulk ){
-
-	std::cout << "Loading DNAscent index... ";
-	std::ifstream indexFile( indexFilename );
-	if ( not indexFile.is_open() ) throw IOerror( indexFilename );
-	std::string line;
-
-	//get whether this is bulk fast5 or individual fast5 from the index
-	std::getline( indexFile, line);
-	if (line == "#bulk") bulk = true;
-	else if (line == "#individual") bulk = false;
-	else throw IndexFormatting();
-
-	//get the readID to path map
-	while ( std::getline( indexFile, line) ){
-
-		std::string readID = line.substr(0, line.find('\t'));
-		std::string path = line.substr(line.find('\t')+1);
-		readID2path[readID] = path;
-	}
-	std::cout << "ok." << std::endl;
 }
 
 
@@ -351,14 +316,14 @@ std::vector< unsigned int > getPOIs( std::string &refSeq, int windowLength ){
 }
 
 
-std::string llAcrossRead( read &r,
-                          unsigned int windowLength,
-                          int &failedEvents,
-                          bool methylAware ){
+HMMdetection llAcrossRead( read &r, unsigned int windowLength){
+                          
+	HMMdetection hmm_out;
+
+	std::map<unsigned int, double> refPos2likelihood;
 
 	unsigned int k = Pore_Substrate_Config.kmer_len;
 
-	std::string out;
 	//get the positions on the reference subsequence where we could attempt to make a call
 	std::vector< unsigned int > POIs = getPOIs( r.referenceSeqMappedTo, windowLength );
 	std::string strand;
@@ -375,7 +340,7 @@ std::string llAcrossRead( read &r,
 		readHead = 0;
 	}
 
-	out += ">" + r.readID + " " + r.referenceMappedTo + " " + std::to_string(r.refStart) + " " + std::to_string(r.refEnd) + " " + strand + "\n";
+	hmm_out.readLikelihoodStdout += ">" + r.readID + " " + r.referenceMappedTo + " " + std::to_string(r.refStart) + " " + std::to_string(r.refEnd) + " " + strand + "\n";
 
 	for ( unsigned int i = 0; i < POIs.size(); i++ ){
 
@@ -431,12 +396,8 @@ std::string llAcrossRead( read &r,
 					}
 
 					double ev = (r.normalisedEvents)[(r.eventAlignment)[j].first];
-					if (ev > 1.0 and ev < 250.0){
+					if (ev > 0. and ev < 250.0){
 						eventSnippet.push_back( ev );
-					}
-					else{
-
-						failedEvents++;
 					}
 				}
 
@@ -461,12 +422,8 @@ std::string llAcrossRead( read &r,
 					}
 
 					double ev = (r.normalisedEvents)[(r.eventAlignment)[j].first];
-					if (ev > 1.0 and ev < 250.0){
+					if (ev > 0. and ev < 250.0){
 						eventSnippet.push_back( ev );
-					}
-					else{
-
-						failedEvents++;
 					}
 				}
 
@@ -533,180 +490,10 @@ std::cerr << std::endl;
 std::cerr << logLikelihoodRatio << std::endl;
 #endif
 
-		out += std::to_string(globalPosOnRef) + "\t" + std::to_string(logLikelihoodRatio) + "\t" + kmerRef + "\t" + kmerQuery + "\n";
+		hmm_out.readLikelihoodStdout += std::to_string(globalPosOnRef) + "\t" + std::to_string(logLikelihoodRatio) + "\t" + kmerRef + "\t" + kmerQuery + "\n";
+		hmm_out.refposToLikelihood[globalPosOnRef] = logLikelihoodRatio;
 	}
-	return out;
-}
-
-
-std::map<unsigned int, double> llAcrossRead_forTraining( read &r, unsigned int windowLength){
-
-	unsigned int k = Pore_Substrate_Config.kmer_len;
-
-	std::map<unsigned int, double> refPos2likelihood;
-
-	//get the positions on the reference subsequence where we could attempt to make a call
-	std::vector< unsigned int > POIs = getPOIs( r.referenceSeqMappedTo, windowLength );
-	std::string strand;
-	unsigned int readHead = 0;
-	if ( r.isReverse ){
-
-		strand = "rev";
-		readHead = (r.eventAlignment).size() - 1;
-		std::reverse( POIs.begin(), POIs.end() );
-	}
-	else{
-
-		strand = "fwd";
-		readHead = 0;
-	}
-
-	for ( unsigned int i = 0; i < POIs.size(); i++ ){
-
-		int posOnRef = POIs[i];
-		int posOnQuery = (r.refToQuery).at(posOnRef);
-
-		//sequence needs to be 6 bases longer than the span of events we catch
-		//so sequence goes from posOnRef - windowLength to posOnRef + windowLength + 6
-		//event span goes from posOnRef - windowLength to posOnRef + windowLength
-
-		std::string readSnippet = (r.referenceSeqMappedTo).substr(posOnRef - windowLength, 2*windowLength+k);
-
-		//make sure the read snippet is fully defined as A/T/G/C in reference
-		unsigned int As = 0, Ts = 0, Cs = 0, Gs = 0;
-		for ( std::string::iterator i = readSnippet.begin(); i < readSnippet.end(); i++ ){
-
-			switch( *i ){
-				case 'A' :
-					As++;
-					break;
-				case 'T' :
-					Ts++;
-					break;
-				case 'G' :
-					Gs++;
-					break;
-				case 'C' :
-					Cs++;
-					break;
-			}
-		}
-		if ( readSnippet.length() != (As + Ts + Gs + Cs) ) continue;
-
-		//calculate where we are on the assembly - if we're a reverse complement, we're moving backwards down the reference genome
-		int globalPosOnRef;
-		std::string kmerQuery = (r.basecall).substr(posOnQuery, k);
-		std::string kmerRef = (r.referenceSeqMappedTo).substr(posOnRef, k);
-		if ( r.isReverse ){
-
-			globalPosOnRef = r.refEnd - posOnRef - k;
-			kmerQuery = reverseComplement( kmerQuery );
-			kmerRef = reverseComplement( kmerRef );
-		}
-		else{
-
-			globalPosOnRef = r.refStart + posOnRef;
-		}
-
-
-		std::vector< double > eventSnippet;
-
-		//catch spans with lots of insertions or deletions (this QC was set using results of tests/detect/hmm_falsePositives)
-		unsigned int spanOnQuery = (r.refToQuery)[posOnRef + windowLength+k] - (r.refToQuery)[posOnRef - windowLength];
-		if ( spanOnQuery > 3.5*windowLength or spanOnQuery < 2*windowLength ){
-			refPos2likelihood[globalPosOnRef] = -20000; //tag an abort based on query span
-			continue;
-		}
-
-		/*get the events that correspond to the read snippet */
-		bool first = true;
-		if ( r.isReverse ){
-
-			for ( unsigned int j = readHead; j >= 0; j-- ){
-
-				/*if an event has been aligned to a position in the window, add it */
-				if ( (r.eventAlignment)[j].second >= (r.refToQuery)[posOnRef - windowLength] and (r.eventAlignment)[j].second < (r.refToQuery)[posOnRef + windowLength] ){
-
-					if (first){
-						readHead = j;
-						first = false;
-						//std::cout << "READHEAD:" << j << " " << readHead << std::endl;
-					}
-
-					double ev = (r.normalisedEvents)[(r.eventAlignment)[j].first];
-					if (ev > 1.0 and ev < 250.0){
-						eventSnippet.push_back( ev );
-					}
-				}
-
-				/*stop once we get to the end of the window */
-				if ( (r.eventAlignment)[j].second < (r.refToQuery)[posOnRef - windowLength] ){
-
-					std::reverse(eventSnippet.begin(), eventSnippet.end());
-					break;
-				}
-			}
-		}
-		else{
-			for ( unsigned int j = readHead; j < (r.eventAlignment).size(); j++ ){
-
-				/*if an event has been aligned to a position in the window, add it */
-				if ( (r.eventAlignment)[j].second >= (r.refToQuery)[posOnRef - windowLength] and (r.eventAlignment)[j].second < (r.refToQuery)[posOnRef + windowLength] ){
-
-					if (first){
-						readHead = j;
-						first = false;
-						//std::cout << "READHEAD:" << j << " " << readHead << std::endl;
-					}
-
-					double ev = (r.normalisedEvents)[(r.eventAlignment)[j].first];
-					if (ev > 1.0 and ev < 250.0){
-						eventSnippet.push_back( ev );
-					}
-				}
-
-				/*stop once we get to the end of the window */
-				if ( (r.eventAlignment)[j].second >= (r.refToQuery)[posOnRef + windowLength] ) break;
-			}
-		}
-
-		//make the BrdU call
-		std::string kOI = (r.referenceSeqMappedTo).substr(posOnRef,k);
-		size_t BrdUStart = kOI.find('T') + windowLength - k-1;
-		size_t BrdUEnd = windowLength;//kOI.rfind('T') + windowLength;
-		double logProbAnalogue = sequenceProbability( eventSnippet, readSnippet, windowLength, true, r.scalings, BrdUStart, BrdUEnd );
-		double logProbThymidine = sequenceProbability( eventSnippet, readSnippet, windowLength, false, r.scalings, 0, 0 );
-		double logLikelihoodRatio = logProbAnalogue - logProbThymidine;
-
-		//catch abnormally few or many events (this QC was set using results of tests/detect/hmm_falsePositives)
-		if ( eventSnippet.size() < 3.5*windowLength ){
-
-			refPos2likelihood[globalPosOnRef] = -10000;//tag an abort based on number of events
-			continue;
-		}
-
-#if TEST_LL
-double runningKL = 0.0;
-for (unsigned int s = 0; s < readSnippet.length() - k; s++){
-	std::string kmer = readSnippet.substr(s,k);
-	if ( BrdUStart <= s and s <= BrdUEnd and kmer.find('T') != std::string::npos and Pore_Substrate_Config.analogue_model.count(kmer) > 0 ){
-		runningKL += KLdivergence( Pore_Substrate_Config.pore_model.at(kmer).first, Pore_Substrate_Config.pore_model.at(kmer).second, Pore_Substrate_Config.analogue_model.at(kmer).first, Pore_Substrate_Config.analogue_model.at(kmer).second );
-	}
-}
-std::cerr << "<-------------------" << std::endl;
-std::cerr << runningKL << std::endl;
-std::cerr << spanOnQuery << std::endl;
-std::cerr << readSnippet << std::endl;
-for (auto ob = eventSnippet.begin(); ob < eventSnippet.end(); ob++){
-	std::cerr << *ob << " ";
-}
-std::cerr << std::endl;
-std::cerr << logLikelihoodRatio << std::endl;
-#endif
-
-		refPos2likelihood[globalPosOnRef] = logLikelihoodRatio;
-	}
-	return refPos2likelihood;
+	return hmm_out;
 }
 
 
@@ -915,11 +702,10 @@ std::map<unsigned int, std::pair<double,double>> runCNN_training(std::shared_ptr
 int detect_main( int argc, char** argv ){
 
 	Arguments args = parseDetectArguments( argc, argv );
-	bool bulkFast5;
 
 	//load DNAscent index
 	std::map< std::string, std::string > readID2path;
-	parseIndex( args.indexFilename, readID2path, bulkFast5 );
+	parseIndex( args.indexFilename, readID2path );
 
 	//get the neural network model path
 	std::string pathExe = getExePath();
@@ -1038,11 +824,10 @@ int detect_main( int argc, char** argv ){
 					r.isReverse = true;
 				}
 
-				normaliseEvents(r, bulkFast5);
+				normaliseEvents(r);
 
 				//catch reads with rough event alignments that fail the QC
 				if ( r.eventAlignment.size() == 0 ){
-
 					failed++;
 					prog++;
 					continue;

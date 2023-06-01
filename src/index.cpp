@@ -221,7 +221,7 @@ std::vector<std::string> fast5_get_multi_read_groups(hid_t &hdf5_file){
 }
 
 
-std::map<std::string,std::string> parseSequencingSummary(std::string path, bool &bulk, bool &useGridION){
+std::map<std::string,std::string> parseSequencingSummary(std::string path, bool &useGridION){
 
 	std::map<std::string,std::string> readID2fast5;
 	std::map<std::string,std::vector<std::string>> fast52readID;
@@ -230,8 +230,6 @@ std::map<std::string,std::string> parseSequencingSummary(std::string path, bool 
 	if ( not inFile.is_open() ) throw IOerror( path );
 	std::string line;
 	std::getline(inFile,line);//header
-
-	bulk = false;
 
 	while ( std::getline( inFile, line ) ){
 
@@ -259,15 +257,6 @@ std::map<std::string,std::string> parseSequencingSummary(std::string path, bool 
 		fast52readID[fast5].push_back(readID);
 	}
 
-	for ( auto idpair = fast52readID.begin(); idpair != fast52readID.end(); idpair++ ){
-
-		if ( (idpair->second).size() > 1 ){
-
-			bulk = true;
-			break;
-		}
-	}
-
 	return readID2fast5;
 }
 
@@ -289,11 +278,7 @@ int index_main( int argc, char** argv ){
 	std::map<std::string,std::string> fast52fullpath;
 	readDirectory(args.fast5path.c_str(), fast52fullpath);
 
-	bool isBulkFast5;
-	std::map<std::string,std::string> readID2fast5 = parseSequencingSummary(args.ssPath, isBulkFast5, args.GridION);
-
-	if (isBulkFast5) outFile << "#bulk" << std::endl;
-	else outFile << "#individual" << std::endl;
+	std::map<std::string,std::string> readID2fast5 = parseSequencingSummary(args.ssPath, args.GridION);
 
 	for (auto idpair = readID2fast5.begin(); idpair != readID2fast5.end(); idpair++){
 

@@ -249,7 +249,8 @@ std::vector< std::pair< double, double > > import_poreModel( std::string poreMod
 			std = line.substr( 0, line.find( delim ) );
 
 			/*key the map by the kmer, and convert the mean and std strings to doubles */
-			kmer2MeanStd[ key ] = std::make_pair( atof( mean.c_str() ), atof( std.c_str() ) );
+			//kmer2MeanStd[ key ] = std::make_pair( atof( mean.c_str() ), atof( std.c_str() ) );
+			kmer2MeanStd[ key ] = std::make_pair( atof(mean.c_str()), 0.12 );			
 		}
 	}
 
@@ -266,4 +267,21 @@ std::vector< std::pair< double, double > > import_poreModel( std::string poreMod
 	}
 
 	return indexedPoreModel;
+}
+
+void parseIndex( std::string indexFilename, std::map< std::string, std::string > &readID2path ){
+
+	std::cout << "Loading DNAscent index... ";
+	std::ifstream indexFile( indexFilename );
+	if ( not indexFile.is_open() ) throw IOerror( indexFilename );
+	std::string line;
+
+	//get the readID to path map
+	while ( std::getline( indexFile, line) ){
+
+		std::string readID = line.substr(0, line.find('\t'));
+		std::string path = line.substr(line.find('\t')+1);
+		readID2path[readID] = path;
+	}
+	std::cout << "ok." << std::endl;
 }

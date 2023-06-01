@@ -101,140 +101,17 @@ void bulk_getEvents( std::string fast5Filename, std::string readID, std::vector<
 }
 
 
-void getEvents( std::string fast5Filename, std::vector<double> &raw, float &sample_rate ){
-
-	//open the file
-	hid_t hdf5_file = H5Fopen(fast5Filename.c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
-	if (hdf5_file < 0) throw IOerror(fast5Filename.c_str());
-
-	//get the channel parameters
-	const char *scaling_path = "/UniqueGlobalKey/channel_id";
-	hid_t scaling_group = H5Gopen(hdf5_file, scaling_path, H5P_DEFAULT);
-	float digitisation = fast5_read_float_attribute(scaling_group, "digitisation");
-	float offset = fast5_read_float_attribute(scaling_group, "offset");
-	float range = fast5_read_float_attribute(scaling_group, "range");
-	sample_rate = fast5_read_float_attribute(scaling_group, "sampling_rate");
-	H5Gclose(scaling_group);
-
-	//get the raw signal
-	hid_t space;
-	hsize_t nsample;
-	float raw_unit;
-	float *rawptr = NULL;
-
-	ssize_t size = H5Lget_name_by_idx(hdf5_file, "/Raw/Reads/", H5_INDEX_NAME, H5_ITER_INC, 0, NULL, 0, H5P_DEFAULT);
-	char* name = (char*)calloc(1 + size, sizeof(char));
-	H5Lget_name_by_idx(hdf5_file, "/Raw/Reads/", H5_INDEX_NAME, H5_ITER_INC, 0, name, 1 + size, H5P_DEFAULT);
-	std::string readName(name);
-	free(name);
-	std::string signal_path = "/Raw/Reads/" + readName + "/Signal";
-
-	hid_t dset = H5Dopen(hdf5_file, signal_path.c_str(), H5P_DEFAULT);
-	if (dset < 0 ) throw BadFast5Field(); 
-	space = H5Dget_space(dset);
-	if (space < 0 ) throw BadFast5Field(); 
-	H5Sget_simple_extent_dims(space, &nsample, NULL);
-   	rawptr = (float*)calloc(nsample, sizeof(float));
-    	herr_t status = H5Dread(dset, H5T_NATIVE_FLOAT, H5S_ALL, H5S_ALL, H5P_DEFAULT, rawptr);
-	if ( status < 0 ){
-		free(rawptr);
-		H5Dclose(dset);
-		return;
-	}
-	H5Dclose(dset);
-	
-	raw_unit = range / digitisation;
-	for ( size_t i = 0; i < nsample; i++ ){
-
-		raw.push_back( (rawptr[i] + offset) * raw_unit );
-	}
-	free(rawptr);
-	H5Fclose(hdf5_file);
-}
-
-
-std::vector< double > solveLinearSystem( std::vector< std::vector< double > > A, std::vector< double > b ){
-/*crude but functional algorithm that solves the linear system A*x = b by building an augmented matrix and transforming to reduced row echelon form */
-	
-	if ( A.size() != b.size() ) throw MismatchedDimensions();
-
-	int lead = 0;
-
-	for ( unsigned int i = 0; i < A.size(); i++ ){
-
-		A[i].push_back( b[i] );
-	}
-
-	int nRows = A.size() - 1;
-	int nCols = A[0].size() - 1;
-
-	for ( int r = 0; r <= nRows; ++r ){
-
-		if ( lead > nCols ){
-			break;
-		}
-
-		int i = r;
-
-		while ( A[i][lead] == 0 ){
-			
-			++i;
-
-			if ( i > nRows ){
-			
-				i = r;
-				++lead;
-				if ( lead > nCols ){
-					goto stop;
-				}
-			}
-		}
-
-		std::vector< std::vector< double > > B = A;
-		A[i] = B[r];
-		A[r] = B[i];
-
-		double normaliser = A[r][lead];
-		if ( A[r][lead] != 0 ){
-			
-			for ( int c = 0; c <= nCols; ++c ){
-
-				A[r][c] /= normaliser;
-			}
-		}
-
-		for ( int i = 0; i <= nRows; ++i ){
-
-			if ( i != r ){
-				normaliser = A[i][lead];
-				for ( int c = 0; c <= nCols; ++c ){ 
-					A[i][c] -= normaliser*A[r][c];
-				}
-			}
-		}
-		lead++;
-	}
-
-	stop:
-	std::vector< double > result;
-	result.reserve( A.size() );
-
-	for ( unsigned int i = 0; i < A.size(); i++ ){
-
-		result.push_back( A[i].back() );
-	}
-	return result;
-}
-
-
 //start: adapted from nanopolish (https://github.com/jts/nanopolish)
 //licensed under MIT
 
 inline float logProbabilityMatch(unsigned int kmerIndex, double x, double shift, double scale){
 
 	std::pair<double,double> meanStd = Pore_Substrate_Config.pore_model[kmerIndex]; 
-	double mu = scale * meanStd.first + shift;
+	double mu = meanStd.first;
 	double sigma = meanStd.second;
+	
+	//scale the signal to the pore model
+	x = (x - shift)/scale;
 
 	float a = (x - mu) / sigma;
 	static const float log_inv_sqrt_2pi = log(0.3989422804014327);
@@ -258,9 +135,6 @@ void adaptive_banded_simple_event_align( std::vector< double > &raw, read &r, Po
 
 	std::string sequence = r.basecall;
 
-	//initialise vectors to solve A*x = b to recompute shift and scale
-	std::vector< std::vector< double > > A(2, std::vector<double>(2,0.0));
-	std::vector< double > b(2,0.0);
 	PoreParameters rescale;
 
 	size_t k = Pore_Substrate_Config.kmer_len;
@@ -299,14 +173,6 @@ void adaptive_banded_simple_event_align( std::vector< double > &raw, read &r, Po
 	size_t n_bands = n_rows + n_cols;
  
 	// Initialize
-
-	// Precompute k-mer ranks to avoid doing this in the inner loop
-	//std::vector<unsigned int> kmer_ranks(n_kmers);
-	//for(size_t i = 0; i < n_kmers; i++) {
-	//	std::string kmer = sequence.substr(i, k);
-	//	kmer_ranks[i] = kmer2index(kmer);
-	//}
-
 	typedef std::vector<float> bandscore;
 	typedef std::vector<uint8_t> bandtrace;
 
@@ -410,7 +276,6 @@ void adaptive_banded_simple_event_align( std::vector< double > &raw, read &r, Po
 			float left = is_offset_valid(offset_left) ? bands[band_idx - 1][offset_left] : -INFINITY;
 			float diag = is_offset_valid(offset_diag) ? bands[band_idx - 2][offset_diag] : -INFINITY;
  
-			//float lp_emission = log_probability_match_r9(read, pore_model, kmer_rank, event_idx, strand_idx);
 			float lp_emission = logProbabilityMatch(kmer_rank, raw[event_idx],s.shift,s.scale);
 
 			float score_d = diag + lp_step + lp_emission;
@@ -441,8 +306,6 @@ void adaptive_banded_simple_event_align( std::vector< double > &raw, read &r, Po
 	double sum_emission = 0;
 	double eventDiffs = 0.0;
 	double n_aligned_events = 0;
-	//std::vector<AlignedPair> out;
-	//std::map<unsigned int, double> eventToScore;
     
 	float max_score = -INFINITY;
 	int curr_event_idx = 0;
@@ -479,23 +342,11 @@ void adaptive_banded_simple_event_align( std::vector< double > &raw, read &r, Po
 		r.eventAlignment.push_back(std::make_pair(curr_event_idx, curr_kmer_idx));
 
 		// qc stats
-		//size_t kmer_rank = kmerRank_nanopolish(sequence.substr(curr_kmer_idx, k).c_str());
-		//sum_emission += log_probability_match_r9(read, pore_model, kmer_rank, curr_event_idx, strand_idx);
 		unsigned int kmer_rank = kmer_ranks[curr_kmer_idx];
 		std::pair<double,double> meanStd = Pore_Substrate_Config.pore_model[kmer_rank];
-		//eventToScore[curr_event_idx] = logProbabilityMatch(kmer, raw[curr_event_idx], s.shift, s.scale);
 		float logProbability = logProbabilityMatch(kmer_rank, raw[curr_event_idx], s.shift, s.scale);
 		sum_emission += logProbability;
 		eventDiffs += meanStd.first - raw[curr_event_idx];
-
-		//update A,b for recomputing shift and scale
-		//only do this for kmers that don't contain a T
-
-		A[0][0] += 1.0 / pow( meanStd.second, 2.0 );
-		A[0][1] += meanStd.first / pow( meanStd.second, 2.0 );
-		A[1][1] += pow( meanStd.first, 2.0 ) / pow( meanStd.second, 2.0 );
-		b[0] += raw[curr_event_idx] / pow( meanStd.second, 2.0 );
-		b[1] += raw[curr_event_idx] * meanStd.first / pow( meanStd.second, 2.0 );
 
 		n_aligned_events += 1;
 
@@ -528,180 +379,138 @@ void adaptive_banded_simple_event_align( std::vector< double > &raw, read &r, Po
 	bool spanned = r.eventAlignment.front().second == 0 && r.eventAlignment.back().second == n_kmers - 1;
     
 	r.alignmentQCs.recordQCs(avg_log_emission, spanned, max_gap);
+	if(avg_log_emission < min_average_log_emission || !spanned || max_gap > max_gap_threshold ) r.eventAlignment.clear();
 
-	if(avg_log_emission < min_average_log_emission || !spanned || max_gap > max_gap_threshold ){//|| usedInScale < 100) {
-		
-		//bool failed = true;
-		r.eventAlignment.clear();
-    	//fprintf(stderr, "ada\t\t%s\t%s\t%.2lf\t%zu\t%.2lf\t%d\t%d\t%d\n", failed ? "FAILED" : "OK",spanned ? "SPAN" : "NOTS", events_per_kmer, sequence.size(), avg_log_emission, curr_event_idx, max_gap, fills);
-	}
-	else{
-
-		//solve the linear system
-		A[1][0] = A[0][1];
-		std::vector< double > x =  solveLinearSystem(A, b);
-		rescale.shift = x[0];
-		rescale.scale = x[1];
-
-		//compute var
-		rescale.var = 0.0;
-		//int nNormalised = 0;
-		for (unsigned int i = 0; i < r.eventAlignment.size(); i++){
-
-			unsigned int kmer_rank = kmer_ranks[r.eventAlignment[i].second];
-			std::pair<double,double> meanStd = Pore_Substrate_Config.pore_model[kmer_rank];
-			//if (kmer.find("T") != std::string::npos) continue;
-			double event = raw[r.eventAlignment[i].first];
-			double mu,stdv;
-			mu = meanStd.first;
-			stdv = meanStd.second;
-
-			double yi = (event - rescale.shift - rescale.scale*mu);
-			rescale.var += yi * yi / (stdv * stdv);
-		}
-		rescale.var /= raw.size();//(double) nNormalised;
-		rescale.var = sqrt(rescale.var);
-		//fprintf(stderr,"%f\n",rescale.var);
-	}
-	//fprintf(stderr,"%f %f %f %f %f\n",s.shift,rescale.shift,s.scale,rescale.scale,rescale.var);
-
-	r.scalings = rescale;
+	r.scalings = s;
 
 	//benchmarking
 	//std::chrono::steady_clock::time_point tp5 = std::chrono::steady_clock::now();
 	//std::cout << "calculate shift and scale: " << std::chrono::duration_cast<std::chrono::microseconds>(tp5 - tp4).count() << std::endl;
-
 }
 
 
-PoreParameters roughRescale( std::vector< double > &means, std::string &basecall, std::vector<unsigned int> &kmer_ranks ){
+std::vector<double> quantileMedians(std::vector<double> &data, int nquantiles){
+
+	auto endSlice = data.end();
+	
+	//uncomment to downsample to a fixed number of events
+	/*
+	unsigned int maxEvents = 100000;
+	if (data.size() > maxEvents){
+		endSlice = data.begin() + maxEvents;
+	}
+	*/
+	
+	std::vector<double> data_downsample(data.begin(), endSlice);
+	std::sort(data_downsample.begin(), data_downsample.end());
+	
+	std::vector<double> quantileMedians;
+	unsigned int n = data_downsample.size() / nquantiles;
+	for (int i = 0; i < nquantiles; i++){
+	
+		double median  = data_downsample[ (i*n + (i+1)*n)/2 ];
+		quantileMedians.push_back(median);
+	}
+	
+	return quantileMedians;
+}
+
+
+std::pair<double, double> linear_regression(std::vector<double> x, std::vector<double> y){
+
+	assert(x.size() == y.size());
+	
+	double sum_x = 0., sum_x2 = 0., sum_y = 0., sum_xy = 0.;
+	int n = y.size();
+	
+	for(int i = 0; i < n; i++){
+		sum_x = sum_x + x[i];
+		sum_x2 = sum_x2 + x[i]*x[i];
+		sum_y = sum_y + y[i];
+		sum_xy = sum_xy + x[i]*y[i];
+	}
+	
+	//calculate coefficients
+	double slope = (n * sum_xy - sum_x * sum_y)/(n * sum_x2 - sum_x * sum_x);
+	double intercept = (sum_y - slope * sum_x)/n;
+	
+	//testing
+	/*
+	for(int i = 0; i < n; i++){
+		std::cerr << x[i] << " " << y[i] << std::endl;
+	}
+	std::cerr << slope << " " << intercept << std::endl;
+	std::cerr << "----------------------" << std::endl;	
+	*/
+
+	return std::make_pair(slope,intercept);
+}
+
+
+PoreParameters estimateScaling_quantiles(std::vector< double > &signal_means, std::string &sequence, std::vector<unsigned int> &kmer_ranks ){
 
 	PoreParameters s;
 
 	size_t k = Pore_Substrate_Config.kmer_len;
-	unsigned int numOfKmers = basecall.size() - k + 1;
+	unsigned int numOfKmers = sequence.size() - k + 1;
 
-	/*get a rough estimate for shift */
-	double event_sum = 0.0;
-	for ( unsigned int i = 0; i < means.size(); i++ ){
-
-		event_sum += means[i];
-	}
-
-	double kmer_sum = 0.0;
-	double kmer_sq_sum = 0.0;
-	std::string kmer;
+	std::vector<double> model_means;
+	model_means.reserve(numOfKmers);
 	for ( unsigned int i = 0; i < numOfKmers; i ++ ){
 
-		kmer = basecall.substr(i, k);
 		std::pair<double,double> meanStd = Pore_Substrate_Config.pore_model[kmer_ranks[i]];
 		double kmer_mean = meanStd.first;
-		kmer_sum += kmer_mean;
-		kmer_sq_sum += pow( kmer_mean, 2.0 );
+		model_means.push_back(kmer_mean);
 	}
 
-	s.shift = event_sum / means.size() - kmer_sum / numOfKmers;
+	std::vector<double> signal_quantiles = quantileMedians(signal_means, 20);
+	std::vector<double> model_quantiles = quantileMedians(model_means, 20);
 
-	/*get a rough estimate for scale */
-	double event_sq_sum = 0.0;
-	for ( unsigned int i = 0; i < means.size(); i++ ){
-
-		event_sq_sum += pow( means[i] - s.shift, 2.0 );
-	}
-
-	s.scale = (event_sq_sum / means.size()) / (kmer_sq_sum / numOfKmers ); 
-	s.drift = 0.0;
-	s.var = 1.0;
+	std::pair<double, double> scalings = linear_regression(model_quantiles, signal_quantiles);
+	
+	s.shift = scalings.second;
+	s.scale = scalings.first;
+	
 	return s;
 }
 
 
-void normaliseEvents( read &r, bool bulkFast5 ){
-
+void normaliseEvents( read &r ){
 
 	float sample_rate;
 	try{
 
-		if (bulkFast5) bulk_getEvents(r.filename, r.readID, r.raw, sample_rate);
-		else getEvents( r.filename, r.raw, sample_rate);
+		bulk_getEvents(r.filename, r.readID, r.raw, sample_rate);
 	}
 	catch ( BadFast5Field &bf5 ){
 
 		return;
 	}
 
-	// PLP commented out
-	event_table et = detect_events(&(r.raw)[0], (r.raw).size(), event_detection_defaults);
-	assert(et.n > 0);
-
-	//get the event mean and length
-	r.normalisedEvents.reserve(et.n);
-	r.eventLengths.reserve(et.n);
-	unsigned int rawStart = 0;
-	for ( unsigned int i = 0; i < et.n; i++ ){
-
-		if (et.event[i].mean > 1.0) {
-
-			if (i > 0) r.eventIdx2rawIdx[i-1] = std::make_pair(rawStart,et.event[i].start-1);
-
-			r.normalisedEvents.push_back( et.event[i].mean );
-			r.eventLengths.push_back(et.event[i].length / sample_rate);
-
-			rawStart = et.event[i].start;
-		}
-	}
-	r.eventIdx2rawIdx[et.n-1] = std::make_pair(rawStart,r.raw.size()-1);
-	free(et.event);
-
-	// end commented out
-
-	r.normalisedEvents.reserve((r.raw).size());
-
-	//PLP checkpoint 01
-	//std::cout << "checkpoint 01: " << (r.raw).size() << std::endl;
-	//end checkpoint 01
-
-	// PLP to do: if R10 then do:
 	r.normalisedEvents = r.raw;
-	std::vector<double> zerosVec(r.raw.size(), 0.); //initialise a vector of zeros the same size as r.raw
-	r.eventLengths = zerosVec;
-	// end to do
-
-	//PLP checkpoint 02
-	//std::cout << "checkpoint 02: " << (r.raw).size() << std::endl;
-	//end checkpoint 02
-
-	//testing - print the event and the raw signals that were used to make it
-	/*
-	for (auto e = r.eventIdx2rawIdx.begin(); e != r.eventIdx2rawIdx.end(); e++ ){
-
-		std::cout << r.normalisedEvents[e -> first] << std::endl;
-		for (unsigned int e1 = (e->second).first; e1 <= (e->second).second; e1++){
-			std::cout << "<" << r.raw[e1] << std::endl;
-		}
-	}
-	*/
 	
-
-	// Precompute k-mer ranks for rough rescaling and banded alignment
+	// Precompute k-mer ranks for rescaling and banded alignment - query sequence
 	size_t k = Pore_Substrate_Config.kmer_len;
 	size_t n_kmers = r.basecall.size() - k + 1;
-	std::vector<unsigned int> kmer_ranks(n_kmers);
+	std::vector<unsigned int> kmer_ranks_query(n_kmers);
 	for(size_t i = 0; i < n_kmers; i++) {
 		std::string kmer = r.basecall.substr(i, k);
-		kmer_ranks[i] = kmer2index(kmer, k);
+		kmer_ranks_query[i] = kmer2index(kmer, k);
 	}
-
-	/*rough calculation of shift and scale so that we can align events */
-	PoreParameters s = roughRescale( r.normalisedEvents, r.basecall, kmer_ranks );
-
-	/*align 5mers to events using the basecall */
-	adaptive_banded_simple_event_align(r.normalisedEvents, r, s, kmer_ranks);
+	
+	// Precompute k-mer ranks for rescaling and banded alignment - reference sequence
+	n_kmers = r.referenceSeqMappedTo.size() - k + 1;
+	std::vector<unsigned int> kmer_ranks_ref(n_kmers);
+	for(size_t i = 0; i < n_kmers; i++) {
+		std::string kmer = r.referenceSeqMappedTo.substr(i, k);
+		kmer_ranks_ref[i] = kmer2index(kmer, k);
+	}
+	
+	//normalise by the reference sequence
+	PoreParameters s = estimateScaling_quantiles( r.normalisedEvents, r.referenceSeqMappedTo, kmer_ranks_ref );
+	
+	// Rough alignment of signals to query sequence
+	adaptive_banded_simple_event_align(r.normalisedEvents, r, s, kmer_ranks_query);
+	
 	r.scalings.eventsPerBase = std::max(1.25, (double) r.eventAlignment.size() / (double) (r.basecall.size() - k));
-
-	//PLP checkpoint 03
-	//std::cout << "checkpoint 03: " << (r.normalisedEvents).size() << std::endl;
-	//end checkpoint 03
-
-
 }

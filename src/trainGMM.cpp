@@ -397,9 +397,6 @@ int train_main( int argc, char** argv ){
 	}
 
 	std::vector< std::vector< double > > importedEvents( pow(4,k) );
-	//PLP checkpoint 1:
-	std::cout << pow(4,k) << "checkpoint 1" << std::endl;
-	//end checkpoint 1
 
 	//get a read count
 	unsigned int readCount = 0;

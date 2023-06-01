@@ -19,9 +19,7 @@
 struct PoreParameters {
 
 	double shift;
-	double drift = 0.0;
 	double scale;
-	double var = 1.0;
 	double eventsPerBase = 0.0;
 };
 
@@ -62,9 +60,7 @@ struct read{
 		void printScalings(void){
 
 			std::cerr << "shift" << " " << scalings.shift << std::endl;
-			std::cerr << "drift" << " " << scalings.drift << std::endl;
 			std::cerr << "scale" << " " << scalings.scale << std::endl;
-			std::cerr << "var" << " " << scalings.var << std::endl;
 		}
 };
 
@@ -78,6 +74,6 @@ std::string getGitCommit(void);
 std::string writeDetectHeader(std::string, std::string, std::string, int, bool, unsigned int, unsigned int, double, bool);
 std::string writeRegionsHeader(std::string, double, bool, unsigned int, unsigned int, double, double);
 unsigned int kmer2index(std::string &, unsigned int);
-
+void parseIndex( std::string, std::map< std::string, std::string > & );
 
 #endif

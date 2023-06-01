@@ -32,6 +32,7 @@ class Global_Config{
 		AdaptiveBanded_Params AdaptiveBanded_config;
 
 		AdaptiveBanded_Params AdaptiveBanded_Params_DNA_R9{-5.0, 50, 100}; //DNA - R9.4.1
+		AdaptiveBanded_Params AdaptiveBanded_Params_DNA_R10{-7.5, 50, 100}; //DNA - R10.4.1
 		AdaptiveBanded_Params AdaptiveBanded_Params_RNA_R9{-5.0, 50, 100}; //RNA - R9.4.1
 
 		HMM_TransitionProbs HMM_TransitionProbs_DNA_R9{0.3, 0.7, 0.999, 0.0025, 0.001, 0.001}; //DNA - R9.4.1
@@ -56,11 +57,9 @@ class Global_Config{
 		void configure_DNA_R10(void){
 			kmer_len = 9;
 			windowLength_align = 50;
-
-			//PLP To Do: add in parameter (boolean?) to indicate whether it should be events or not
 			
-			fn_pore_model = "r10.4.1_400bps.nucleotide.9mer.template_SD4.model"; //from: https://github.com/hasindu2008/f5c/tree/r10/test/r10-models
-			fn_analogue_model = "BrdU_20230105_REP_R10_V14_Brdu_400bps.model";
+			fn_pore_model = "r10.4.1_400bps.nucleotide.9mer.model"; //from: https://github.com/nanoporetech/kmer_models/blob/master/dna_r10.4.1_e8.2_400bps/9mer_levels_v1.txt
+			fn_analogue_model = "r10.4.1_400bps.nucleotide.9mer.model";
 			pore_model = import_poreModel(fn_pore_model, kmer_len);
 			analogue_model = import_poreModel(fn_analogue_model, kmer_len); //placeholder
 			
@@ -68,7 +67,7 @@ class Global_Config{
 			dnn_model_inputLayer = "serving_default_input_1";
 
 			HMM_config = HMM_TransitionProbs_DNA_R9;
-			AdaptiveBanded_config = AdaptiveBanded_Params_DNA_R9;
+			AdaptiveBanded_config = AdaptiveBanded_Params_DNA_R10;
 		}
 
 		void configure_RNA_R9(void){

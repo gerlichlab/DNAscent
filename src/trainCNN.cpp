@@ -188,7 +188,6 @@ Arguments parseDataArguments( int argc, char** argv ){
 int data_main( int argc, char** argv ){
 
 	Arguments args = parseDataArguments( argc, argv );
-	bool bulkFast5;
 
 	//get the neural network model path
 	std::string pathExe = getExePath();
@@ -199,7 +198,7 @@ int data_main( int argc, char** argv ){
 
 	//load DNAscent index
 	std::map< std::string, std::string > readID2path;
-	parseIndex( args.indexFilename, readID2path, bulkFast5 );
+	parseIndex( args.indexFilename, readID2path );
 
 	//import fasta reference
 	std::map< std::string, std::string > reference = import_reference_pfasta( args.referenceFilename );
@@ -237,6 +236,7 @@ int data_main( int argc, char** argv ){
 	int result;
 	int failedEvents = 0;
 	unsigned int maxBufferSize;
+	unsigned int windowLength_align = 50;
 	std::vector< bam1_t * > buffer;
 	if ( args.threads <= 4 ) maxBufferSize = args.threads; //PLP&SY: check with Mike
 	else maxBufferSize = 4*(args.threads);
@@ -263,7 +263,7 @@ int data_main( int argc, char** argv ){
 		/*if we've filled up the buffer with short reads, compute them in parallel */
 		if (buffer.size() >= maxBufferSize or (buffer.size() > 0 and result == -1 ) ){
 
-			#pragma omp parallel for schedule(dynamic) shared(buffer,Pore_Substrate_Config,args,prog,failed) num_threads(args.threads)
+			#pragma omp parallel for schedule(dynamic) shared(buffer,Pore_Substrate_Config,args,prog,failed,windowLength_align) num_threads(args.threads)
 			for (unsigned int i = 0; i < buffer.size(); i++){
 
 				read r; 
@@ -298,7 +298,7 @@ int data_main( int argc, char** argv ){
 					r.isReverse = true;
 				}
 
-				normaliseEvents(r, bulkFast5);
+				normaliseEvents(r);
 
 				//catch reads with rough event alignments that fail the QC
 				if ( r.eventAlignment.size() == 0 ){
@@ -307,19 +307,9 @@ int data_main( int argc, char** argv ){
 					prog++;
 					continue;
 				}
-
-				std::map<unsigned int, std::pair<double,double>> analogueCalls;
-
-				unsigned int windowLength_align = 50;
-				std::pair<bool,std::shared_ptr<AlignedRead>> ar = eventalign_detect( r, windowLength_align, 1.0 );
-				if (not ar.first){
-					failed++;
-					prog++;
-					continue;
-				}
-				analogueCalls = runCNN_training(ar.second,session);
 				
-				std::string readOut = eventalign_train( r, 100, analogueCalls, args.dilation, args.useRaw);
+				HMMdetection hmm_likelihood = llAcrossRead(r, 17);
+				std::string readOut = eventalign( r, windowLength_align, hmm_likelihood.refposToLikelihood);
 
 				#pragma omp critical
 				{
