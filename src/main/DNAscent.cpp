@@ -19,10 +19,10 @@
 #include "../trainGMM.h"
 #include "../config.h"
 
-/*prototype */
+
 int show_options_DNAscent( int, char** );
 
-/*map from name of the DNAscent function passed as argument on the command line to the function that it should call */
+
 static std::map< std::string, std::function< int( int, char** ) > > executables = {
 	{"index", 	index_main},
 	{"detect", 	detect_main},
@@ -55,12 +55,12 @@ int show_options_DNAscent( int, char** ){
 	return 0;
 }
 
+
 Global_Config Pore_Substrate_Config;
 
-/*main DNAscent executable that will link to other executables */
 int main( int argc, char** argv ){
 
-	//configure for DNA R10
+	//configure for DNA R10.4.1
 	Pore_Substrate_Config.configure_DNA_R10();
 
 	if ( argc < 2 ){

@@ -113,9 +113,10 @@ inline float logProbabilityMatch(unsigned int kmerIndex, double x, double shift,
 	//scale the signal to the pore model
 	x = (x - shift)/scale;
 
-	float a = (x - mu) / sigma;
-	static const float log_inv_sqrt_2pi = log(0.3989422804014327);
-	double thymProb = log_inv_sqrt_2pi - eln(sigma) + (-0.5f * a * a);
+	float a = (x - mu) / sigma;	
+	double thymProb = -eln(M_PI * sigma) - eln(1 + a * a); //Cauchy PDF
+	//static const float log_inv_sqrt_2pi = log(0.3989422804014327);
+	//double thymProb = log_inv_sqrt_2pi - eln(sigma) + (-0.5f * a * a);
 	return thymProb;
 }	
 
@@ -161,7 +162,7 @@ void adaptive_banded_simple_event_align( std::vector< double > &raw, read &r, Po
 
 	// setting a tiny skip penalty helps keep the true alignment within the adaptive band
 	// this was empirically determined
-	double epsilon = 1e-10;
+	double epsilon = 1e-30;
 	double lp_skip = log(epsilon);
 	double lp_stay = log(p_stay);
 	double lp_step = log(1.0 - exp(lp_skip) - exp(lp_stay));
@@ -303,7 +304,7 @@ void adaptive_banded_simple_event_align( std::vector< double > &raw, read &r, Po
 	//
 	// Backtrack to compute alignment
 	//
-	double sum_emission = 0;
+	double sum_emission = 0.;
 	double eventDiffs = 0.0;
 	double n_aligned_events = 0;
     
@@ -349,6 +350,13 @@ void adaptive_banded_simple_event_align( std::vector< double > &raw, read &r, Po
 		eventDiffs += meanStd.first - raw[curr_event_idx];
 
 		n_aligned_events += 1;
+		
+		//TESTING - print the alignment
+		//double mu = meanStd.first;
+		//double sigma = meanStd.second;
+		//double x = (raw[curr_event_idx] - s.shift)/s.scale;
+		//std::cout << curr_kmer_idx << "\t" << x << "\t" << mu << std::endl;
+		//ENDTESTING
 
 		int band_idx = event_kmer_to_band(curr_event_idx, curr_kmer_idx);
 		int offset = band_event_to_offset(band_idx, curr_event_idx);
@@ -377,6 +385,9 @@ void adaptive_banded_simple_event_align( std::vector< double > &raw, read &r, Po
 	// QC results
 	double avg_log_emission = sum_emission / n_aligned_events;
 	bool spanned = r.eventAlignment.front().second == 0 && r.eventAlignment.back().second == n_kmers - 1;
+    
+    	//Testing - print QCs
+    	//std::cout << avg_log_emission << "\t" << spanned << "\t" << max_gap << std::endl;
     
 	r.alignmentQCs.recordQCs(avg_log_emission, spanned, max_gap);
 	if(avg_log_emission < min_average_log_emission || !spanned || max_gap > max_gap_threshold ) r.eventAlignment.clear();
@@ -463,8 +474,8 @@ PoreParameters estimateScaling_quantiles(std::vector< double > &signal_means, st
 		model_means.push_back(kmer_mean);
 	}
 
-	std::vector<double> signal_quantiles = quantileMedians(signal_means, 20);
-	std::vector<double> model_quantiles = quantileMedians(model_means, 20);
+	std::vector<double> signal_quantiles = quantileMedians(signal_means, 10);
+	std::vector<double> model_quantiles = quantileMedians(model_means, 10);
 
 	std::pair<double, double> scalings = linear_regression(model_quantiles, signal_quantiles);
 	

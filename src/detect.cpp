@@ -45,7 +45,8 @@ static const char *help=
 "  -t,--threads              number of threads (default is 1 thread),\n"
 "  --GPU                     use the GPU device indicated for prediction (default is CPU),\n"
 "  -q,--quality              minimum mapping quality (default is 20),\n"
-"  -l,--length               minimum read length in bp (default is 1000).\n"
+"  -l,--length               minimum read length in bp (default is 1000),\n"
+"     --HMM                  use hidden Markov detection instead of neural network.\n"
 "Written by Michael Boemo, Department of Pathology, University of Cambridge.\n"
 "Please submit bug reports to GitHub Issues (https://github.com/MBoemo/DNAscent/issues).";
 
@@ -55,11 +56,11 @@ struct Arguments {
 	std::string outputFilename;
 	std::string indexFilename;
 	bool useGPU = false;
+	bool useHMM = false;
 	unsigned char GPUdevice = '0';
 	int minQ = 20;
 	int minL = 1000;
 	unsigned int threads = 1;
-	double dilation = 1.0;
 };
 
 Arguments parseDetectArguments( int argc, char** argv ){
@@ -131,6 +132,11 @@ Arguments parseDetectArguments( int argc, char** argv ){
 			args.outputFilename = strArg;
 			i+=2;
 		}
+		else if ( "--HMM" ){
+		
+			args.useHMM = true;
+			i+=1;
+		}
 		else if ( flag == "--GPU" ){
 
 			args.useGPU = true;
@@ -139,12 +145,6 @@ Arguments parseDetectArguments( int argc, char** argv ){
 
 			args.GPUdevice = *argv[ i + 1 ];
 
-			i+=2;
-		}
-		else if ( flag == "--dilation" ){
-
-			std::string strArg( argv[ i + 1 ] );
-			args.dilation = std::stof( strArg.c_str() );
 			i+=2;
 		}
 		else throw InvalidOption( flag );
@@ -177,7 +177,7 @@ double sequenceProbability( std::vector <double> &observations,
 	double internalM12M1 = eln(1. - (1./scalings.eventsPerBase));
 	double externalM12M1 = eln(1.0 - externalM12D - internalM12I - internalM12M1);
 
-	std::vector< double > I_curr(2*windowSize+1, NAN), D_curr(2*windowSize+1, NAN), M_curr(2*windowSize+1, NAN), I_prev(2*windowSize+1, NAN), D_prev(2*windowSize+1, NAN), M_prev(2*windowSize+1, NAN);
+	std::vector< double > I_curr(2*windowSize+1-k, NAN), D_curr(2*windowSize+1-k, NAN), M_curr(2*windowSize+1-k, NAN), I_prev(2*windowSize+1-k, NAN), D_prev(2*windowSize+1-k, NAN), M_prev(2*windowSize+1-k, NAN);
 	double firstI_curr = NAN, firstI_prev = NAN;
 	double start_curr = NAN, start_prev = 0.0;
 
@@ -211,7 +211,7 @@ double sequenceProbability( std::vector <double> &observations,
 		level_mu = meanStd.first;
 		level_sigma = meanStd.second;
 
-		matchProb = eln( normalPDF( level_mu, level_sigma, (observations[t] - scalings.shift)/scalings.scale ) );
+		matchProb = eln( cauchyPDF( level_mu, level_sigma, (observations[t] - scalings.shift)/scalings.scale ) );
 		insProb = 0.0; //log(1) = 0; set probability equal to 1 and use transition probability as weighting
 
 		//first insertion
@@ -236,23 +236,27 @@ double sequenceProbability( std::vector <double> &observations,
 
 			//get model parameters
 			kmer = sequence.substr(i, k);
-			std::pair<double,double> analogue_meanStd = Pore_Substrate_Config.analogue_model[kmer2index(kmer, k)];
 			insProb = 0.0; //log(1) = 0; set probability equal to 1 and use transition probability as weighting
-			if ( useBrdU and BrdUStart <= i and i <= BrdUEnd and kmer.find('T') != std::string::npos and analogue_meanStd.first != 0. ){
-
+			if ( useBrdU and BrdUStart <= i and i <= BrdUEnd and kmer.find('T') != std::string::npos ){
+				
+				std::pair<double,double> analogue_meanStd = Pore_Substrate_Config.analogue_model[kmer2index(kmer, k)];
+				level_mu = analogue_meanStd.first;
+				level_sigma = analogue_meanStd.second;
+				matchProb = eln( cauchyPDF( level_mu, level_sigma, (observations[t] - scalings.shift)/scalings.scale ) );
+				
+				/*
+				std::pair<double,double> meanStd = Pore_Substrate_Config.pore_model[kmer2index(kmer, k)];
 				level_mu = meanStd.first;
-				level_sigma = meanStd.second;
-
-				matchProb = eln( normalPDF( level_mu, level_sigma, (observations[t] - scalings.shift)/scalings.scale ) );
+				level_sigma = meanStd.second;					
+				matchProb = eln( 0.5*normalPDF( level_mu-2.*level_sigma, level_sigma, (observations[t] - scalings.shift)/scalings.scale ) + 0.5*normalPDF( level_mu+2.*level_sigma, level_sigma, (observations[t] - scalings.shift)/scalings.scale ));				
+				*/
 			}
 			else{
 
 				std::pair<double,double> meanStd = Pore_Substrate_Config.pore_model[kmer2index(kmer, k)];
-
 				level_mu = meanStd.first;
 				level_sigma = meanStd.second;
-
-				matchProb = eln( normalPDF( level_mu, level_sigma, (observations[t] - scalings.shift)/scalings.scale ) );
+				matchProb = eln( cauchyPDF( level_mu, level_sigma, (observations[t] - scalings.shift)/scalings.scale ) );
 			}
 
 			//to the insertion
@@ -347,11 +351,7 @@ HMMdetection llAcrossRead( read &r, unsigned int windowLength){
 		int posOnRef = POIs[i];
 		int posOnQuery = (r.refToQuery).at(posOnRef);
 
-		//sequence needs to be 6 bases longer than the span of events we catch
-		//so sequence goes from posOnRef - windowLength to posOnRef + windowLength + 6
-		//event span goes from posOnRef - windowLength to posOnRef + windowLength
-
-		std::string readSnippet = (r.referenceSeqMappedTo).substr(posOnRef - windowLength, 2*windowLength+k);
+		std::string readSnippet = (r.referenceSeqMappedTo).substr(posOnRef - windowLength, 2*windowLength);
 
 		//make sure the read snippet is fully defined as A/T/G/C in reference
 		unsigned int As = 0, Ts = 0, Cs = 0, Gs = 0;
@@ -377,8 +377,8 @@ HMMdetection llAcrossRead( read &r, unsigned int windowLength){
 		std::vector< double > eventSnippet;
 
 		//catch spans with lots of insertions or deletions (this QC was set using results of tests/detect/hmm_falsePositives)
-		unsigned int spanOnQuery = (r.refToQuery)[posOnRef + windowLength+k] - (r.refToQuery)[posOnRef - windowLength];
-		if ( spanOnQuery > 3.5*windowLength or spanOnQuery < 2*windowLength ) continue;
+		unsigned int spanOnQuery = (r.refToQuery)[posOnRef + windowLength-k] - (r.refToQuery)[posOnRef - windowLength];
+		assert(spanOnQuery >= 0);
 
 		/*get the events that correspond to the read snippet */
 		bool first = true;
@@ -387,7 +387,7 @@ HMMdetection llAcrossRead( read &r, unsigned int windowLength){
 			for ( unsigned int j = readHead; j >= 0; j-- ){
 
 				/*if an event has been aligned to a position in the window, add it */
-				if ( (r.eventAlignment)[j].second >= (r.refToQuery)[posOnRef - windowLength] and (r.eventAlignment)[j].second < (r.refToQuery)[posOnRef + windowLength] ){
+				if ( (r.eventAlignment)[j].second >= (r.refToQuery)[posOnRef - windowLength] and (r.eventAlignment)[j].second < (r.refToQuery)[posOnRef + windowLength-k] ){
 
 					if (first){
 						readHead = j;
@@ -413,7 +413,7 @@ HMMdetection llAcrossRead( read &r, unsigned int windowLength){
 			for ( unsigned int j = readHead; j < (r.eventAlignment).size(); j++ ){
 
 				/*if an event has been aligned to a position in the window, add it */
-				if ( (r.eventAlignment)[j].second >= (r.refToQuery)[posOnRef - windowLength] and (r.eventAlignment)[j].second < (r.refToQuery)[posOnRef + windowLength] ){
+				if ( (r.eventAlignment)[j].second >= (r.refToQuery)[posOnRef - windowLength] and (r.eventAlignment)[j].second < (r.refToQuery)[posOnRef + windowLength-k] ){
 
 					if (first){
 						readHead = j;
@@ -428,12 +428,12 @@ HMMdetection llAcrossRead( read &r, unsigned int windowLength){
 				}
 
 				/*stop once we get to the end of the window */
-				if ( (r.eventAlignment)[j].second >= (r.refToQuery)[posOnRef + windowLength] ) break;
+				if ( (r.eventAlignment)[j].second >= (r.refToQuery)[posOnRef + windowLength-k] ) break;
 			}
 		}
 
-		//catch abnormally few or many events (this QC was set using results of tests/detect/hmm_falsePositives)
-		if ( eventSnippet.size() > 8*windowLength or eventSnippet.size() < 3.5*windowLength ) continue;
+		//catch abnormally few events
+		if ( eventSnippet.size() < 2*windowLength - k ) continue;
 
 		/*
 		TESTING - print out the read snippet, the ONT model, and the aligned events
@@ -465,8 +465,8 @@ HMMdetection llAcrossRead( read &r, unsigned int windowLength){
 
 		//make the BrdU call
 		std::string kOI = (r.referenceSeqMappedTo).substr(posOnRef,k);
-		size_t BrdUStart = kOI.find('T') + windowLength - k-1;
-		size_t BrdUEnd = windowLength;//kOI.rfind('T') + windowLength;
+		size_t BrdUStart = kOI.find('T') + windowLength - k + 1;
+		size_t BrdUEnd = windowLength;
 		double logProbAnalogue = sequenceProbability( eventSnippet, readSnippet, windowLength, true, r.scalings, BrdUStart, BrdUEnd );
 		double logProbThymidine = sequenceProbability( eventSnippet, readSnippet, windowLength, false, r.scalings, 0, 0 );
 		double logLikelihoodRatio = logProbAnalogue - logProbThymidine;
@@ -497,64 +497,65 @@ std::cerr << logLikelihoodRatio << std::endl;
 }
 
 
-void read2tensor(std::shared_ptr<AlignedRead> r, const TensorShape &shape, TF_Tensor *t){
+std::string runCNN(std::shared_ptr<AlignedRead> r, std::shared_ptr<ModelSession> session, std::vector<TF_Output> inputOps){
 
-	std::vector<float> unformattedTensor = r -> makeTensor();
-
-	size_t size = unformattedTensor.size();
-	//put a check in here for size
-
-	//auto output_array = std::make_unique<float[]>(size);
-	std::cout << "mark1" << std::endl;
-	float *output_array = (float *)malloc(size*sizeof(float));
-	for(size_t i = 0; i < size; i++){
-		output_array[i] = unformattedTensor[i];
-	}
-	std::cout << "mark2" << std::endl;
-
-	t = TF_NewTensor(TF_FLOAT,
-		shape.values,
-		shape.dim,
-		(void *)output_array,
-		size*sizeof(float),
-		cpp_array_deallocator<float>,
-		nullptr);
-	std::cout << "mark3" << std::endl;
-	free(output_array);
-}
-
-
-std::string runCNN(std::shared_ptr<AlignedRead> r, std::shared_ptr<ModelSession> session){
-
-	int NumInputs = 1;
+	int NumInputs = 2;
 	int NumOutputs = 1;
 
-	std::vector<size_t> protoShape = r -> getShape();
-	TensorShape input_shape={{1, (int64_t) protoShape[0], (int64_t) protoShape[1]}, 3};
+	std::vector<TF_Tensor*> input_tensors;
+	TF_Tensor* OutputValues;
 
-	std::vector<float> unformattedTensor = r -> makeTensor();
+	//sequence input
+	std::vector<size_t> protoSequenceShape = r -> getSequenceShape();
+	TensorShape input_sequenceShape={{1, (int64_t) protoSequenceShape[0], (int64_t) protoSequenceShape[1]}, 3};
 
-	size_t size = unformattedTensor.size();
-	assert(size > 0);
+	std::vector<float> unformattedSequenceTensor = r -> makeSequenceTensor();
 
-	float *tmp_array = (float *)malloc(size*sizeof(float));
-	for(size_t i = 0; i < size; i++){
-		tmp_array[i] = unformattedTensor[i];
+	size_t sizeSequence = unformattedSequenceTensor.size();
+	assert(sizeSequence > 0);
+
+	float *tmp_sequenceArray = (float *)malloc(sizeSequence*sizeof(float));
+	for(size_t i = 0; i < sizeSequence; i++){
+		tmp_sequenceArray[i] = unformattedSequenceTensor[i];
 	}
 
-	TF_Tensor* InputValues = TF_NewTensor(TF_FLOAT,
-		input_shape.values,
-		input_shape.dim,
-		(void *)tmp_array,
-		size*sizeof(float),
+	TF_Tensor* SequenceInputTensor = TF_NewTensor(TF_FLOAT,
+		input_sequenceShape.values,
+		input_sequenceShape.dim,
+		(void *)tmp_sequenceArray,
+		sizeSequence*sizeof(float),
 		cpp_array_deallocator<float>,
 		nullptr);
 
-	TF_Tensor* OutputValues;
+	input_tensors.push_back(SequenceInputTensor);
+
+	//signal input
+	std::vector<size_t> protoSignalShape = r -> getSignalShape();
+	TensorShape input_signalShape={{1, (int64_t) protoSignalShape[0], (int64_t) protoSignalShape[1], (int64_t) protoSignalShape[2]}, 4};
+
+	std::vector<float> unformattedSignalTensor = r -> makeSignalTensor();
+
+	size_t sizeSignal = unformattedSignalTensor.size();
+	assert(sizeSignal > 0);
+
+	float *tmp_signalArray = (float *)malloc(sizeSignal*sizeof(float));
+	for(size_t i = 0; i < sizeSignal; i++){
+		tmp_signalArray[i] = unformattedSignalTensor[i];
+	}
+
+	TF_Tensor* SignalInputTensor = TF_NewTensor(TF_FLOAT,
+		input_signalShape.values,
+		input_signalShape.dim,
+		(void *)tmp_signalArray,
+		sizeSignal*sizeof(float),
+		cpp_array_deallocator<float>,
+		nullptr);
+
+	input_tensors.push_back(SignalInputTensor);
 
 	//Run the Session
 	CStatus status;
-	TF_SessionRun(*(session->session.get()), NULL, &session->inputs, &InputValues, NumInputs, &session->outputs, &OutputValues, NumOutputs, NULL, 0, NULL, status.ptr);
+	TF_SessionRun(*(session->session.get()), NULL, &inputOps[0], &input_tensors[0], NumInputs, &session->outputs, &OutputValues, NumOutputs, NULL, 0, NULL, status.ptr);
 
 	if(TF_GetCode(status.ptr) != TF_OK)
 	{
@@ -570,11 +571,10 @@ std::string runCNN(std::shared_ptr<AlignedRead> r, std::shared_ptr<ModelSession>
 
 	//get positions on the read reference to write the output
 	std::vector<unsigned int> positions = r -> getPositions();
-	std::vector<int> alignmentQuality = r -> getAlignmentQuality();
-	std::vector<std::string> kmers = r -> getKmers();
+	std::vector<std::string> sixMers = r -> getKmers();
 
 	size_t output_size = TF_TensorByteSize(OutputValues) / sizeof(float);
-	assert(output_size == protoShape[0] * outputFields);
+	assert(output_size == protoSequenceShape[0] * outputFields);
 	float *output_array = (float *)TF_TensorData(OutputValues);
 
 	//write the output
@@ -588,14 +588,14 @@ std::string runCNN(std::shared_ptr<AlignedRead> r, std::shared_ptr<ModelSession>
 		if((i+1)%outputFields==0){
 
 			//only output T positions
-			if (kmers[pos].substr(0,1) != "T"){
+			if (sixMers[pos].substr(0,1) != "T"){
 				pos++;
 				continue;
 			}
 
 			str_line += thisPosition + "\t" + std::to_string(output_array[i])+ "\t" + std::to_string(output_array[i-1]);
-			if (std::abs(alignmentQuality[pos]) > 100) str_line += "\t*";
-
+			if (r -> getStrand() == "rev") str_line += "\t" + reverseComplement(sixMers[pos]);
+			else str_line += "\t" + sixMers[pos];
 			lines.push_back(str_line);
 			str_line = "";
 			pos++;
@@ -606,7 +606,8 @@ std::string runCNN(std::shared_ptr<AlignedRead> r, std::shared_ptr<ModelSession>
 	}
 
 	TF_DeleteTensor(OutputValues);
-	TF_DeleteTensor(InputValues);
+	TF_DeleteTensor(SequenceInputTensor);
+	TF_DeleteTensor(SignalInputTensor);
 
 	if (r -> getStrand() == "rev") std::reverse(lines.begin(),lines.end());
 
@@ -615,87 +616,6 @@ std::string runCNN(std::shared_ptr<AlignedRead> r, std::shared_ptr<ModelSession>
 	}
 
 	return str_output;
-}
-
-
-std::map<unsigned int, std::pair<double,double>> runCNN_training(std::shared_ptr<AlignedRead> r, std::shared_ptr<ModelSession> session){
-
-	int NumInputs = 1;
-	int NumOutputs = 1;
-
-	std::map<unsigned int, std::pair<double,double>> analogueCalls;
-
-	std::vector<size_t> protoShape = r -> getShape();
-	TensorShape input_shape={{1, (int64_t) protoShape[0], (int64_t) protoShape[1]}, 3};
-
-	std::vector<float> unformattedTensor = r -> makeTensor();
-
-	size_t size = unformattedTensor.size();
-	assert(size > 0);
-
-	float *tmp_array = (float *)malloc(size*sizeof(float));
-	for(size_t i = 0; i < size; i++){
-		tmp_array[i] = unformattedTensor[i];
-	}
-
-	TF_Tensor* InputValues = TF_NewTensor(TF_FLOAT,
-		input_shape.values,
-		input_shape.dim,
-		(void *)tmp_array,
-		size*sizeof(float),
-		cpp_array_deallocator<float>,
-		nullptr);
-
-	TF_Tensor* OutputValues;
-
-	//Run the Session
-	CStatus status;
-	TF_SessionRun(*(session->session.get()), NULL, &session->inputs, &InputValues, NumInputs, &session->outputs, &OutputValues, NumOutputs, NULL, 0, NULL, status.ptr);
-
-	if(TF_GetCode(status.ptr) != TF_OK)
-	{
-		printf("%s",TF_Message(status.ptr));
-	}
-
-	if(TF_TensorType(OutputValues) != TF_FLOAT){
-		std::cerr << "Error, unexpected output tensor type." << std::endl;
-		exit (EXIT_FAILURE);
-	}
-
-	unsigned int outputFields = 3;
-
-	//get positions on the read reference to write the output
-	std::vector<unsigned int> positions = r -> getPositions();
-	std::vector<std::string> kmers = r -> getKmers();
-
-	size_t output_size = TF_TensorByteSize(OutputValues) / sizeof(float);
-	assert(output_size == protoShape[0] * outputFields);
-	float *output_array = (float *)TF_TensorData(OutputValues);
-
-	//write the output
-	unsigned int pos = 0;
-	unsigned int thisPosition = positions[0];
-	for(size_t i = 0; i < output_size; i++){
-		if((i+1)%outputFields==0){
-
-			//only output T positions
-			if (kmers[pos].substr(0,1) != "T"){
-				pos++;
-				continue;
-			}
-
-			analogueCalls[thisPosition] = std::make_pair(output_array[i],output_array[i-1]);
-			pos++;
-		}
-		else{
-			if (i != output_size-1) thisPosition = positions[pos];
-		}
-	}
-
-	TF_DeleteTensor(OutputValues);
-	TF_DeleteTensor(InputValues);
-
-	return analogueCalls;
 }
 
 
@@ -710,16 +630,31 @@ int detect_main( int argc, char** argv ){
 	//get the neural network model path
 	std::string pathExe = getExePath();
 	std::string modelPath = pathExe + Pore_Substrate_Config.fn_dnn_model;
-	std::string input_layer_name = Pore_Substrate_Config.dnn_model_inputLayer;
+	std::string input1_layer_name = Pore_Substrate_Config.dnn_model_inputLayer1;
+	std::string input2_layer_name = Pore_Substrate_Config.dnn_model_inputLayer2;
 
-	std::shared_ptr<ModelSession> session;
+	std::pair< std::shared_ptr<ModelSession>, std::shared_ptr<TF_Graph *> > modelPair;
 
 	if (not args.useGPU){
-		session = model_load_cpu(modelPath.c_str(), args.threads, input_layer_name.c_str());
+
+		modelPair = model_load_cpu_twoInputs(modelPath.c_str(), args.threads);
 	}
 	else{
-		session = model_load_gpu(modelPath.c_str(), args.GPUdevice, args.threads, input_layer_name.c_str());
+
+		modelPair = model_load_gpu_twoInputs(modelPath.c_str(), args.GPUdevice, args.threads);
 	}
+
+	std::shared_ptr<ModelSession> session = modelPair.first;
+	std::shared_ptr<TF_Graph *> Graph = modelPair.second;
+
+	auto input1_op = TF_GraphOperationByName(*(Graph.get()), input1_layer_name.c_str());
+	auto input2_op = TF_GraphOperationByName(*(Graph.get()), input2_layer_name.c_str());
+	if(!input1_op or !input2_op){
+		std::cout << "bad input name" << std::endl;
+		exit(0);
+	}
+
+	std::vector<TF_Output> inputOps = {{input1_op,0}, {input2_op,0}};
 
 	//import fasta reference
 	std::map< std::string, std::string > reference = import_reference_pfasta( args.referenceFilename );
@@ -728,7 +663,7 @@ int detect_main( int argc, char** argv ){
 	if ( not outFile.is_open() ) throw IOerror( args.outputFilename );
 
 	//write the outfile header
-	std::string outHeader = writeDetectHeader(args.bamFilename, args.referenceFilename, args.indexFilename, args.threads, false, args.minQ, args.minL, args.dilation, args.useGPU);
+	std::string outHeader = writeDetectHeader(args.bamFilename, args.referenceFilename, args.indexFilename, args.threads, false, args.minQ, args.minL, args.useGPU);
 	outFile << outHeader;
 
 	htsFile* bam_fh;
@@ -757,6 +692,8 @@ int detect_main( int argc, char** argv ){
 	//build an iterator for all reads in the bam file
 	const char *allReads = ".";
 	itr = sam_itr_querys(bam_idx,bam_hdr,allReads);
+
+	std::map<unsigned int, double> placeholder_analogueCalls;
 
 	int result;
 	int failedEvents = 0;
@@ -789,7 +726,7 @@ int detect_main( int argc, char** argv ){
 		/*if we've filled up the buffer with short reads, compute them in parallel */
 		if (buffer.size() >= maxBufferSize or (buffer.size() > 0 and result == -1 ) ){
 
-			#pragma omp parallel for schedule(dynamic) shared(buffer,Pore_Substrate_Config,args,prog,failed,session) num_threads(args.threads)
+			#pragma omp parallel for schedule(dynamic) shared(buffer,Pore_Substrate_Config,args,prog,failed,session,placeholder_analogueCalls,inputOps) num_threads(args.threads)
 			for (unsigned int i = 0; i < buffer.size(); i++){
 
 				read r;
@@ -832,16 +769,26 @@ int detect_main( int argc, char** argv ){
 					prog++;
 					continue;
 				}
+				
+				std::string readOut;
 
-				std::pair<bool,std::shared_ptr<AlignedRead>> ar = eventalign_detect( r, Pore_Substrate_Config.windowLength_align, args.dilation );
-
-				if (not ar.first){
-					failed++;
-					prog++;
-					continue;
+				if (args.useHMM){
+				
+					HMMdetection hmm_likelihood = llAcrossRead(r, 12);
+					readOut = hmm_likelihood.readLikelihoodStdout;
 				}
+				else{
+				
+					std::shared_ptr<AlignedRead> ar = eventalign( r, Pore_Substrate_Config.windowLength_align, placeholder_analogueCalls);
 
-				std::string readOut = runCNN(ar.second,session);
+					if (not ar -> QCpassed){
+						failed++;
+						prog++;
+						continue;
+					}
+
+					readOut = runCNN(ar,session,inputOps);
+				}
 
 				prog++;
 				pb.displayProgress( prog, failed, failedEvents );

@@ -45,6 +45,7 @@ struct Arguments {
 	int threads;
 	std::string eventalignFilename;
 	unsigned int maxReads;
+	bool capReads;
 	unsigned int maxEvents;
 	float pi;
 };
@@ -68,6 +69,7 @@ Arguments parseTrainingArguments( int argc, char** argv ){
 	//defaults - we'll override these if the option was specified by the user
 	trainArgs.threads = 1;
 	trainArgs.maxReads = 100000;
+	trainArgs.capReads = false;
 	trainArgs.maxEvents = 10000;
 	trainArgs.pi = 0.5;
 
@@ -92,6 +94,7 @@ Arguments parseTrainingArguments( int argc, char** argv ){
 
 			std::string strArg( argv[ i + 1 ] );
 			trainArgs.maxReads = std::stoi(strArg.c_str());
+			trainArgs.capReads = true;
 			i+=2;
 		}
 		else if ( flag == "-e" or flag == "--max-events" ){
@@ -385,7 +388,8 @@ int train_main( int argc, char** argv ){
 	char set1[] = {'A', 'T', 'G', 'C'};
 	unsigned int k = Pore_Substrate_Config.kmer_len;
 	std::vector<std::string> allKmers;
-	printAllKLength(set1, k, 4, allKmers); //PLP&SY: check with Mike
+	printAllKLength(set1, k, 4, allKmers);
+
 	std::map< int, std::string > intToKmer;
 	std::map< std::string, int > kmerToInt;
 	int index = 0;
@@ -400,22 +404,30 @@ int train_main( int argc, char** argv ){
 
 	//get a read count
 	unsigned int readCount = 0;
-	std::ifstream eventFile(trainArgs.eventalignFilename);
-	if ( not eventFile.is_open() ) throw IOerror( trainArgs.eventalignFilename );
-	while( std::getline( eventFile, line ) ){
 
-		if ( line.substr(0,1) == ">" ) readCount++;
-	}	
-	progressBar pb_read(std::min(readCount,trainArgs.maxReads),true);
-	eventFile.close();
+	if (not trainArgs.capReads){
+		std::ifstream readStream(trainArgs.eventalignFilename);	
+		if ( not readStream.is_open() ) throw IOerror( trainArgs.eventalignFilename );
+		while( std::getline( readStream, line ) ){
+			if ( line.substr(0,1) == ">" ) readCount++;
+		}
+		readStream.close();	
+	
+	}
+	else{
+		readCount = trainArgs.maxReads;
+	}
+	
+	progressBar pb_read(readCount,true);
 
 	unsigned int readsRead = 0;
- 	eventFile.open( trainArgs.eventalignFilename );
+	std::ifstream eventFile(trainArgs.eventalignFilename);	
 	if ( not eventFile.is_open() ) throw IOerror( trainArgs.eventalignFilename );
-	std::getline( eventFile, line);//throw away the header
 	while ( std::getline( eventFile, line) ){
-
+	
 		if (line.empty()) continue;
+
+		if ( line.substr(0,1) == "#" ) continue;
 
 		if ( line.substr(0,1) == ">" ){
 
@@ -426,12 +438,12 @@ int train_main( int argc, char** argv ){
 
 		std::istringstream ss( line );
 		std::string kmer, entry;
-		double eventMean = 0.0;
+		double eventMean;
 
 		int col = 0;
 		while ( std::getline( ss, entry, '\t' ) ){
 
-			if ( col == 4 ){
+			if ( col == 3 ){
 
 				kmer = entry;
 				break;
@@ -443,10 +455,7 @@ int train_main( int argc, char** argv ){
 			col++;
 		}
 
-		assert (eventMean != 0.0);
-
 		if ( importedEvents[kmer2index(kmer, k)].size() < trainArgs.maxEvents ){
-
 			importedEvents[kmer2index(kmer, k)].push_back( eventMean );
 		}
 		if (readsRead > trainArgs.maxReads) break;

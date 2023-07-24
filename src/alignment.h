@@ -22,8 +22,8 @@
 #include <utility>
 #include "config.h"
 
-#define NFEATURES 8
-
+#define NFEATURES 5
+#define RAWDEPTH 20
 
 class AlignedPosition{
 
@@ -32,8 +32,7 @@ class AlignedPosition{
 		bool forTraining = false;
 		std::string kmer;
 		unsigned int refPos;
-		std::vector<double> events;
-		std::vector<double> lengths;
+		std::vector<double> signal;
 		double eventAlignQuality;
 
 	public:
@@ -44,10 +43,9 @@ class AlignedPosition{
 			this -> eventAlignQuality = quality;
 		}
 		~AlignedPosition() {};
-		void addEvent(double ev, double len){
+		void addSignal(double s){
 
-			events.push_back(ev);
-			lengths.push_back(len);
+			signal.push_back(s);
 		}
 		std::string getKmer(void){
 
@@ -61,28 +59,47 @@ class AlignedPosition{
 			
 			return eventAlignQuality;
 		}
-		std::vector<float> makeFeature(void){
+		std::vector<float> makeSignalFeature(void){
 
-			assert(events.size() > 0 && events.size() == lengths.size());
+			assert(signal.size() > 0);
 			assert(kmer.substr(0,1) == "A" || kmer.substr(0,1) == "T" || kmer.substr(0,1) == "G" || kmer.substr(0,1) == "C");
 
+			std::vector<float> padded_signal;
 
+			for (size_t i = 0; i < signal.size(); i++){
+
+				padded_signal.push_back(signal[i]);
+
+				if (i == RAWDEPTH - 1) break;
+			}
+			
+			//zero padding if this position has few raw events - these will be masked by the neural network
+			if (signal.size() < RAWDEPTH){
+
+				for (size_t i = 0; i < RAWDEPTH - signal.size(); i++){
+
+					padded_signal.push_back(0.);
+				}
+			}
+
+			assert(padded_signal.size() == RAWDEPTH);
+			return padded_signal;
+		}
+		std::vector<float> makeSequenceFeature(void){
+
+			assert(signal.size() > 0);
+			assert(kmer.substr(0,1) == "A" || kmer.substr(0,1) == "T" || kmer.substr(0,1) == "G" || kmer.substr(0,1) == "C");
+			
 			//one-hot encode bases
 			std::vector<float> feature = {0., 0., 0., 0.};
 			if (kmer.substr(0,1) == "A") feature[0] = 1.;
 			else if (kmer.substr(0,1) == "T") feature[1] = 1.;
 			else if (kmer.substr(0,1) == "G") feature[2] = 1.;
 			else if (kmer.substr(0,1) == "C") feature[3] = 1.;
-			
+
+			//expected signal
 			std::pair<double,double> meanStd = Pore_Substrate_Config.pore_model[kmer2index(kmer, Pore_Substrate_Config.kmer_len)];
-			
-			//event means
-			double eventMean = vectorMean(events);
-			double lengthsSum = vectorSum(lengths);
-			feature.push_back(eventMean);
-			feature.push_back(lengthsSum);
 			feature.push_back(meanStd.first);
-			feature.push_back(meanStd.second);
 
 			return feature;
 		}
@@ -98,6 +115,9 @@ class AlignedRead{
 		std::vector<double> alignmentQualities;
 
 	public:
+		bool QCpassed;
+		std::string str_output;
+	
 		AlignedRead(std::string readID, std::string chromosome, std::string strand, unsigned int ml, unsigned int mu, unsigned int numEvents){
 
 			this -> readID = readID;
@@ -105,6 +125,7 @@ class AlignedRead{
 			this -> strand = strand;
 			this -> mappingLower = ml;
 			this -> mappingUpper = mu;
+			this -> QCpassed = false;
 		}
 		AlignedRead( const AlignedRead &ar ){
 
@@ -116,17 +137,17 @@ class AlignedRead{
 			this -> positions = ar.positions;
 		}
 		~AlignedRead(){}
-		void addEvent(std::string kmer, unsigned int refPos, double ev, double len, int quality){
+		void addSignal(std::string kmer, unsigned int refPos, double sig, int quality){
 
 			if (positions.count(refPos) == 0){
 
 				std::shared_ptr<AlignedPosition> ap( new AlignedPosition(kmer, refPos, quality));
-				ap -> addEvent(ev,len);
+				ap -> addSignal(sig);
 				positions[refPos] = ap;
 			}
 			else{
 
-				positions[refPos] -> addEvent(ev,len);
+				positions[refPos] -> addSignal(sig);
 			}
 		}
 		std::string getReadID(void){
@@ -144,7 +165,31 @@ class AlignedRead{
 		unsigned int getMappingUpper(void){
 			return mappingUpper;
 		}
-		std::vector<float> makeTensor(void){
+		std::vector<float> makeSignalTensor(void){
+
+			assert(strand == "fwd" || strand == "rev");
+			std::vector<float> tensor;
+			tensor.reserve(RAWDEPTH * positions.size());
+
+			if (strand == "fwd"){
+
+				for (auto p = positions.begin(); p != positions.end(); p++){
+
+					std::vector<float> feature = (p -> second) -> makeSignalFeature();
+					tensor.insert(tensor.end(), feature.begin(), feature.end());
+				}
+			}
+			else{
+
+				for (auto p = positions.rbegin(); p != positions.rend(); p++){
+
+					std::vector<float> feature = (p -> second) -> makeSignalFeature();
+					tensor.insert(tensor.end(), feature.begin(), feature.end());
+				}
+			}
+			return tensor;
+		}
+		std::vector<float> makeSequenceTensor(void){
 
 			assert(strand == "fwd" || strand == "rev");
 			std::vector<float> tensor;
@@ -154,7 +199,7 @@ class AlignedRead{
 
 				for (auto p = positions.begin(); p != positions.end(); p++){
 
-					std::vector<float> feature = (p -> second) -> makeFeature();
+					std::vector<float> feature = (p -> second) -> makeSequenceFeature();
 					tensor.insert(tensor.end(), feature.begin(), feature.end());
 				}
 			}
@@ -162,7 +207,7 @@ class AlignedRead{
 
 				for (auto p = positions.rbegin(); p != positions.rend(); p++){
 
-					std::vector<float> feature = (p -> second) -> makeFeature();
+					std::vector<float> feature = (p -> second) -> makeSequenceFeature();
 					tensor.insert(tensor.end(), feature.begin(), feature.end());
 				}
 			}
@@ -278,7 +323,11 @@ class AlignedRead{
 			}
 			return out;
 		}
-		std::vector<size_t> getShape(void){
+		std::vector<size_t> getSignalShape(void){
+
+			return {positions.size(), RAWDEPTH, 1};
+		}
+		std::vector<size_t> getSequenceShape(void){
 
 			return {positions.size(), NFEATURES};
 		}
@@ -287,7 +336,6 @@ class AlignedRead{
 
 /*function prototypes */
 int align_main( int argc, char** argv );
-std::pair<bool,std::shared_ptr<AlignedRead>> eventalign_detect( read &, unsigned int, double );
-std::string eventalign( read &, unsigned int , std::map<unsigned int, double> &);
+std::shared_ptr<AlignedRead> eventalign( read &, unsigned int , std::map<unsigned int, double> &);
 
 #endif

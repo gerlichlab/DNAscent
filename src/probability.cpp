@@ -146,3 +146,9 @@ double normalPDF( double mu, double sigma, double x ){
 
 	return ( 1.0/sqrt( 2.0*pow( sigma, 2.0 )*M_PI ) )*exp( -pow( x - mu , 2.0 )/( 2.0*pow( sigma, 2.0 ) ) );
 }
+
+
+double cauchyPDF( double loc, double scale, double x ){
+
+	return 1./( (scale*M_PI) * ( 1. + pow((x-loc)/scale, 2.) ) );
+}

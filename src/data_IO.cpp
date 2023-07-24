@@ -36,7 +36,6 @@ std::string writeDetectHeader(std::string alignmentFilename,
 				bool useHMM,
 				unsigned int quality,
 				unsigned int length,
-				double dilation,
 				bool useGPU){
 
 	std::string detMode = "CNN";
@@ -246,11 +245,11 @@ std::vector< std::pair< double, double > > import_poreModel( std::string poreMod
 			mean = line.substr( 0, line.find( delim ) );
 			line.erase( 0, line.find( delim ) + delim.length() );
 
-			std = line.substr( 0, line.find( delim ) );
+			std = line.substr( 0, line.find( "\n" ) );
 
 			/*key the map by the kmer, and convert the mean and std strings to doubles */
-			//kmer2MeanStd[ key ] = std::make_pair( atof( mean.c_str() ), atof( std.c_str() ) );
-			kmer2MeanStd[ key ] = std::make_pair( atof(mean.c_str()), 0.12 );			
+			kmer2MeanStd[ key ] = std::make_pair( atof( mean.c_str() ), atof( std.c_str() ) );
+			//kmer2MeanStd[ key ] = std::make_pair( atof(mean.c_str()), 0.24 );						
 		}
 	}
 

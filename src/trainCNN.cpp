@@ -308,12 +308,18 @@ int data_main( int argc, char** argv ){
 					continue;
 				}
 				
-				HMMdetection hmm_likelihood = llAcrossRead(r, 17);
-				std::string readOut = eventalign( r, windowLength_align, hmm_likelihood.refposToLikelihood);
+				HMMdetection hmm_likelihood = llAcrossRead(r, 12);
+				std::shared_ptr<AlignedRead> ar = eventalign( r, windowLength_align, hmm_likelihood.refposToLikelihood);
+
+				if (not ar -> QCpassed){
+					failed++;
+					prog++;
+					continue;
+				}
 
 				#pragma omp critical
 				{
-					outFile << readOut;
+					outFile << ar -> str_output;
 					prog++;
 					pb.displayProgress( prog, failed, failedEvents );
 				}
