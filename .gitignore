@@ -16,6 +16,7 @@ examples/
 #libraries
 hdf5-1.8.14/
 tensorflow/
+pod5-file-format/
 hdf5-1.8.14.tar.gz
 
 #generated

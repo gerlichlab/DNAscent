@@ -552,18 +552,14 @@ std::shared_ptr<AlignedRead> eventalign( read &r, unsigned int totalWindowLength
 
 	ar -> str_output += ">" + r.readID + " " + r.referenceMappedTo + " " + std::to_string(r.refStart) + " " + std::to_string(r.refEnd) + " " + strand + "\n";
 
-	//midpoint for bidirectional alignment
-	size_t midpoint = (r.referenceSeqMappedTo.size()) / 2;
-
 	unsigned int posOnRef = 0;
-	while ( posOnRef < midpoint ){
+	while ( posOnRef < r.referenceSeqMappedTo.size() ){
 
 		//adjust so we can get the last bit of the read if it doesn't line up with the windows nicely
-		unsigned int basesToEnd = midpoint - posOnRef ;
+		unsigned int basesToEnd = r.referenceSeqMappedTo.size() - posOnRef ;
 		unsigned int windowLength = std::min(basesToEnd, totalWindowLength);
 
 		//find good breakpoints
-		//bool found = false;
 		std::string break1, break2;
 		if (basesToEnd > 1.5*totalWindowLength){
 
@@ -589,8 +585,7 @@ std::shared_ptr<AlignedRead> eventalign( read &r, unsigned int totalWindowLength
 				double gap1 = std::abs(meanStd.first - meanStd_front.first);
 				double gap2 = std::abs(meanStd.first - meanStd_back.first);
 
-				if (gap1 > 20. and gap2 > 20.){
-					//found = true;
+				if (gap1 > 0.75 and gap2 > 0.75){
 					break1 = breakSnippet.substr(i-1,k);
 					break2 = breakSnippet.substr(i+1,k);
 					windowLength = i + k;
@@ -736,212 +731,8 @@ std::shared_ptr<AlignedRead> eventalign( read &r, unsigned int totalWindowLength
 		readHead += lastM_ev + 1;
 		posOnRef += lastM_ref + 1;
 	}
-
-	//TESTING - make sure nothing sketchy happens at the boundary
-	//ar -> str_output += "STARTREVERSE\n";
-
-
-	//REVERSE
-	posOnRef = r.referenceSeqMappedTo.size() - 1;
-	int rev_readHead = (r.eventAlignment).size() - 1;
-	std::vector<std::string> lines;
-	lines.reserve((r.referenceSeqMappedTo.size()) / 2);
-	while ( posOnRef > midpoint - k + 1 ){
-
-		//adjust so we can get the last bit of the read if it doesn't line up with the windows nicely
-		unsigned int basesToEnd = posOnRef - midpoint + k - 1;
-		unsigned int windowLength = std::min(basesToEnd, totalWindowLength);
-
-		//find good breakpoints
-		//bool found = false;
-		std::string break1, break2;
-		if (basesToEnd > 1.5*totalWindowLength){
-
-			std::string breakSnippet = (r.referenceSeqMappedTo).substr(posOnRef - 1.5*windowLength, 1.5*windowLength);
-
-			bool isDefined = referenceDefined(breakSnippet);
-			if (not isDefined){
-				posOnRef -= windowLength;
-				continue;
-			}
-
-			for (unsigned int i = 1.5*windowLength; i > windowLength; i--){
-
-				std::string kmer = (r.referenceSeqMappedTo).substr(posOnRef-i,k);
-				std::pair<double,double> meanStd = Pore_Substrate_Config.pore_model[kmer2index(kmer, k)];
-
-				std::string kmer_back = (r.referenceSeqMappedTo).substr(posOnRef-i+1,k);
-				std::pair<double,double> meanStd_back = Pore_Substrate_Config.pore_model[kmer2index(kmer_back, k)];
-
-				std::string kmer_front = (r.referenceSeqMappedTo).substr(posOnRef-i-1,k);
-				std::pair<double,double> meanStd_front = Pore_Substrate_Config.pore_model[kmer2index(kmer_front, k)];
-
-				double gap1 = std::abs(meanStd.first - meanStd_front.first);
-				double gap2 = std::abs(meanStd.first - meanStd_back.first);
-
-
-				if (gap1 > 20. and gap2 > 20.){
-					//found = true;
-					break1 = (r.referenceSeqMappedTo).substr(posOnRef-i-1,k);
-					break2 = (r.referenceSeqMappedTo).substr(posOnRef-i+1,k);
-					windowLength = i;
-					break;
-				}
-			}
-		}
-
-		std::string readSnippet = (r.referenceSeqMappedTo).substr(posOnRef - windowLength, windowLength);
-
-		std::reverse(readSnippet.begin(), readSnippet.end());
-
-		bool isDefined = referenceDefined(readSnippet);
-		if (not isDefined){
-
-			posOnRef -= windowLength;
-			continue;
-		}
-
-		std::vector< double > eventSnippet;
-		std::vector< unsigned int > eventIndices;
-
-		/*get the events that correspond to the read snippet */
-		//ar -> str_output += "readHead at start: " + std::to_string(readHead) + "\n";
-		bool firstMatch = true;
-		for ( unsigned int j = rev_readHead; j >= 0; j-- ){
-
-			//std::cout << (r.eventAlignment)[j].second << " " << j << " " << (r.refToQuery)[posOnRef] << " " << rev_readHead << std::endl;
-
-			/*if an event has been aligned to a position in the window, add it */
-			if ( (r.eventAlignment)[j].second > (r.refToQuery)[posOnRef - windowLength] and (r.eventAlignment)[j].second <= (r.refToQuery)[posOnRef - k + 1] ){
-
-				if (firstMatch){
-					rev_readHead = j;
-					firstMatch = false;
-				}
-
-				double ev = (r.normalisedEvents)[(r.eventAlignment)[j].first];
-				if (ev > 0. and ev < 250.0){
-					eventSnippet.push_back( ev );
-					eventIndices.push_back( (r.eventAlignment)[j].first );
-				}
-			}
-
-			/*stop once we get to the end of the window */
-			if ( (r.eventAlignment)[j].second < (r.refToQuery)[posOnRef - windowLength] ) break;
-		}
-		
-		//flag large insertions
-		int querySpan = (r.refToQuery)[posOnRef - k + 1] - (r.refToQuery)[posOnRef - windowLength];
-		assert(querySpan >= 0);
-		int referenceSpan = windowLength - k + 1;
-		int indelScore = querySpan - referenceSpan;		
-
-		//pass on this window if we have a deletion
-		if ( eventSnippet.size() < 2){
-
-			posOnRef -= windowLength;
-			continue;
-		}
-
-		//calculate where we are on the assembly - if we're a reverse complement, we're moving backwards down the reference genome
-		int globalPosOnRef;
-		if ( r.isReverse ) globalPosOnRef = r.refEnd - posOnRef;
-		else globalPosOnRef = r.refStart + posOnRef - k;
-
-		std::pair< double, std::vector<std::string> > builtinAlignment = builtinViterbi( eventSnippet, readSnippet, r.scalings, true);
-
-		std::vector< std::string > stateLabels = builtinAlignment.second;
-		size_t lastM_ev = 0;
-		size_t lastM_ref = 0;
-
-		size_t evIdx = 0;
-
-		//grab the index of the last match so we don't print insertions where we shouldn't
-		for (size_t i = 0; i < stateLabels.size(); i++){
-
-			std::string label = stateLabels[i].substr(stateLabels[i].find('_')+1);
-			int pos = std::stoi(stateLabels[i].substr(0,stateLabels[i].find('_')));
-
-			if (label == "M"){
-				lastM_ev = evIdx;
-				lastM_ref = pos;
-			}
-
-			if (label != "D") evIdx++; //silent states don't emit an event
-		}
-
-		//do a second pass to print the alignment
-		evIdx = 0;
-		for (size_t i = 0; i < stateLabels.size(); i++){
-
-			std::string label = stateLabels[i].substr(stateLabels[i].find('_')+1);
-			int pos = std::stoi(stateLabels[i].substr(0,stateLabels[i].find('_')));
-
-			if (label == "D") continue; //silent states don't emit an event
-
-			std::string kmerStrand = (r.referenceSeqMappedTo).substr(posOnRef - pos - k, k);
-
-			double scaledEvent = (eventSnippet[evIdx] - r.scalings.shift) / r.scalings.scale;
-
-			unsigned int evPos;
-			std::string kmerRef;
-			if (r.isReverse){
-				evPos = globalPosOnRef + pos + k - 1;
-				kmerRef = reverseComplement(kmerStrand);
-			}
-			else{
-				evPos = globalPosOnRef - pos;
-				kmerRef = kmerStrand;
-			}
-
-			if (label == "M"){
-				std::pair<double,double> meanStd = Pore_Substrate_Config.pore_model[kmer2index(kmerStrand, k)];
-				std::string matchLine;
-				if (analogueCalls.count(evPos) > 0){
-					matchLine += std::to_string(evPos) 
-						  + "\t" + kmerRef 
-						  + "\t" + std::to_string(scaledEvent) 
-						  + "\t" + kmerStrand 
-						  + "\t" + std::to_string(meanStd.first) 
-						  + "\t" + std::to_string(analogueCalls.at(evPos)) 
-						  + "\n";
-				}
-				else{
-					matchLine += std::to_string(evPos) 
-						  + "\t" + kmerRef 
-						  + "\t" + std::to_string(scaledEvent) 
-						  + "\t" + kmerStrand 
-						  + "\t" + std::to_string(meanStd.first) 
-						  + "\n";
-					ar -> addSignal(kmerStrand, evPos, scaledEvent, indelScore);
-				}
-				lines.push_back(matchLine);				
-			}
-			else if (label == "I" and evIdx < lastM_ev){ //don't print insertions after the last match because we're going to align these in the next segment
-				lines.push_back(std::to_string(evPos) + "\t" + kmerRef + "\t" + std::to_string(scaledEvent)  + "\t" + std::string(k, 'N') + "\t" + "0" + "\n");
-			}
-
-			evIdx ++;
-		}
-
-		//TESTING - make sure nothing sketchy happens at the breakpoint
-		//if (not found) lines.push_back("BREAKPOINT\n");
-		//else lines.push_back("BREAKPOINT PRIME " + break1 + " " + break2 + "\n");
-
-		//go again starting at posOnRef + lastM_ref using events starting at readHead + lastM_ev
-		rev_readHead -= lastM_ev + 1;
-		posOnRef -= lastM_ref + 1;
-	}
-
-	std::reverse(lines.begin(), lines.end());
-	for (size_t i = 0; i < lines.size(); i++){
-		ar -> str_output += lines[i];
-	}
 	
-	//the two alignments should meet in the middle - pass the read if they do
-	if (abs(readHead - rev_readHead) <= k){
-		ar -> QCpassed = true;
-	}
+	ar -> QCpassed = true;
 
 	return ar;
 }
@@ -991,7 +782,6 @@ int align_main( int argc, char** argv ){
 	const char *allReads = ".";
 	itr = sam_itr_querys(bam_idx,bam_hdr,allReads);
 
-	unsigned int windowLength = 50;
 	std::map<unsigned int, double> placeholder_analogueCalls;
 	int result;
 	int failedEvents = 0;
@@ -1022,7 +812,7 @@ int align_main( int argc, char** argv ){
 		/*if we've filled up the buffer with short reads, compute them in parallel */
 		if (buffer.size() >= maxBufferSize or (buffer.size() > 0 and result == -1 ) ){
 
-			#pragma omp parallel for schedule(dynamic) shared(buffer,windowLength,Pore_Substrate_Config,args,prog,failed,placeholder_analogueCalls) num_threads(args.threads)
+			#pragma omp parallel for schedule(dynamic) shared(buffer,Pore_Substrate_Config,args,prog,failed,placeholder_analogueCalls) num_threads(args.threads)
 			for (unsigned int i = 0; i < buffer.size(); i++){
 
 				read r;
@@ -1067,7 +857,7 @@ int align_main( int argc, char** argv ){
 					continue;
 				}
 
-				std::shared_ptr<AlignedRead> ar = eventalign( r, windowLength, placeholder_analogueCalls);
+				std::shared_ptr<AlignedRead> ar = eventalign( r, Pore_Substrate_Config.windowLength_align, placeholder_analogueCalls);
 
 				if (not ar -> QCpassed){
 					failed++;
