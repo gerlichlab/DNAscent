@@ -264,7 +264,7 @@ std::pair< double, std::vector< std::string > > builtinViterbi( std::vector <dou
 		level_mu = meanStd.first;
 		level_sigma = meanStd.second;
 
-		//matchProb = eln( normalPDF( level_mu, level_sigma, (observations[t] - scalings.shift)/scalings.scale ) );
+		//matchProb = eln( normalPDF( level_mu, 0.24, (observations[t] - scalings.shift)/scalings.scale ) );
 		matchProb = eln( cauchyPDF( level_mu, level_sigma, (observations[t] - scalings.shift)/scalings.scale ) );
 		insProb = 0.0; //log(1) = 0; set probability equal to 1 and use transition probability as weighting
 
@@ -338,7 +338,7 @@ std::pair< double, std::vector< std::string > > builtinViterbi( std::vector <dou
 			level_mu = meanStd.first;
 			level_sigma = meanStd.second;
 
-			//matchProb = eln( normalPDF( level_mu, level_sigma, (observations[t] - scalings.shift)/scalings.scale ) );
+			//matchProb = eln( normalPDF( level_mu, 0.24, (observations[t] - scalings.shift)/scalings.scale ) );
 			matchProb = eln( cauchyPDF( level_mu, level_sigma, (observations[t] - scalings.shift)/scalings.scale ) );
 			
 			//to the insertion

@@ -772,12 +772,12 @@ int detect_main( int argc, char** argv ){
 				
 				std::string readOut;
 
-				if (args.useHMM){
+				//if (args.useHMM){
 				
-					HMMdetection hmm_likelihood = llAcrossRead(r, 12);
-					readOut = hmm_likelihood.readLikelihoodStdout;
-				}
-				else{
+				//	HMMdetection hmm_likelihood = llAcrossRead(r, 12);
+				//	readOut = hmm_likelihood.readLikelihoodStdout;
+				//}
+				//else{
 				
 					std::shared_ptr<AlignedRead> ar = eventalign( r, Pore_Substrate_Config.windowLength_align, placeholder_analogueCalls);
 
@@ -788,7 +788,7 @@ int detect_main( int argc, char** argv ){
 					}
 
 					readOut = runCNN(ar,session,inputOps);
-				}
+				//}
 
 				prog++;
 				pb.displayProgress( prog, failed, failedEvents );

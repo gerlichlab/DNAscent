@@ -113,10 +113,14 @@ inline float logProbabilityMatch(unsigned int kmerIndex, double x, double shift,
 	//scale the signal to the pore model
 	x = (x - shift)/scale;
 
+	//cauchy distribution
 	float a = (x - mu) / sigma;	
-	double thymProb = -eln(M_PI * sigma) - eln(1 + a * a); //Cauchy PDF
+	double thymProb = -eln(M_PI * sigma) - eln(1 + a * a);
+	
+	//normal distribution
+	//float a = (x - mu) / 0.24;	
 	//static const float log_inv_sqrt_2pi = log(0.3989422804014327);
-	//double thymProb = log_inv_sqrt_2pi - eln(sigma) + (-0.5f * a * a);
+	//double thymProb = log_inv_sqrt_2pi - eln(0.24) + (-0.5f * a * a);
 	return thymProb;
 }	
 
@@ -277,7 +281,7 @@ void adaptive_banded_simple_event_align( std::vector< double > &raw, read &r, Po
 			float left = is_offset_valid(offset_left) ? bands[band_idx - 1][offset_left] : -INFINITY;
 			float diag = is_offset_valid(offset_diag) ? bands[band_idx - 2][offset_diag] : -INFINITY;
  
-			float lp_emission = logProbabilityMatch(kmer_rank, raw[event_idx],s.shift,s.scale);
+			float lp_emission = logProbabilityMatch(kmer_rank, raw[event_idx], s.shift, s.scale);
 
 			float score_d = diag + lp_step + lp_emission;
 			float score_u = up + lp_stay + lp_emission;
@@ -390,6 +394,7 @@ void adaptive_banded_simple_event_align( std::vector< double > &raw, read &r, Po
     	//std::cout << avg_log_emission << "\t" << spanned << "\t" << max_gap << std::endl;
     
 	r.alignmentQCs.recordQCs(avg_log_emission, spanned, max_gap);
+	//std::cerr << r.readID << " " << avg_log_emission << std::endl;
 	if(avg_log_emission < min_average_log_emission || !spanned || max_gap > max_gap_threshold ) r.eventAlignment.clear();
 
 	r.scalings = s;
