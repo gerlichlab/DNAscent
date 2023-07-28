@@ -604,11 +604,13 @@ std::shared_ptr<AlignedRead> eventalign( read &r, unsigned int totalWindowLength
 		}
 
 		std::vector< double > eventSnippet;
-		std::vector< unsigned int > eventIndices;
 
 		/*get the events that correspond to the read snippet */
 		//ar -> str_output += "readHead at start: " + std::to_string(readHead) + "\n";
 		bool firstMatch = true;
+		std::map<int,int> rawIdx2eventIdx;
+		int eventIdx = 0;
+		int rawIdx = 0;
 		for ( unsigned int j = readHead; j < (r.eventAlignment).size(); j++ ){
 
 			/*if an event has been aligned to a position in the window, add it */
@@ -619,12 +621,15 @@ std::shared_ptr<AlignedRead> eventalign( read &r, unsigned int totalWindowLength
 					firstMatch = false;
 				}
 
-				double ev = (r.normalisedEvents)[(r.eventAlignment)[j].first];
-
-				if (ev > 0. and ev < 250.0){
-					eventSnippet.push_back( ev );
-					eventIndices.push_back( (r.eventAlignment)[j].first );
+				std::vector<double> raw = (r.events)[(r.eventAlignment)[j].first].raw;
+							
+				for (unsigned int k = 0; k < raw.size(); k++){
+				
+					eventSnippet.push_back(raw[k]);
+					rawIdx2eventIdx[rawIdx] = eventIdx;
+					rawIdx++;
 				}
+				eventIdx++;
 			}
 
 			/*stop once we get to the end of the window */
@@ -728,7 +733,7 @@ std::shared_ptr<AlignedRead> eventalign( read &r, unsigned int totalWindowLength
 		//else ar.str_output += "BREAKPOINT PRIME " + break1 + " " + break2 + "\n";
 
 		//go again starting at posOnRef + lastM_ref using events starting at readHead + lastM_ev
-		readHead += lastM_ev + 1;
+		readHead += rawIdx2eventIdx[lastM_ev] + 1;
 		posOnRef += lastM_ref + 1;
 	}
 	

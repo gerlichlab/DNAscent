@@ -44,11 +44,20 @@ class EventAlignment{
 		}
 };
 
+
+struct event {
+
+	double mean;
+	std::vector< double > raw;
+};
+
+
 struct read{
 
 	std::string basecall, referenceSeqMappedTo, referenceMappedTo, filename, readID;
 	PoreParameters scalings;
-	std::vector< double > raw, normalisedEvents, eventLengths;
+	std::vector< event > events;
+	std::vector< double> raw;
 	std::map< unsigned int, unsigned int > refToQuery;
 	std::vector< std::pair< unsigned int, unsigned int > > eventAlignment;
 	std::map< unsigned int, std::pair< unsigned int, unsigned int >> eventIdx2rawIdx;

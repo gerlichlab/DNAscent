@@ -394,10 +394,12 @@ HMMdetection llAcrossRead( read &r, unsigned int windowLength){
 						first = false;
 						//std::cout << "READHEAD:" << j << " " << readHead << std::endl;
 					}
-
-					double ev = (r.normalisedEvents)[(r.eventAlignment)[j].first];
+					
+					double ev = (r.events)[(r.eventAlignment)[j].first].mean;
+					std::vector<double> raw = (r.events)[(r.eventAlignment)[j].first].raw;
+					
 					if (ev > 0. and ev < 250.0){
-						eventSnippet.push_back( ev );
+						eventSnippet.insert(eventSnippet.end(), raw.begin(), raw.end());
 					}
 				}
 
@@ -420,10 +422,12 @@ HMMdetection llAcrossRead( read &r, unsigned int windowLength){
 						first = false;
 						//std::cout << "READHEAD:" << j << " " << readHead << std::endl;
 					}
-
-					double ev = (r.normalisedEvents)[(r.eventAlignment)[j].first];
+					
+					double ev = (r.events)[(r.eventAlignment)[j].first].mean;
+					std::vector<double> raw = (r.events)[(r.eventAlignment)[j].first].raw;
+					
 					if (ev > 0. and ev < 250.0){
-						eventSnippet.push_back( ev );
+						eventSnippet.insert(eventSnippet.end(), raw.begin(), raw.end());
 					}
 				}
 

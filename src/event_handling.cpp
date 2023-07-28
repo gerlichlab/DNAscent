@@ -184,14 +184,14 @@ void pod5_getSignal( read &r ){
 //start: adapted from nanopolish (https://github.com/jts/nanopolish)
 //licensed under MIT
 
-inline float logProbabilityMatch(unsigned int kmerIndex, double x, double shift, double scale){
+inline float logProbabilityMatch(unsigned int kmerIndex, event e, double shift, double scale){
 
 	std::pair<double,double> meanStd = Pore_Substrate_Config.pore_model[kmerIndex]; 
 	double mu = meanStd.first;
 	double sigma = meanStd.second;
 	
 	//scale the signal to the pore model
-	x = (x - shift)/scale;
+	double x = (e.mean - shift)/scale;
 
 	//cauchy distribution
 	float a = (x - mu) / sigma;	
@@ -213,17 +213,15 @@ inline float logProbabilityMatch(unsigned int kmerIndex, double x, double shift,
 #define move_down(curr_band) { curr_band.event_idx + 1, curr_band.kmer_idx }
 #define move_right(curr_band) { curr_band.event_idx, curr_band.kmer_idx + 1 }
 
-void adaptive_banded_simple_event_align( std::vector< double > &raw, read &r, PoreParameters &s, std::vector<unsigned int> &kmer_ranks ){
+void adaptive_banded_simple_event_align( read &r, PoreParameters &s, std::vector<unsigned int> &kmer_ranks ){
 
 	//benchmarking
 	//std::chrono::steady_clock::time_point tp1 = std::chrono::steady_clock::now();
 
 	std::string sequence = r.basecall;
 
-	PoreParameters rescale;
-
 	size_t k = Pore_Substrate_Config.kmer_len;
-	size_t n_events = raw.size();
+	size_t n_events = r.events.size();
 	size_t n_kmers = sequence.size() - k + 1;
 
 	// backtrack markers
@@ -361,7 +359,7 @@ void adaptive_banded_simple_event_align( std::vector< double > &raw, read &r, Po
 			float left = is_offset_valid(offset_left) ? bands[band_idx - 1][offset_left] : -INFINITY;
 			float diag = is_offset_valid(offset_diag) ? bands[band_idx - 2][offset_diag] : -INFINITY;
  
-			float lp_emission = logProbabilityMatch(kmer_rank, raw[event_idx], s.shift, s.scale);
+			float lp_emission = logProbabilityMatch(kmer_rank, r.events[event_idx], s.shift, s.scale);
 
 			float score_d = diag + lp_step + lp_emission;
 			float score_u = up + lp_stay + lp_emission;
@@ -389,7 +387,6 @@ void adaptive_banded_simple_event_align( std::vector< double > &raw, read &r, Po
 	// Backtrack to compute alignment
 	//
 	double sum_emission = 0.;
-	double eventDiffs = 0.0;
 	double n_aligned_events = 0;
     
 	float max_score = -INFINITY;
@@ -415,7 +412,7 @@ void adaptive_banded_simple_event_align( std::vector< double > &raw, read &r, Po
 	//std::chrono::steady_clock::time_point tp3 = std::chrono::steady_clock::now();
 	//std::cout << "calculate end index: " << std::chrono::duration_cast<std::chrono::microseconds>(tp3 - tp2).count() << std::endl;
 
-	r.eventAlignment.reserve(raw.size());
+	r.eventAlignment.reserve(r.events.size());
 
 	int curr_gap = 0;
 	int max_gap = 0;
@@ -429,9 +426,8 @@ void adaptive_banded_simple_event_align( std::vector< double > &raw, read &r, Po
 		// qc stats
 		unsigned int kmer_rank = kmer_ranks[curr_kmer_idx];
 		std::pair<double,double> meanStd = Pore_Substrate_Config.pore_model[kmer_rank];
-		float logProbability = logProbabilityMatch(kmer_rank, raw[curr_event_idx], s.shift, s.scale);
+		float logProbability = logProbabilityMatch(kmer_rank, r.events[curr_event_idx], s.shift, s.scale);
 		sum_emission += logProbability;
-		eventDiffs += meanStd.first - raw[curr_event_idx];
 
 		n_aligned_events += 1;
 		
@@ -474,7 +470,7 @@ void adaptive_banded_simple_event_align( std::vector< double > &raw, read &r, Po
     	//std::cout << avg_log_emission << "\t" << spanned << "\t" << max_gap << std::endl;
     
 	r.alignmentQCs.recordQCs(avg_log_emission, spanned, max_gap);
-	//std::cerr << r.readID << " " << avg_log_emission << std::endl;
+	//std::cerr << r.readID << " " << avg_log_emission << " " << max_gap << std::endl;
 	if(avg_log_emission < min_average_log_emission || !spanned || max_gap > max_gap_threshold ) r.eventAlignment.clear();
 
 	r.scalings = s;
@@ -581,8 +577,46 @@ void normaliseEvents( read &r ){
 
 		return;
 	}
+	
+	
+	event_table et = detect_events(&(r.raw)[0], (r.raw).size(), event_detection_defaults);
+	assert(et.n > 0);
+	
+	r.events.reserve(et.n);
+	unsigned int rawStart = 0;
+	double mean = 0.;
+	for ( unsigned int i = 0; i < et.n; i++ ){
 
-	r.normalisedEvents = r.raw;
+		if (et.event[i].mean > 0.) {
+
+			if (i > 0){
+			
+				//TESTING
+				/*
+				std::cout << mean << std::endl;
+				for (unsigned int j = rawStart; j <= et.event[i].start-1; j++){
+				
+					std::cout << "\t" << r.raw[j] << std::endl;
+				}
+				*/
+				
+				
+				//build the previous event
+				event e;
+				e.mean = mean;
+				for (unsigned int j = rawStart; j <= et.event[i].start-1; j++){
+				
+					e.raw.push_back(r.raw[j]);
+				}
+				r.events.push_back(e);				
+				
+				//save stats for the next event
+				mean = et.event[i].mean;
+				rawStart = et.event[i].start;
+			}
+		}
+	}
+	
 	
 	// Precompute k-mer ranks for rescaling and banded alignment - query sequence
 	size_t k = Pore_Substrate_Config.kmer_len;
@@ -601,11 +635,11 @@ void normaliseEvents( read &r ){
 		kmer_ranks_ref[i] = kmer2index(kmer, k);
 	}
 	
-	//normalise by the reference sequence
-	PoreParameters s = estimateScaling_quantiles( r.normalisedEvents, r.referenceSeqMappedTo, kmer_ranks_ref );
+	//normalise by quantile scaling by comparing the raw signal against the reference sequence
+	PoreParameters s = estimateScaling_quantiles( r.raw, r.referenceSeqMappedTo, kmer_ranks_ref );
 	
 	// Rough alignment of signals to query sequence
-	adaptive_banded_simple_event_align(r.normalisedEvents, r, s, kmer_ranks_query);
+	adaptive_banded_simple_event_align(r, s, kmer_ranks_query);
 	
-	r.scalings.eventsPerBase = std::max(1.25, (double) r.eventAlignment.size() / (double) (r.basecall.size() - k));
+	r.scalings.eventsPerBase = (double) r.raw.size() / (double) (r.basecall.size() - k);
 }
