@@ -19,10 +19,11 @@
 #include <chrono>
 #include "config.h"
 
-//extern "C" {
 #include "scrappie/event_detection.h"
 #include "scrappie/scrappie_common.h"
-//}
+
+// #include "../pod5-file-format/c++/pod5_format/c_api.h"
+
 
 #define _USE_MATH_DEFINES
 
@@ -52,19 +53,19 @@ float fast5_read_float_attribute(hid_t group, const char *attribute) {
 //end scrappie
 
 
-void bulk_getEvents( std::string fast5Filename, std::string readID, std::vector<double> &raw, float &sample_rate ){
+void fast5_getSignal( read &r ){
 
 	//open the file
-	hid_t hdf5_file = H5Fopen(fast5Filename.c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
-	if (hdf5_file < 0) throw IOerror(fast5Filename.c_str());
+	hid_t hdf5_file = H5Fopen(r.filename.c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
+	if (hdf5_file < 0) throw IOerror(r.filename.c_str());
 
 	//get the channel parameters
-	std::string scaling_path = "/read_" + readID + "/channel_id";
+	std::string scaling_path = "/read_" + r.readID + "/channel_id";
 	hid_t scaling_group = H5Gopen(hdf5_file, scaling_path.c_str(), H5P_DEFAULT);
 	float digitisation = fast5_read_float_attribute(scaling_group, "digitisation");
 	float offset = fast5_read_float_attribute(scaling_group, "offset");
 	float range = fast5_read_float_attribute(scaling_group, "range");
-	sample_rate = fast5_read_float_attribute(scaling_group, "sampling_rate");
+	//float sample_rate = fast5_read_float_attribute(scaling_group, "sampling_rate");
 	H5Gclose(scaling_group);
 
 	//get the raw signal
@@ -73,7 +74,7 @@ void bulk_getEvents( std::string fast5Filename, std::string readID, std::vector<
 	float raw_unit;
 	float *rawptr = NULL;
 
-	std::string signal_path = "/read_" + readID + "/Raw/Signal";
+	std::string signal_path = "/read_" + r.readID + "/Raw/Signal";
 	hid_t dset = H5Dopen(hdf5_file, signal_path.c_str(), H5P_DEFAULT);
 	if (dset < 0 ) throw BadFast5Field(); 
 	space = H5Dget_space(dset);
@@ -90,15 +91,94 @@ void bulk_getEvents( std::string fast5Filename, std::string readID, std::vector<
 	H5Dclose(dset);
 	
 	raw_unit = range / digitisation;
-	raw.reserve(nsample);
+	r.raw.reserve(nsample);
 	for ( size_t i = 0; i < nsample; i++ ){
 
-		raw.push_back( (rawptr[i] + offset) * raw_unit );
+		r.raw.push_back( (rawptr[i] + offset) * raw_unit );
 	}
 
 	free(rawptr);
 	H5Fclose(hdf5_file);
 }
+
+/*
+void pod5_getSignal( read &r ){
+
+	Pod5FileReader_t *pod5_file = pod5_open_file(r.filename.c_str());
+	if (pod5_file < 0) throw IOerror(r.filename.c_str());
+
+	size_t batch_count = 0;
+	if (pod5_get_read_batch_count(&batch_count, pod5_file) != POD5_OK) {
+		std::cerr << "Failed to query batch count: " << pod5_get_error_string() << "\n";
+		return EXIT_FAILURE;
+	}
+	
+	size_t read_count = 0;
+
+	for (std::size_t batch_index = 0; batch_index < batch_count; ++batch_index) {
+		std::cout << "batch_index: " << batch_index + 1 << "/" << batch_count << "\n";
+
+		Pod5ReadRecordBatch_t * batch = nullptr;
+		if (pod5_get_read_batch(&batch, file, batch_index) != POD5_OK) {
+			std::cerr << "Failed to get batch: " << pod5_get_error_string() << "\n";
+			return EXIT_FAILURE;
+		}
+
+		std::size_t batch_row_count = 0;
+		if (pod5_get_read_batch_row_count(&batch_row_count, batch) != POD5_OK) {
+			std::cerr << "Failed to get batch row count\n";
+			return EXIT_FAILURE;
+		}
+
+		for (std::size_t row = 0; row < batch_row_count; ++row) {
+			uint16_t read_table_version = 0;
+			ReadBatchRowInfo_t read_data;
+			if (pod5_get_read_batch_row_info_data(
+				batch, row, READ_BATCH_ROW_INFO_VERSION, &read_data, &read_table_version)
+				!= POD5_OK)
+			{
+				std::cerr << "Failed to get read " << row << "\n";
+				return EXIT_FAILURE;
+			}
+
+			read_count += 1;
+
+			std::size_t sample_count = 0;
+			pod5_get_read_complete_sample_count(file, batch, row, &sample_count);
+
+			std::vector<std::int16_t> samples;
+			samples.resize(sample_count);
+			pod5_get_read_complete_signal(file, batch, row, samples.size(), samples.data());
+
+			// Run info
+			RunInfoDictData_t * run_info = nullptr;
+			if (pod5_get_run_info(batch, read_data.run_info, &run_info) != POD5_OK) {
+				throw std::runtime_error(
+					"Failed to get run info " + std::to_string(read_data.run_info) + " : "
+					+ pod5_get_error_string());
+			}
+
+			pod5_free_run_info(run_info);
+		}
+
+		if (pod5_free_read_batch(batch) != POD5_OK) {
+			std::cerr << "Failed to release batch\n";
+			return EXIT_FAILURE;
+		}
+	}
+
+	std::cout << "Extracted " << read_count << " reads " << "\n";
+
+	// Close the reader
+	if (pod5_close_and_free_reader(file) != POD5_OK) {
+		std::cerr << "Failed to close reader: " << pod5_get_error_string() << "\n";
+		return EXIT_FAILURE;
+	}
+
+	// Cleanup the library
+	pod5_terminate();
+}
+*/
 
 
 //start: adapted from nanopolish (https://github.com/jts/nanopolish)
@@ -493,10 +573,9 @@ PoreParameters estimateScaling_quantiles(std::vector< double > &signal_means, st
 
 void normaliseEvents( read &r ){
 
-	float sample_rate;
 	try{
 
-		bulk_getEvents(r.filename, r.readID, r.raw, sample_rate);
+		fast5_getSignal(r);
 	}
 	catch ( BadFast5Field &bf5 ){
 

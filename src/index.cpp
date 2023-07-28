@@ -31,8 +31,8 @@
 "Please submit bug reports to GitHub Issues (https://github.com/MBoemo/DNAscent/issues).";
 
  struct Arguments {
-	std::string fast5path;
-	std::string ssPath;
+	std::string sigfilesPath;
+	std::string seqssumPath;
 	std::string outfile;
 	bool GridION = false;
 };
@@ -62,13 +62,13 @@ Arguments parseIndexArguments( int argc, char** argv ){
  			std::string strArg( argv[ i + 1 ] );
 			char trailing = strArg.back();
 			if (trailing == '/') strArg.pop_back();
-			args.fast5path = strArg;
+			args.sigfilesPath = strArg;
 			i+=2;
 		}
 		else if ( flag == "-s" or flag == "--sequencing-summary" ){
 
 			std::string strArg( argv[ i + 1 ] );
-			args.ssPath = strArg;
+			args.seqssumPath = strArg;
 			i+=2;
 		}
 		else if ( flag == "-o" or flag == "--output" ){
@@ -88,41 +88,6 @@ Arguments parseIndexArguments( int argc, char** argv ){
 }
 
 
-void countFast5(std::string path, int &count){
-
-	tinydir_dir dir;
-	unsigned int i;
-	if (tinydir_open_sorted(&dir, path.c_str()) == -1){
-		std::string error = "Error opening directory: "+path;
-		perror(error.c_str());
-		goto fail;
-	}
-
-	for (i = 0; i < dir.n_files; i++){
-
-		tinydir_file file;
-		if (tinydir_readfile_n(&dir, &file, i) == -1){
-			std::string error = "Error opening file in: "+path;
-			perror(error.c_str());
-			goto fail;
-		}
-
-		if (file.is_dir){
-
-			if (strcmp(file.name,".") != 0 and strcmp(file.name,"..") != 0){
-
-				std::string newPath = path + "/" + file.name;
-				countFast5(newPath, count);
-			}
-		}
-		else count++;
-	}
-
-	fail:
-	tinydir_close(&dir);
-}
-
-
 const char *get_ext(const char *filename){
 
 	const char *ext = strrchr(filename, '.');
@@ -131,7 +96,46 @@ const char *get_ext(const char *filename){
 }
 
 
-void readDirectory(std::string path, std::map<std::string,std::string> &allfast5paths){
+void countSignalFiles(std::string path, int &count){
+
+	tinydir_dir dir;
+	unsigned int i;
+	if (tinydir_open_sorted(&dir, path.c_str()) == -1){
+		std::string error = "Error opening directory: "+path;
+		perror(error.c_str());
+		goto fail;
+	}
+
+	for (i = 0; i < dir.n_files; i++){
+
+		tinydir_file file;
+		if (tinydir_readfile_n(&dir, &file, i) == -1){
+			std::string error = "Error opening file in: "+path;
+			perror(error.c_str());
+			goto fail;
+		}
+
+		if (file.is_dir){
+
+			if (strcmp(file.name,".") != 0 and strcmp(file.name,"..") != 0){
+
+				std::string newPath = path + "/" + file.name;
+				countSignalFiles(newPath, count);
+			}
+		}
+		else{
+		
+			const char *ext = get_ext(file.name);
+			if ( strcmp(ext,"fast5") == 0 or strcmp(ext,"pod5") == 0 ) count++;
+		}
+	}
+
+	fail:
+	tinydir_close(&dir);
+}
+
+
+void readDirectory(std::string path, std::map<std::string,std::string> &sigfile2fullpath){
 
 	tinydir_dir dir;
 	unsigned int i;
@@ -158,17 +162,17 @@ void readDirectory(std::string path, std::map<std::string,std::string> &allfast5
 				if (trail == '/') path.pop_back();
 
 				std::string newPath = path + "/" + file.name;
-				readDirectory(newPath, allfast5paths);
+				readDirectory(newPath, sigfile2fullpath);
 			}
 		}
 		else{
 			const char *ext = get_ext(file.name);
-			if ( strcmp(ext,"fast5") == 0 ){
+			if ( strcmp(ext,"fast5") == 0 or strcmp(ext,"pod5") == 0 ){
 
 				char &trail = path.back();
 				if (trail == '/') path.pop_back();
 
-				allfast5paths[file.name] = path + "/" + file.name;
+				sigfile2fullpath[file.name] = path + "/" + file.name;
 			}
 		}
 	}
@@ -265,30 +269,30 @@ int index_main( int argc, char** argv ){
 
  	Arguments args = parseIndexArguments( argc, argv );
 
-	int totalFast5 = 0;
-	countFast5(args.fast5path.c_str(), totalFast5);
+	int totalSignalFiles = 0;
+	countSignalFiles(args.sigfilesPath.c_str(), totalSignalFiles);
 
 	int progress = 0;
-	progressBar pb(totalFast5,false);
+	progressBar pb(totalSignalFiles,false);
 
 	std::ofstream outFile( args.outfile );
 	if ( not outFile.is_open() ) throw IOerror( args.outfile );
 
 	//iterate on the filesystem to find the full path for each fast5 file
-	std::map<std::string,std::string> fast52fullpath;
-	readDirectory(args.fast5path.c_str(), fast52fullpath);
+	std::map<std::string,std::string> sigfile2fullpath;
+	readDirectory(args.sigfilesPath.c_str(), sigfile2fullpath);
 
-	std::map<std::string,std::string> readID2fast5 = parseSequencingSummary(args.ssPath, args.GridION);
+	std::map<std::string,std::string> readID2fast5 = parseSequencingSummary(args.seqssumPath, args.GridION);
 
 	for (auto idpair = readID2fast5.begin(); idpair != readID2fast5.end(); idpair++){
 
 		//check that the path we need is in the map and exit gracefully if not
-		if ( fast52fullpath.count(idpair->second) == 0 ){
+		if ( sigfile2fullpath.count(idpair->second) == 0 ){
 		
 			const char *ext = get_ext((idpair->second).c_str());
 			if (strcmp(ext,"fast5") != 0){
 		
-				std::cerr << "This doesn't look like a fast5 file: " << idpair->second << std::endl;
+				std::cerr << "This doesn't look like a fast5 or pod5 file: " << idpair->second << std::endl;
 				std::cerr << "- Ensure all files are decompressed." << std::endl;
 				std::cerr << "- Use the --GridION flag if the sequencing summary file was generated by a GridION." << std::endl;
 			}
@@ -296,7 +300,7 @@ int index_main( int argc, char** argv ){
 			throw MissingFast5(idpair->second);
 		}
 
-		outFile << idpair->first << "\t" << fast52fullpath.at(idpair->second) << std::endl;
+		outFile << idpair->first << "\t" << sigfile2fullpath.at(idpair->second) << std::endl;
 		progress++;
 		pb.displayProgress( progress, 0, 0 );
 	}

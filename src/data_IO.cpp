@@ -29,6 +29,7 @@
 #include "forkSense.h"
 #include "config.h"
 
+
 std::string writeDetectHeader(std::string alignmentFilename,
 		                std::string refFilename,
 				std::string indexFn,
