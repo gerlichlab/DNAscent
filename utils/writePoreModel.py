@@ -42,7 +42,7 @@ for i,kmer in enumerate(poreModel):
 	if i % 1000 == 0:
 		print('Written ',str(i),' kmers')
 	if kmer in fitModel:
-		f.write(kmer + '\t' + str(fitModel[kmer][0]) + '\t' + str(fitModel[kmer][1]) + '\n')
+		f.write(kmer + '\t' + str(poreModel[kmer]) + '\t' + str(fitModel[kmer][1]) + '\n')
 		meanDifferences.append(fitModel[kmer][0] - poreModel[kmer])
 		allStdv.append(fitModel[kmer][1])
 	else:
