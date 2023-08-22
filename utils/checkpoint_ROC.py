@@ -16,13 +16,13 @@ import os
 import pickle
 import sys
 
-maxReads = 1000
+maxReads = 100#1000
 
 
 
-dir_BrdUtest = '/home/mb915/rds/rds-boemo_3-tyMgmffheQw/2023_07_11_MJ_ONT_Brdu_48hr_training_v14_5khz_fast5/testReads_slices'
-dir_EdUtest = '/home/mb915/rds/rds-boemo_3-tyMgmffheQw/2023_07_05_MJ_ONT_RPE1_Edu_BrdU_trainingdata_V14_5khz/barcode24/testReads_slices'
-dir_Thymtest = '/home/mb915/rds/rds-boemo_3-tyMgmffheQw/2023_07_05_MJ_ONT_RPE1_Edu_BrdU_trainingdata_V14_5khz/barcode22/testReads_slices'
+dir_BrdUtest = '/home/mb915/rds/rds-boemo_3-tyMgmffheQw/2023_07_11_MJ_ONT_Brdu_48hr_training_v14_5khz_fast5/secondRound/testReads_slices'
+dir_EdUtest = '/home/mb915/rds/rds-boemo_3-tyMgmffheQw/2023_07_05_MJ_ONT_RPE1_Edu_BrdU_trainingdata_V14_5khz/barcode24/secondRound/testReads_slices'
+dir_Thymtest = '/home/mb915/rds/rds-boemo_3-tyMgmffheQw/2023_07_05_MJ_ONT_RPE1_Edu_BrdU_trainingdata_V14_5khz/barcode22/secondRound/testReads_slices'
 
 probThresholds = np.array(range(0,21))/20.
 
@@ -33,11 +33,12 @@ maxEvents = 20
 #
 class trainingRead:
 
-	def __init__(self, read_sixMers, read_signals, read_modelMeans, read_positions, read_analogueCalls, readID, label):
+	def __init__(self, read_sixMers, read_signals, read_modelMeans, read_positions, read_EdUCalls, read_BrdUCalls, readID, label):
 		self.sixMers = read_sixMers[0:maxLen]
 		self.signal = read_signals[0:maxLen]
 		self.modelMeans = read_modelMeans[0:maxLen]
-		self.analogueCalls = read_analogueCalls[0:maxLen]
+		self.BrdUCalls = read_BrdUCalls[0:maxLen]
+		self.EdUCalls = read_EdUCalls[0:maxLen]
 		self.readID = readID
 		self.label = label
 		
@@ -222,7 +223,7 @@ def checkTestDirectory(dirName, model):
 		for i in range(pred.shape[0]):
 		
 			#skip non-thymidine positions
-			if testRead.analogueCalls[i] == '-':
+			if testRead.BrdUCalls[i] == '-':
 				continue
 	
 			thymProb = pred[i,0]

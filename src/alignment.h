@@ -116,7 +116,7 @@ class AlignedRead{
 
 	public:
 		bool QCpassed;
-		std::string str_output;
+		std::string stdout;
 	
 		AlignedRead(std::string readID, std::string chromosome, std::string strand, unsigned int ml, unsigned int mu, unsigned int numEvents){
 
@@ -336,6 +336,6 @@ class AlignedRead{
 
 /*function prototypes */
 int align_main( int argc, char** argv );
-std::shared_ptr<AlignedRead> eventalign( read &, unsigned int , std::map<unsigned int, double> &);
+std::shared_ptr<AlignedRead> eventalign( read &, unsigned int , std::map<unsigned int,std::pair<double,double>> &);
 
 #endif

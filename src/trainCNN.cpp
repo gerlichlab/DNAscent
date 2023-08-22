@@ -39,11 +39,11 @@ static const char *help=
 "  -o,--output               path to output file that will be generated.\n"
 "Optional arguments are:\n"
 "  -t,--threads              number of threads (default is 1 thread),\n"
+"  --GPU                     use the GPU device indicated for prediction (default is CPU),\n"
 "  -m,--maxReads             maximum number of reads to consider,\n"
 "  -q,--quality              minimum mapping quality (default is 20),\n"
 "  -l,--length               minimum read length in bp (default is 100),\n"
-"     --HMM                  use HMM bootstrapping (default is CNN),\n"
-"     --useRaw               write raw signal instead of events.\n"
+"     --HMM                  use HMM bootstrapping (default is CNN)\n"
 
 "Written by Michael Boemo, Department of Pathology, University of Cambridge.\n"
 "Please submit bug reports to GitHub Issues (https://github.com/MBoemo/DNAscent/issues).";
@@ -53,12 +53,13 @@ struct Arguments {
 	std::string referenceFilename;
 	std::string outputFilename;
 	std::string indexFilename;
-	bool methylAware, capReads, useRaw, useHMM;
-	double divergence;
+	bool capReads;
+	bool useHMM = false;
+	bool useGPU = false;
+	unsigned char GPUdevice = '0';
 	int minQ, maxReads;
 	int minL;
 	unsigned int threads;
-	double dilation;
 };
 
 Arguments parseDataArguments( int argc, char** argv ){
@@ -86,12 +87,8 @@ Arguments parseDataArguments( int argc, char** argv ){
 	args.threads = 1;
 	args.minQ = 20;
 	args.minL = 100;
-	args.methylAware = false;
-	args.divergence = 0;
 	args.capReads = false;
-	args.useRaw = false;
 	args.maxReads = 0;
-	args.dilation = 1.0;
 	args.useHMM = false;
 
 	/*parse the command line arguments */
@@ -149,32 +146,20 @@ Arguments parseDataArguments( int argc, char** argv ){
 			args.maxReads = std::stoi( strArg.c_str() );
 			i+=2;
 		}
-		else if ( flag == "--dilation" ){
-
-			std::string strArg( argv[ i + 1 ] );
-			args.dilation = std::stof( strArg.c_str() );
-			i+=2;
-		}
-		else if ( flag == "--divergence" ){
-
-			std::string strArg( argv[ i + 1 ] );
-			args.divergence = std::stof(strArg.c_str());
-			i+=2;
-		}
-		else if ( flag == "--methyl-aware" ){
-
-			args.methylAware = true;
-			i+=1;
-		}
 		else if ( flag == "--HMM" ){
 
 			args.useHMM = true;
 			i+=1;
 		}
-		else if ( flag == "--useRaw" ){
+		else if ( flag == "--GPU" ){
 
-			args.useRaw = true;
-			i+=1;
+			args.useGPU = true;
+			std::string strArg( argv[ i + 1 ] );
+			if (strArg.length() > 1) throw InvalidDevice(strArg);
+
+			args.GPUdevice = *argv[ i + 1 ];
+
+			i+=2;
 		}
 		else throw InvalidOption( flag );
 	}
@@ -189,16 +174,38 @@ int data_main( int argc, char** argv ){
 
 	Arguments args = parseDataArguments( argc, argv );
 
-	//get the neural network model path
-	std::string pathExe = getExePath();
-	std::string modelPath = pathExe + "dnn_models/detect_model_BrdUEdU/";
-	std::string input_layer_name = "serving_default_input_1";
-
-	std::shared_ptr<ModelSession> session = model_load_cpu(modelPath.c_str(), args.threads, input_layer_name.c_str());
-
 	//load DNAscent index
 	std::map< std::string, std::string > readID2path;
 	parseIndex( args.indexFilename, readID2path );
+
+	//get the neural network model path
+	std::string pathExe = getExePath();
+	std::string modelPath = pathExe + Pore_Substrate_Config.fn_dnn_model;
+	std::string input1_layer_name = Pore_Substrate_Config.dnn_model_inputLayer1;
+	std::string input2_layer_name = Pore_Substrate_Config.dnn_model_inputLayer2;
+
+	std::pair< std::shared_ptr<ModelSession>, std::shared_ptr<TF_Graph *> > modelPair;
+
+	if (not args.useGPU){
+
+		modelPair = model_load_cpu_twoInputs(modelPath.c_str(), args.threads);
+	}
+	else{
+
+		modelPair = model_load_gpu_twoInputs(modelPath.c_str(), args.GPUdevice, args.threads);
+	}
+
+	std::shared_ptr<ModelSession> session = modelPair.first;
+	std::shared_ptr<TF_Graph *> Graph = modelPair.second;
+
+	auto input1_op = TF_GraphOperationByName(*(Graph.get()), input1_layer_name.c_str());
+	auto input2_op = TF_GraphOperationByName(*(Graph.get()), input2_layer_name.c_str());
+	if(!input1_op or !input2_op){
+		std::cout << "bad input name" << std::endl;
+		exit(0);
+	}
+
+	std::vector<TF_Output> inputOps = {{input1_op,0}, {input2_op,0}};
 
 	//import fasta reference
 	std::map< std::string, std::string > reference = import_reference_pfasta( args.referenceFilename );
@@ -233,10 +240,11 @@ int data_main( int argc, char** argv ){
 	const char *allReads = ".";
 	itr = sam_itr_querys(bam_idx,bam_hdr,allReads);
 
+	std::map<unsigned int, std::pair<double,double>> placeholder_analogueCalls;
+
 	int result;
 	int failedEvents = 0;
 	unsigned int maxBufferSize;
-	unsigned int windowLength_align = 50;
 	std::vector< bam1_t * > buffer;
 	if ( args.threads <= 4 ) maxBufferSize = args.threads; //PLP&SY: check with Mike
 	else maxBufferSize = 4*(args.threads);
@@ -263,7 +271,7 @@ int data_main( int argc, char** argv ){
 		/*if we've filled up the buffer with short reads, compute them in parallel */
 		if (buffer.size() >= maxBufferSize or (buffer.size() > 0 and result == -1 ) ){
 
-			#pragma omp parallel for schedule(dynamic) shared(buffer,Pore_Substrate_Config,args,prog,failed,windowLength_align) num_threads(args.threads)
+			#pragma omp parallel for schedule(dynamic) shared(buffer,Pore_Substrate_Config,args,prog,failed,session,inputOps,placeholder_analogueCalls) num_threads(args.threads)
 			for (unsigned int i = 0; i < buffer.size(); i++){
 
 				read r; 
@@ -308,10 +316,16 @@ int data_main( int argc, char** argv ){
 					continue;
 				}
 				
-				HMMdetection hmm_likelihood = llAcrossRead(r, 12);
-				std::shared_ptr<AlignedRead> ar = eventalign( r, windowLength_align, hmm_likelihood.refposToLikelihood);
+				//HMM
+				//HMMdetection hmm_likelihood = llAcrossRead(r, 12);
+				//std::shared_ptr<AlignedRead> ar_annotated = eventalign(r, Pore_Substrate_Config.windowLength_align, hmm_likelihood.refposToLikelihood);
 
-				if (not ar -> QCpassed){
+				//DNN
+				std::shared_ptr<AlignedRead> ar = eventalign( r, Pore_Substrate_Config.windowLength_align, placeholder_analogueCalls);
+				DNNdetection DNN_probabilities = runCNN(ar,session,inputOps);
+				std::shared_ptr<AlignedRead> ar_annotated = eventalign(r, Pore_Substrate_Config.windowLength_align, DNN_probabilities.refposToProbability);				
+
+				if (not ar_annotated -> QCpassed){
 					failed++;
 					prog++;
 					continue;
@@ -319,7 +333,7 @@ int data_main( int argc, char** argv ){
 
 				#pragma omp critical
 				{
-					outFile << ar -> str_output;
+					outFile << ar_annotated -> stdout;
 					prog++;
 					pb.displayProgress( prog, failed, failedEvents );
 				}

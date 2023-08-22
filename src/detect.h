@@ -19,8 +19,16 @@
 struct HMMdetection{
 
 	public:
-		std::map<unsigned int, double> refposToLikelihood;
-		std::string readLikelihoodStdout;
+		std::map<unsigned int, std::pair<double,double>> refposToLikelihood;
+		std::string stdout;
+};
+
+
+struct DNNdetection{
+
+	public:
+		std::map<unsigned int, std::pair<double,double>> refposToProbability;
+		std::string stdout;
 };
 
 
@@ -29,7 +37,7 @@ int detect_main( int argc, char** argv );
 
 std::vector< unsigned int > getPOIs( std::string &, int );
 double sequenceProbability( std::vector <double> &, std::string &, size_t, bool, PoreParameters, size_t, size_t );
-std::map<unsigned int, std::pair<double,double>> runCNN_training(std::shared_ptr<AlignedRead> r, std::shared_ptr<ModelSession> session);
+DNNdetection runCNN(std::shared_ptr<AlignedRead> , std::shared_ptr<ModelSession> , std::vector<TF_Output> );
 HMMdetection llAcrossRead( read &, unsigned int );
 
 #endif

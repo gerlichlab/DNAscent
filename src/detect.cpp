@@ -344,7 +344,7 @@ HMMdetection llAcrossRead( read &r, unsigned int windowLength){
 		readHead = 0;
 	}
 
-	hmm_out.readLikelihoodStdout += ">" + r.readID + " " + r.referenceMappedTo + " " + std::to_string(r.refStart) + " " + std::to_string(r.refEnd) + " " + strand + "\n";
+	hmm_out.stdout += ">" + r.readID + " " + r.referenceMappedTo + " " + std::to_string(r.refStart) + " " + std::to_string(r.refEnd) + " " + strand + "\n";
 
 	for ( unsigned int i = 0; i < POIs.size(); i++ ){
 
@@ -494,14 +494,16 @@ std::cerr << std::endl;
 std::cerr << logLikelihoodRatio << std::endl;
 #endif
 
-		hmm_out.readLikelihoodStdout += std::to_string(globalPosOnRef) + "\t" + std::to_string(logLikelihoodRatio) + "\t" + kmerRef + "\t" + kmerQuery + "\n";
-		hmm_out.refposToLikelihood[globalPosOnRef] = logLikelihoodRatio;
+		hmm_out.stdout += std::to_string(globalPosOnRef) + "\t" + std::to_string(logLikelihoodRatio) + "\t" + kmerRef + "\t" + kmerQuery + "\n";
+		hmm_out.refposToLikelihood[globalPosOnRef] = std::make_pair(logLikelihoodRatio,0.);
 	}
 	return hmm_out;
 }
 
 
-std::string runCNN(std::shared_ptr<AlignedRead> r, std::shared_ptr<ModelSession> session, std::vector<TF_Output> inputOps){
+DNNdetection runCNN(std::shared_ptr<AlignedRead> r, std::shared_ptr<ModelSession> session, std::vector<TF_Output> inputOps){
+
+	DNNdetection read_out;
 
 	int NumInputs = 2;
 	int NumOutputs = 1;
@@ -585,9 +587,9 @@ std::string runCNN(std::shared_ptr<AlignedRead> r, std::shared_ptr<ModelSession>
 	unsigned int pos = 0;
 	std::vector<std::string> lines;
 	lines.reserve(positions.size());
-	std::string thisPosition = std::to_string(positions[0]);
-	std::string str_line, str_output;
-	str_output += ">" + r -> getReadID() + " " + r -> getChromosome() + " " + std::to_string(r -> getMappingLower()) + " " + std::to_string(r -> getMappingUpper()) + " " + r -> getStrand() + "\n"; //header
+	unsigned int thisPosition = positions[0];
+	std::string str_line;
+	read_out.stdout += ">" + r -> getReadID() + " " + r -> getChromosome() + " " + std::to_string(r -> getMappingLower()) + " " + std::to_string(r -> getMappingUpper()) + " " + r -> getStrand() + "\n"; //header
 	for(size_t i = 0; i < output_size; i++){
 		if((i+1)%outputFields==0){
 
@@ -596,8 +598,10 @@ std::string runCNN(std::shared_ptr<AlignedRead> r, std::shared_ptr<ModelSession>
 				pos++;
 				continue;
 			}
+			
+			read_out.refposToProbability[thisPosition] = std::make_pair(output_array[i], output_array[i-1]);
 
-			str_line += thisPosition + "\t" + std::to_string(output_array[i])+ "\t" + std::to_string(output_array[i-1]);
+			str_line += std::to_string(thisPosition) + "\t" + std::to_string(output_array[i])+ "\t" + std::to_string(output_array[i-1]);
 			if (r -> getStrand() == "rev") str_line += "\t" + reverseComplement(sixMers[pos]);
 			else str_line += "\t" + sixMers[pos];
 			lines.push_back(str_line);
@@ -605,7 +609,7 @@ std::string runCNN(std::shared_ptr<AlignedRead> r, std::shared_ptr<ModelSession>
 			pos++;
 		}
 		else{
-			if (i != output_size-1) thisPosition = std::to_string(positions[pos]);
+			if (i != output_size-1) thisPosition = positions[pos];
 		}
 	}
 
@@ -616,10 +620,10 @@ std::string runCNN(std::shared_ptr<AlignedRead> r, std::shared_ptr<ModelSession>
 	if (r -> getStrand() == "rev") std::reverse(lines.begin(),lines.end());
 
 	for (auto s = lines.begin(); s < lines.end(); s++){
-		str_output += *s + "\n";
+		read_out.stdout += *s + "\n";
 	}
 
-	return str_output;
+	return read_out;
 }
 
 
@@ -697,7 +701,7 @@ int detect_main( int argc, char** argv ){
 	const char *allReads = ".";
 	itr = sam_itr_querys(bam_idx,bam_hdr,allReads);
 
-	std::map<unsigned int, double> placeholder_analogueCalls;
+	std::map<unsigned int, std::pair<double,double>> placeholder_analogueCalls;
 
 	int result;
 	int failedEvents = 0;
@@ -791,7 +795,8 @@ int detect_main( int argc, char** argv ){
 						continue;
 					}
 
-					readOut = runCNN(ar,session,inputOps);
+					DNNdetection dnn_probabilities = runCNN(ar,session,inputOps);
+					readOut = dnn_probabilities.stdout;
 				//}
 
 				prog++;

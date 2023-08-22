@@ -538,7 +538,7 @@ bool referenceDefined(std::string &readSnippet){
 }
 
 
-std::shared_ptr<AlignedRead> eventalign( read &r, unsigned int totalWindowLength, std::map<unsigned int, double> &analogueCalls){
+std::shared_ptr<AlignedRead> eventalign( read &r, unsigned int totalWindowLength, std::map<unsigned int, std::pair<double,double>> &analogueCalls){
 
 	//get the positions on the reference subsequence where we could attempt to make a call
 	std::string strand;
@@ -550,7 +550,7 @@ std::shared_ptr<AlignedRead> eventalign( read &r, unsigned int totalWindowLength
 
 	std::shared_ptr<AlignedRead> ar = std::make_shared<AlignedRead>(AlignedRead(r.readID, r.referenceMappedTo, strand, r.refStart, r.refEnd, (r.eventAlignment).size()));
 
-	ar -> str_output += ">" + r.readID + " " + r.referenceMappedTo + " " + std::to_string(r.refStart) + " " + std::to_string(r.refEnd) + " " + strand + "\n";
+	ar -> stdout += ">" + r.readID + " " + r.referenceMappedTo + " " + std::to_string(r.refStart) + " " + std::to_string(r.refEnd) + " " + strand + "\n";
 
 	unsigned int posOnRef = 0;
 	while ( posOnRef < r.referenceSeqMappedTo.size() ){
@@ -606,7 +606,7 @@ std::shared_ptr<AlignedRead> eventalign( read &r, unsigned int totalWindowLength
 		std::vector< double > eventSnippet;
 
 		/*get the events that correspond to the read snippet */
-		//ar -> str_output += "readHead at start: " + std::to_string(readHead) + "\n";
+		//ar -> stdout += "readHead at start: " + std::to_string(readHead) + "\n";
 		bool firstMatch = true;
 		std::map<int,int> rawIdx2eventIdx;
 		int eventIdx = 0;
@@ -703,16 +703,17 @@ std::shared_ptr<AlignedRead> eventalign( read &r, unsigned int totalWindowLength
 			if (label == "M"){
 				std::pair<double,double> meanStd = Pore_Substrate_Config.pore_model[kmer2index(kmerStrand, k)];
 				if (analogueCalls.count(evPos) > 0){
-					ar -> str_output += std::to_string(evPos) 
+					ar -> stdout += std::to_string(evPos) 
 					              + "\t" + kmerRef 
 					              + "\t" + std::to_string(scaledEvent) 
 					              + "\t" + kmerStrand 
 					              + "\t" + std::to_string(meanStd.first) 
-					              + "\t" + std::to_string(analogueCalls.at(evPos)) 
+					              + "\t" + std::to_string(analogueCalls.at(evPos).first) 
+					              + "\t" + std::to_string(analogueCalls.at(evPos).second) 					          
 					              + "\n";
 				}
 				else{
-					ar -> str_output += std::to_string(evPos) 
+					ar -> stdout += std::to_string(evPos) 
 					              + "\t" + kmerRef 
 					              + "\t" + std::to_string(scaledEvent) 
 					              + "\t" + kmerStrand 
@@ -722,7 +723,7 @@ std::shared_ptr<AlignedRead> eventalign( read &r, unsigned int totalWindowLength
 				}
 			}
 			else if (label == "I" and evIdx < lastM_ev){ //don't print insertions after the last match because we're going to align these in the next segment
-				ar -> str_output += std::to_string(evPos) + "\t" + kmerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::string(k, 'N') + "\t" + "0" + "\n";
+				ar -> stdout += std::to_string(evPos) + "\t" + kmerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::string(k, 'N') + "\t" + "0" + "\n";
 			}
 			
 			evIdx ++;
@@ -730,7 +731,7 @@ std::shared_ptr<AlignedRead> eventalign( read &r, unsigned int totalWindowLength
 
 		//TESTING - make sure nothing sketchy happens at the breakpoint
 		//if (not found) out += "BREAKPOINT\n";
-		//else ar.str_output += "BREAKPOINT PRIME " + break1 + " " + break2 + "\n";
+		//else ar.stdout += "BREAKPOINT PRIME " + break1 + " " + break2 + "\n";
 
 		//go again starting at posOnRef + lastM_ref using events starting at readHead + lastM_ev
 		readHead += rawIdx2eventIdx[lastM_ev] + 1;
@@ -787,7 +788,7 @@ int align_main( int argc, char** argv ){
 	const char *allReads = ".";
 	itr = sam_itr_querys(bam_idx,bam_hdr,allReads);
 
-	std::map<unsigned int, double> placeholder_analogueCalls;
+	std::map<unsigned int, std::pair<double,double>> placeholder_analogueCalls;
 	int result;
 	int failedEvents = 0;
 	unsigned int maxBufferSize;
@@ -872,7 +873,7 @@ int align_main( int argc, char** argv ){
 
 				#pragma omp critical
 				{
-					outFile << ar -> str_output;
+					outFile << ar -> stdout;
 					prog++;
 					pb.displayProgress( prog, failed, failedEvents );
 				}
