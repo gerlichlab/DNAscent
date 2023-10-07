@@ -15,7 +15,7 @@ label = sys.argv[3]         # e.g., thymidine, BrdU, or EdU
 
 maxLen = 2000
 maxRaw = 20
-maxReads = 150000
+maxReads = 5000
 
 
 #-------------------------------------------------
@@ -46,6 +46,7 @@ class trainingRead:
 			index = baseToInt[s[0]]
 			oneHot[index] = 1
 			oneHot.append(self.modelMeans[i])
+			oneHot.append(float(len(self.signal[i])))
 			sequence_tensor.append(oneHot)
 		self.sequence_tensor = np.array(sequence_tensor)
 

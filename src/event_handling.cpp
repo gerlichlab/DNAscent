@@ -194,13 +194,13 @@ inline float logProbabilityMatch(unsigned int kmerIndex, event e, double shift, 
 	double x = (e.mean - shift)/scale;
 
 	//cauchy distribution
-	float a = (x - mu) / sigma;	
-	double thymProb = -eln(M_PI * sigma) - eln(1 + a * a);
+	//float a = (x - mu) / sigma;	
+	//double thymProb = -eln(M_PI * sigma) - eln(1 + a * a);
 	
 	//normal distribution
-	//float a = (x - mu) / 0.24;	
-	//static const float log_inv_sqrt_2pi = log(0.3989422804014327);
-	//double thymProb = log_inv_sqrt_2pi - eln(0.24) + (-0.5f * a * a);
+	float a = (x - mu) / 0.24;	
+	static const float log_inv_sqrt_2pi = log(0.3989422804014327);
+	double thymProb = log_inv_sqrt_2pi - eln(0.24) + (-0.5f * a * a);
 	return thymProb;
 }	
 
@@ -467,7 +467,7 @@ void adaptive_banded_simple_event_align( read &r, PoreParameters &s, std::vector
 	bool spanned = r.eventAlignment.front().second == 0 && r.eventAlignment.back().second == n_kmers - 1;
     
     	//Testing - print QCs
-    	//std::cout << avg_log_emission << "\t" << spanned << "\t" << max_gap << std::endl;
+    	//std::cout << avg_log_emission << "\t" << spanned << "\t" << max_gap << "\t" << r.isReverse << std::endl;
     
 	r.alignmentQCs.recordQCs(avg_log_emission, spanned, max_gap);
 	//std::cerr << r.readID << " " << avg_log_emission << " " << max_gap << std::endl;

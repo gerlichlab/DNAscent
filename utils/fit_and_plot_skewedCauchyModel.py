@@ -9,8 +9,8 @@ from joblib import Parallel, delayed
 import itertools
 
 
-f_thym = '/home/mb915/rds/rds-boemo_3-tyMgmffheQw/2023_07_05_MJ_ONT_RPE1_Edu_BrdU_trainingdata_V14_5khz/barcode22/DNAscent_R10.normToRef.align'
-f_analogue = '/home/mb915/rds/rds-boemo_3-tyMgmffheQw/2023_07_05_MJ_ONT_RPE1_Edu_BrdU_trainingdata_V14_5khz/barcode23/DNAscent_R10.normToRef.align'
+f_thym = '/home/mb915/rds/rds-boemo_3-tyMgmffheQw/2023_09_08_FT_ONT_Pfal_R10_trainingset/barcode03/DNAscent_R10.align'
+f_analogue = '/home/mb915/rds/rds-boemo_3-tyMgmffheQw/2023_09_08_FT_ONT_Pfal_R10_trainingset/barcode01/DNAscent_R10.align'
 
 maxEvents = 2000
 maxReads = 50000
@@ -117,41 +117,43 @@ for kmer in thymDict:
 			continue
 	
 		#plot signal histograms
+		'''
 		plt.figure()
 		plt.hist(thymDict[kmer],20,alpha=0.3,density=True,label='Thym Events')
 		if kmer in analogueDict:
 			plt.hist(analogueDict[kmer],20,alpha=0.3,density=True,label='BrdU Events')
+		'''
 		
 		#plot unlabelled Cauchy pore model
-		model_mu = poreModel[kmer][0]
-		model_std = poreModel[kmer][1]
-		x_model = np.linspace(model_mu - 5*model_std, model_mu + 5*model_std, 100)
-		plt.plot(x_model, stats.cauchy.pdf(x_model, model_mu, model_std), label='Pore Model')
+		#model_mu = poreModel[kmer][0]
+		#model_std = poreModel[kmer][1]
+		#x_model = np.linspace(model_mu - 5*model_std, model_mu + 5*model_std, 100)
+		#plt.plot(x_model, stats.cauchy.pdf(x_model, model_mu, model_std), label='Pore Model')
 
 		#plot analogue Cauchy pore model		
-		if kmer in analogueModel:
-			model_mu = analogueModel[kmer][0]
-			model_std = analogueModel[kmer][1]
-			x_model = np.linspace(model_mu - 5*model_std, model_mu + 5*model_std, 100)
-			plt.plot(x_model, stats.cauchy.pdf(x_model, model_mu, model_std), label='Analogue Model')	
+		#if kmer in analogueModel:
+		#	model_mu = analogueModel[kmer][0]
+		#	model_std = analogueModel[kmer][1]
+		#	x_model = np.linspace(model_mu - 5*model_std, model_mu + 5*model_std, 100)
+		#	plt.plot(x_model, stats.cauchy.pdf(x_model, model_mu, model_std), label='Analogue Model')	
 		
 		#fit Cauchy to unlabelled signals
 		fit_thym_loc, fit_thym_scale = stats.cauchy.fit(thymDict[kmer])
-		x_model = np.linspace(fit_thym_loc - 5*fit_thym_scale, fit_thym_loc + 5*fit_thym_scale, 100)
-		plt.plot(x_model, stats.cauchy.pdf(x_model, fit_thym_loc, fit_thym_scale), label='Thym Cauchy Fit')		
+		#x_model = np.linspace(fit_thym_loc - 5*fit_thym_scale, fit_thym_loc + 5*fit_thym_scale, 100)
+		#plt.plot(x_model, stats.cauchy.pdf(x_model, fit_thym_loc, fit_thym_scale), label='Thym Cauchy Fit')		
 		
 		#fit skewed Cauchy to analogue signals, then keep Cauchy location and scale parameters
 		ae, fit_analogue_loc, fit_analogue_scale = stats.skewcauchy.fit(analogueDict[kmer])
-		x_model = np.linspace(fit_analogue_loc - 5*fit_analogue_scale, fit_analogue_loc + 5*fit_analogue_scale, 100)
-		plt.plot(x_model, stats.cauchy.pdf(x_model, fit_analogue_loc, fit_analogue_scale), label='Analogue Cauchy Fit')		
+		#x_model = np.linspace(fit_analogue_loc - 5*fit_analogue_scale, fit_analogue_loc + 5*fit_analogue_scale, 100)
+		#plt.plot(x_model, stats.cauchy.pdf(x_model, fit_analogue_loc, fit_analogue_scale), label='Analogue Cauchy Fit')		
 		
 		#plot for this kmer
-		plt.title(kmer)
-		plt.xlabel('Signal (Normalised)')
-		plt.ylabel('Density')		
-		plt.legend(framealpha=0.3)		
-		plt.savefig(kmer+'.png')
-		plt.close()
+		#plt.title(kmer)
+		#plt.xlabel('Signal (Normalised)')
+		#plt.ylabel('Density')		
+		#plt.legend(framealpha=0.3)		
+		#plt.savefig(kmer+'.png')
+		#plt.close()
 		
 		#write the fit for unlabelled
 		f_thym = open('R10model_Thym.2000events_50kreads.model','a')		

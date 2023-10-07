@@ -22,7 +22,7 @@
 #include <utility>
 #include "config.h"
 
-#define NFEATURES 5
+#define NFEATURES 6
 #define RAWDEPTH 20
 
 class AlignedPosition{
@@ -100,6 +100,8 @@ class AlignedPosition{
 			//expected signal
 			std::pair<double,double> meanStd = Pore_Substrate_Config.pore_model[kmer2index(kmer, Pore_Substrate_Config.kmer_len)];
 			feature.push_back(meanStd.first);
+
+			feature.push_back((float) signal.size());
 
 			return feature;
 		}

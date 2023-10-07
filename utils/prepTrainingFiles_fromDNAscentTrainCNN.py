@@ -12,10 +12,10 @@ import math
 outputPath = sys.argv[1]    # directory for pickled training reads
 inputTrainCNN = sys.argv[2] # from DNAscent trainCNN
 label = sys.argv[3]         # e.g., thymidine, BrdU, or EdU
+maxReads = int(sys.argv[4])
 
 maxLen = 2000
 maxRaw = 20
-maxReads = 20000
 
 
 #-------------------------------------------------
@@ -45,6 +45,7 @@ class trainingRead:
 			index = baseToInt[s[0]]
 			oneHot[index] = 1
 			oneHot.append(self.modelMeans[i])
+			oneHot.append(float(len(self.signal[i])))
 			sequence_tensor.append(oneHot)
 		self.sequence_tensor = np.array(sequence_tensor)
 
@@ -99,11 +100,6 @@ for line in f:
 
 	if line[0] == '>':
 
-		readsLoaded += 1
-		#print('Reads loaded: ',readsLoaded)
-		if readsLoaded > maxReads:
-			break
-
 		#make an object out of this read
 		if len(read_kmers) > maxLen:
 
@@ -111,6 +107,10 @@ for line in f:
 			
 				numReadSlices = math.floor(float(len(read_kmers))/float(maxLen))
 				for s in range(numReadSlices):
+				
+					readsLoaded += 1
+					if readsLoaded > maxReads:
+						break
 				
 					tr = trainingRead(read_kmers[maxLen*s:maxLen*(s+1)], read_signals[maxLen*s:maxLen*(s+1)], read_modelSignal[maxLen*s:maxLen*(s+1)], read_positions[maxLen*s:maxLen*(s+1)], read_analogueCalls[maxLen*s:maxLen*(s+1)], prevReadID, label)
 					saveRead(tr, prevReadID+'_slice'+str(s), outputPath)
@@ -140,7 +140,7 @@ for line in f:
 		splitLine = line.rstrip().split('\t')
 
 		#skip insertion events
-		if splitLine[4] == "NNNNNN":
+		if splitLine[3] == "NNNNNNNNN":
 			continue
 
 		#position on reference genome
@@ -170,7 +170,7 @@ for line in f:
 		prevPos = pos
 
 		analogueCall = '-'
-		if len(splitLine) == 6:
+		if len(splitLine) >= 6:
 			analogueCall = splitLine[5]
 			
 		pos_signals.append(signal)

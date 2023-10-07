@@ -4,7 +4,7 @@ matplotlib.use('Agg')
 from matplotlib import pyplot as plt
 
 
-callThreshold = 2.5
+callThreshold = 0. #2.5
 readFractionThreshold = 0.4
 
 f = open(sys.argv[1],'r')
@@ -13,7 +13,7 @@ numAttempts = 0
 
 g = open('analoguePositiveIDs.txt','w')
 
-#maxReads = 5000
+maxReads = 5000
 readCount = 0
 
 allFractions = []
@@ -44,8 +44,8 @@ for line in f:
 
 		continue
 
-	#if readCount > maxReads:
-	#	break
+	if readCount > maxReads:
+		break
 
 	else:
 

@@ -1612,7 +1612,7 @@ int sense_main( int argc, char** argv ){
 
 					B.set(std::stof(column));
 				}
-				else if ( cIndex == 3 ){
+				else if ( cIndex == 4 ){
 					assert(column == "*");
 					qualityOK = false;
 				}

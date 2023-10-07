@@ -13,13 +13,14 @@ import numpy as np
 import random
 import os
 import pickle
+import sys
 
 print('Tensorflow version:',tf.__version__)
 
 maxEvents = 20
 
-f_checkpoint = '/home/mb915/rds/rds-boemo_3-tyMgmffheQw/workspace/R10_4_1_DNAtraining/checkpoints/9_pt2/weights.13-0.21.h5'
-
+#f_checkpoint = '/home/mb915/rds/rds-boemo_3-tyMgmffheQw/workspace/R10_4_1_DNAtraining/checkpoints/9_pt2/weights.13-0.21.h5'
+f_checkpoint = sys.argv[1]
 
 #-------------------------------------------------
 #
@@ -81,12 +82,12 @@ def convolutional_block(X, f, filters, stage, block, s=1):
 def buildModel(input_shape = (64, 64, 3), classes = 6):
     
     # Define the input as a tensor with shape input_shape
-    sequence_input = Input(shape=(None,5))
+    sequence_input = Input(shape=(None,6))
     
     signal_input = Input(shape=(None,maxEvents, 1))
     X = TimeDistributed(Masking(mask_value=0.0))(signal_input)
     X = TimeDistributed(GRU(16,return_sequences=True))(X)
-    X = TimeDistributed(GRU(11,return_sequences=False))(X)
+    X = TimeDistributed(GRU(10,return_sequences=False))(X)
 
     X = Concatenate(axis=-1)([sequence_input,X])
 
@@ -122,13 +123,11 @@ def buildModel(input_shape = (64, 64, 3), classes = 6):
 
     # Output layer
     X = TimeDistributed(Dense(classes, activation='softmax', name='fc' + str(classes), kernel_initializer = glorot_uniform(seed=0)))(X)
-    
-    
+  
     # Create model
     model = Model(inputs = [sequence_input, signal_input] , outputs = X, name='R10_BrdU_EdU')
 
     return model
-
 
 #-------------------------------------------------
 #
@@ -136,8 +135,15 @@ model = buildModel((None,15,6), 3)
 op = Adam(learning_rate=0.0001)
 model.compile(optimizer=op, metrics=['accuracy'], loss='categorical_crossentropy', sample_weight_mode="temporal")
 print(model.summary())
-
-#uncomment to load weights from a trainign checkpoint
 model.load_weights(f_checkpoint)
 model.save('detect_model_BrdUEdU_DNAr10_4_1')
+
+#pop noisy channel layers
+'''
+final_layer = model.layers[-4].output 
+final_model = Model(inputs = model.input, outputs = final_layer, name='final')
+final_model.compile(optimizer=op, metrics=['accuracy'], loss='categorical_crossentropy', sample_weight_mode="temporal")
+print(final_model.summary())
+final_model.save('detect_model_BrdUEdU_DNAr10_4_1')
+'''
 

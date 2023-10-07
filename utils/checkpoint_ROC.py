@@ -4,7 +4,7 @@ from matplotlib import pyplot as plt
 import tensorflow as tf
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.models import Model
-from tensorflow.keras.layers import Input, Dense, Attention, Conv1D, Activation, BatchNormalization, SeparableConv1D, TimeDistributed, MultiHeadAttention, AdditiveAttention, Attention, Concatenate, Masking, LSTM, GRU, Bidirectional, Add, SeparableConv1D, Dropout
+from tensorflow.keras.layers import SpatialDropout1D, Input, Dense, Attention, Conv1D, Activation, BatchNormalization, SeparableConv1D, TimeDistributed, MultiHeadAttention, AdditiveAttention, Attention, Concatenate, Masking, LSTM, GRU, Bidirectional, Add, SeparableConv1D, Dropout, Softmax
 from tensorflow.keras.callbacks import EarlyStopping
 from tensorflow.keras.losses import CategoricalCrossentropy, MeanSquaredError, BinaryFocalCrossentropy
 from tensorflow.keras.utils import pad_sequences, Sequence
@@ -16,9 +16,7 @@ import os
 import pickle
 import sys
 
-maxReads = 100#1000
-
-
+maxReads = 500
 
 dir_BrdUtest = '/home/mb915/rds/rds-boemo_3-tyMgmffheQw/2023_07_11_MJ_ONT_Brdu_48hr_training_v14_5khz_fast5/secondRound/testReads_slices'
 dir_EdUtest = '/home/mb915/rds/rds-boemo_3-tyMgmffheQw/2023_07_05_MJ_ONT_RPE1_Edu_BrdU_trainingdata_V14_5khz/barcode24/secondRound/testReads_slices'
@@ -29,16 +27,18 @@ probThresholds = np.array(range(0,21))/20.
 checkpoint_fn = sys.argv[1]
 maxEvents = 20
 
+dropout_prob = 0.5
+
+
 #-------------------------------------------------
 #
 class trainingRead:
 
-	def __init__(self, read_sixMers, read_signals, read_modelMeans, read_positions, read_EdUCalls, read_BrdUCalls, readID, label):
+	def __init__(self, read_sixMers, read_signals, read_modelMeans, read_positions, read_analogueCalls, readID, label):
 		self.sixMers = read_sixMers[0:maxLen]
 		self.signal = read_signals[0:maxLen]
 		self.modelMeans = read_modelMeans[0:maxLen]
-		self.BrdUCalls = read_BrdUCalls[0:maxLen]
-		self.EdUCalls = read_EdUCalls[0:maxLen]
+		self.analogueCalls = read_analogueCalls[0:maxLen]
 		self.readID = readID
 		self.label = label
 		
@@ -51,6 +51,7 @@ class trainingRead:
 			index = baseToInt[s[0]]
 			oneHot[index] = 1
 			oneHot.append(self.modelMeans[i])
+			oneHot.append(float(len(self.signal[i])))
 			sequence_tensor.append(oneHot)
 		self.sequence_tensor = np.array(sequence_tensor)
 
@@ -67,7 +68,7 @@ class trainingRead:
 					padded_signals.append(0.)
 			padded_signals = padded_signals[0:maxRaw]
 			signal_tensor.append(np.array(padded_signals))			
-		self.signal_tensor = np.array(signal_tensor)
+		self.signal_tensor = np.array(signal_tensor)	
 
 
 #-------------------------------------------------
@@ -130,12 +131,12 @@ def convolutional_block(X, f, filters, stage, block, s=1):
 def buildModel(input_shape = (64, 64, 3), classes = 6):
     
     # Define the input as a tensor with shape input_shape
-    sequence_input = Input(shape=(None,5))
+    sequence_input = Input(shape=(None,6))
     
     signal_input = Input(shape=(None,maxEvents, 1))
     X = TimeDistributed(Masking(mask_value=0.0))(signal_input)
     X = TimeDistributed(GRU(16,return_sequences=True))(X)
-    X = TimeDistributed(GRU(11,return_sequences=False))(X)
+    X = TimeDistributed(GRU(10,return_sequences=False))(X)
 
     X = Concatenate(axis=-1)([sequence_input,X])
 
@@ -171,8 +172,7 @@ def buildModel(input_shape = (64, 64, 3), classes = 6):
 
     # Output layer
     X = TimeDistributed(Dense(classes, activation='softmax', name='fc' + str(classes), kernel_initializer = glorot_uniform(seed=0)))(X)
-    
-    
+  
     # Create model
     model = Model(inputs = [sequence_input, signal_input] , outputs = X, name='R10_BrdU_EdU')
 
@@ -223,9 +223,9 @@ def checkTestDirectory(dirName, model):
 		for i in range(pred.shape[0]):
 		
 			#skip non-thymidine positions
-			if testRead.BrdUCalls[i] == '-':
+			if testRead.analogueCalls[i] == '-':
 				continue
-	
+
 			thymProb = pred[i,0]
 			brduProb = pred[i,1]
 			eduProb = pred[i,2]
@@ -249,9 +249,17 @@ model.compile(optimizer=op, metrics=['accuracy'], loss='categorical_crossentropy
 print(model.summary())
 model.load_weights(checkpoint_fn)
 print('weights loaded')
-attempts_inThym, brduCalls_inThym, eduCalls_inThym = checkTestDirectory(dir_Thymtest, model)
-attempts_inEdU, brduCalls_inEdU, eduCalls_inEdU = checkTestDirectory(dir_EdUtest, model)
-attempts_inBrdU, brduCalls_inBrdU, eduCalls_inBrdU = checkTestDirectory(dir_BrdUtest, model)
+
+final_model = model
+#pop noisy channel layers
+#final_layer = model.layers[-4].output 
+#final_model = Model(inputs = model.input, outputs = final_layer, name='final')
+#final_model.compile(optimizer=op, metrics=['accuracy'], loss='categorical_crossentropy', sample_weight_mode="temporal")
+#print(final_model.summary())
+
+attempts_inThym, brduCalls_inThym, eduCalls_inThym = checkTestDirectory(dir_Thymtest, final_model)
+attempts_inEdU, brduCalls_inEdU, eduCalls_inEdU = checkTestDirectory(dir_EdUtest, final_model)
+attempts_inBrdU, brduCalls_inBrdU, eduCalls_inBrdU = checkTestDirectory(dir_BrdUtest, final_model)
 
 #plotting
 fig,ax = plt.subplots()
@@ -265,6 +273,7 @@ for i, p in enumerate(probThresholds):
 	truePositives.append( eduCalls_inEdU[p]/float(attempts_inEdU[p]) )
 	ax.annotate(str(p),(falsePositives[i],truePositives[i]),fontsize=6)
 plt.plot(falsePositives,truePositives,'b',alpha=0.5,label='EdU/Thym')
+
 
 #BrdU and thymidine
 falsePositives = []
@@ -286,6 +295,7 @@ for i, p in enumerate(probThresholds):
 	ax.annotate(str(p),(falsePositives[i],truePositives[i]),fontsize=6)
 plt.plot(falsePositives,truePositives,'b--',alpha=0.5,label='EdU/BrdU')
 
+
 #BrdU and EdU
 falsePositives = []
 for p in probThresholds:
@@ -303,8 +313,8 @@ plt.xlim(0,1.0)
 plt.xlabel('False Positive Rate')
 plt.ylabel('(Positive Calls)/Attempts')
 plt.ylim(0,1)
-plt.savefig(checkpoint_fn_split[1]+'.pdf')
+plt.savefig("".join(checkpoint_fn_split[0:-1])+'.pdf')
 plt.xlim(0,0.2)
-plt.savefig(checkpoint_fn_split[1]+'_zoom.pdf')
+plt.savefig("".join(checkpoint_fn_split[0:-1])+'_zoom.pdf')
 plt.close()
 

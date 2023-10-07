@@ -16,10 +16,10 @@ import pickle
 
 print('Tensorflow version:',tf.__version__)
 
-logPath = '/home/mb915/rds/rds-boemo_3-tyMgmffheQw/workspace/R10_4_1_DNAtraining/logs/trainingLog_DNN_9_pt2.csv'
-trainingReadLogPath = '/home/mb915/rds/rds-boemo_3-tyMgmffheQw/workspace/R10_4_1_DNAtraining/logs/trainingReads_DNN_9.txt'
-valReadLogPath = '/home/mb915/rds/rds-boemo_3-tyMgmffheQw/workspace/R10_4_1_DNAtraining/logs/validationReads_DNN_9.txt'
-checkpointPath = '/home/mb915/rds/rds-boemo_3-tyMgmffheQw/workspace/R10_4_1_DNAtraining/checkpoints/9_pt2'
+logPath = '/home/mb915/rds/rds-boemo_3-tyMgmffheQw/workspace/R10_4_1_DNAtraining/logs/trainingLog_DNN_16.csv'
+trainingReadLogPath = '/home/mb915/rds/rds-boemo_3-tyMgmffheQw/workspace/R10_4_1_DNAtraining/logs/trainingReads_DNN_16.txt'
+valReadLogPath = '/home/mb915/rds/rds-boemo_3-tyMgmffheQw/workspace/R10_4_1_DNAtraining/logs/validationReads_DNN_16.txt'
+checkpointPath = '/home/mb915/rds/rds-boemo_3-tyMgmffheQw/workspace/R10_4_1_DNAtraining/checkpoints/16'
 validationSplit = 0.1
 
 f_checkpoint = '/home/mb915/rds/rds-boemo_3-tyMgmffheQw/workspace/R10_4_1_DNAtraining/checkpoints/9/weights.04-0.22.h5'
@@ -29,10 +29,10 @@ maxLen = 2000
 #static params
 truePositive_BrdU = 0.8
 truePositive_EdU = 0.8
-trueNegative = 0.9
+trueNegative = 0.95
 falsePositive = 1. - trueNegative
 llThreshold = 2.5
-incorporationEstimate = 0.8
+incorporationEstimate = 0.5
 
 maxEvents = 20
 
@@ -325,14 +325,14 @@ class DataGenerator(Sequence):
 #MAIN
 
 #uncomment to train from scratch
-'''
+
 filepaths = ['/home/mb915/rds/rds-boemo_3-tyMgmffheQw/2023_07_05_MJ_ONT_RPE1_Edu_BrdU_trainingdata_V14_5khz/barcode24/trainingReads_slices',
 '/home/mb915/rds/rds-boemo_3-tyMgmffheQw/2023_07_11_MJ_ONT_Brdu_48hr_training_v14_5khz_fast5/trainingReads_slices',
 '/home/mb915/rds/rds-boemo_3-tyMgmffheQw/2023_07_05_MJ_ONT_RPE1_Edu_BrdU_trainingdata_V14_5khz/barcode22/trainingReads_slices']
 
-maxReads = [20000,
-20000,
-40000]
+maxReads = [10000,
+10000,
+20000]
 
 trainPaths = []
 valPaths = []
@@ -365,10 +365,10 @@ for ri in valPaths:
 f_valReads.close()
 
 partition = {'training':trainPaths, 'validation':valPaths}
-'''
+
 
 #uncommment to resume from a checkpoint
-
+'''
 val_readIDs = []
 f_readIDs = open(valReadLogPath,'r')
 for line in f_readIDs:
@@ -382,7 +382,7 @@ for line in f_readIDs:
 f_readIDs.close()
 
 partition = {'training':train_readIDs, 'validation':val_readIDs}
-
+'''
 
 labels = {}
 
@@ -406,7 +406,7 @@ model.compile(optimizer=op, metrics=['accuracy'], loss='categorical_crossentropy
 print(model.summary())
 
 #uncomment to load weights from a trainign checkpoint
-model.load_weights(f_checkpoint)
+#model.load_weights(f_checkpoint)
 
 #callbacks
 es = EarlyStopping(monitor='val_loss', min_delta=0, patience=20, verbose=1, mode='auto', baseline=None, restore_best_weights=True)
