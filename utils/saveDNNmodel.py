@@ -82,14 +82,11 @@ def convolutional_block(X, f, filters, stage, block, s=1):
 def buildModel(input_shape = (64, 64, 3), classes = 6):
     
     # Define the input as a tensor with shape input_shape
-    sequence_input = Input(shape=(None,6))
+    sequence_input = Input(shape=(None,5))
     
-    signal_input = Input(shape=(None,maxEvents, 1))
-    X = TimeDistributed(Masking(mask_value=0.0))(signal_input)
-    X = TimeDistributed(GRU(16,return_sequences=True))(X)
-    X = TimeDistributed(GRU(10,return_sequences=False))(X)
+    signal_input = Input(shape=(None,3))
 
-    X = Concatenate(axis=-1)([sequence_input,X])
+    X = Concatenate(axis=-1)([sequence_input,signal_input])
 
     # Stage 1
     X = Conv1D(64, 3, strides = 1, padding='same', name = 'conv1', kernel_initializer = glorot_uniform(seed=0))(X)
@@ -123,7 +120,8 @@ def buildModel(input_shape = (64, 64, 3), classes = 6):
 
     # Output layer
     X = TimeDistributed(Dense(classes, activation='softmax', name='fc' + str(classes), kernel_initializer = glorot_uniform(seed=0)))(X)
-  
+    
+    
     # Create model
     model = Model(inputs = [sequence_input, signal_input] , outputs = X, name='R10_BrdU_EdU')
 

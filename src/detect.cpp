@@ -540,7 +540,7 @@ DNNdetection runCNN(std::shared_ptr<AlignedRead> r, std::shared_ptr<ModelSession
 
 	//signal input
 	std::vector<size_t> protoSignalShape = r -> getSignalShape();
-	TensorShape input_signalShape={{1, (int64_t) protoSignalShape[0], (int64_t) protoSignalShape[1], (int64_t) protoSignalShape[2]}, 4};
+	TensorShape input_signalShape={{1, (int64_t) protoSignalShape[0], (int64_t) protoSignalShape[1]}, 3};
 
 	std::vector<float> unformattedSignalTensor = r -> makeSignalTensor();
 

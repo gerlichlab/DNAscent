@@ -22,7 +22,7 @@
 #include <utility>
 #include "config.h"
 
-#define NFEATURES 6
+#define NFEATURES 5
 #define RAWDEPTH 20
 
 class AlignedPosition{
@@ -63,7 +63,15 @@ class AlignedPosition{
 
 			assert(signal.size() > 0);
 			assert(kmer.substr(0,1) == "A" || kmer.substr(0,1) == "T" || kmer.substr(0,1) == "G" || kmer.substr(0,1) == "C");
-
+			
+			std::vector<float> signal_stats;
+			double signalMean = vectorMean(signal);
+			signal_stats.push_back(signalMean);
+			signal_stats.push_back(vectorStdv(signal,signalMean));			
+			signal_stats.push_back((float) signal.size());			
+			return signal_stats;
+			
+			/*
 			std::vector<float> padded_signal;
 
 			for (size_t i = 0; i < signal.size(); i++){
@@ -84,6 +92,7 @@ class AlignedPosition{
 
 			assert(padded_signal.size() == RAWDEPTH);
 			return padded_signal;
+			*/
 		}
 		std::vector<float> makeSequenceFeature(void){
 
@@ -101,7 +110,7 @@ class AlignedPosition{
 			std::pair<double,double> meanStd = Pore_Substrate_Config.pore_model[kmer2index(kmer, Pore_Substrate_Config.kmer_len)];
 			feature.push_back(meanStd.first);
 
-			feature.push_back((float) signal.size());
+			//feature.push_back((float) signal.size());
 
 			return feature;
 		}
@@ -171,7 +180,7 @@ class AlignedRead{
 
 			assert(strand == "fwd" || strand == "rev");
 			std::vector<float> tensor;
-			tensor.reserve(RAWDEPTH * positions.size());
+			tensor.reserve(3 * positions.size());
 
 			if (strand == "fwd"){
 
@@ -327,7 +336,7 @@ class AlignedRead{
 		}
 		std::vector<size_t> getSignalShape(void){
 
-			return {positions.size(), RAWDEPTH, 1};
+			return {positions.size(), 3};
 		}
 		std::vector<size_t> getSequenceShape(void){
 

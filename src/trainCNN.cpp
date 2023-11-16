@@ -317,13 +317,13 @@ int data_main( int argc, char** argv ){
 				}
 				
 				//HMM
-				//HMMdetection hmm_likelihood = llAcrossRead(r, 12);
-				//std::shared_ptr<AlignedRead> ar_annotated = eventalign(r, Pore_Substrate_Config.windowLength_align, hmm_likelihood.refposToLikelihood);
+				HMMdetection hmm_likelihood = llAcrossRead(r, 12);
+				std::shared_ptr<AlignedRead> ar_annotated = eventalign(r, Pore_Substrate_Config.windowLength_align, hmm_likelihood.refposToLikelihood);
 
 				//DNN
-				std::shared_ptr<AlignedRead> ar = eventalign( r, Pore_Substrate_Config.windowLength_align, placeholder_analogueCalls);
-				DNNdetection DNN_probabilities = runCNN(ar,session,inputOps);
-				std::shared_ptr<AlignedRead> ar_annotated = eventalign(r, Pore_Substrate_Config.windowLength_align, DNN_probabilities.refposToProbability);				
+				//std::shared_ptr<AlignedRead> ar = eventalign( r, Pore_Substrate_Config.windowLength_align, placeholder_analogueCalls);
+				//DNNdetection DNN_probabilities = runCNN(ar,session,inputOps);
+				//std::shared_ptr<AlignedRead> ar_annotated = eventalign(r, Pore_Substrate_Config.windowLength_align, DNN_probabilities.refposToProbability);				
 
 				if (not ar_annotated -> QCpassed){
 					failed++;
