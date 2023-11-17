@@ -39,8 +39,8 @@ class Global_Config{
 			kmer_len = 9;
 			windowLength_align = 50;
 			
-			fn_pore_model = "r10.4.1_unlabelled_cauchy.model";
-			fn_analogue_model = "r10.4.1_BrdU_cauchy.model";
+			fn_pore_model = "r10.4.1_unlabelled_gaussian.model";
+			fn_analogue_model = "r10.4.1_EdU_gaussian.model";
 			pore_model = import_poreModel(fn_pore_model, kmer_len);
 			analogue_model = import_poreModel(fn_analogue_model, kmer_len);
 			

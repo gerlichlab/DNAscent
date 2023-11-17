@@ -198,9 +198,11 @@ inline float logProbabilityMatch(unsigned int kmerIndex, event e, double shift, 
 	//double thymProb = -eln(M_PI * sigma) - eln(1 + a * a);
 	
 	//normal distribution
-	float a = (x - mu) / 0.24;	
+	//float a = (x - mu) / 0.24;	
+	float a = (x - mu) / sigma;	
 	static const float log_inv_sqrt_2pi = log(0.3989422804014327);
-	double thymProb = log_inv_sqrt_2pi - eln(0.24) + (-0.5f * a * a);
+	//double thymProb = log_inv_sqrt_2pi - eln(0.24) + (-0.5f * a * a);
+	double thymProb = log_inv_sqrt_2pi - eln(sigma) + (-0.5f * a * a);
 	return thymProb;
 }	
 
@@ -637,9 +639,9 @@ void normaliseEvents( read &r ){
 	
 	//normalise by quantile scaling by comparing the raw signal against the reference sequence
 	PoreParameters s = estimateScaling_quantiles( r.raw, r.referenceSeqMappedTo, kmer_ranks_ref );
-	
+		
 	// Rough alignment of signals to query sequence
 	adaptive_banded_simple_event_align(r, s, kmer_ranks_query);
 	
-	r.scalings.eventsPerBase = (double) r.raw.size() / (double) (r.basecall.size() - k);
+	r.scalings.eventsPerBase = (double) et.n / (double) (r.basecall.size() - k);
 }

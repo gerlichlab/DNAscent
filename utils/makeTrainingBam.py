@@ -13,6 +13,7 @@ f_alignment = sys.argv[2]
 
 f = pysam.Samfile(f_alignment,'r')
 g = pysam.Samfile('analoguePositiveIDs.bam','wb',template=f)
+
 for record in f:
 	if record.query_name in IDs:
 		g.write(record)

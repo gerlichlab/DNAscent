@@ -211,7 +211,7 @@ double sequenceProbability( std::vector <double> &observations,
 		level_mu = meanStd.first;
 		level_sigma = meanStd.second;
 
-		matchProb = eln( normalPDF( level_mu, 0.24, (observations[t] - scalings.shift)/scalings.scale ) );
+		matchProb = eln( normalPDF( level_mu, level_sigma, (observations[t] - scalings.shift)/scalings.scale ) );
 		//matchProb = eln( cauchyPDF( level_mu, level_sigma, (observations[t] - scalings.shift)/scalings.scale ) );
 		insProb = 0.0; //log(1) = 0; set probability equal to 1 and use transition probability as weighting
 
@@ -243,7 +243,7 @@ double sequenceProbability( std::vector <double> &observations,
 				std::pair<double,double> analogue_meanStd = Pore_Substrate_Config.analogue_model[kmer2index(kmer, k)];
 				level_mu = analogue_meanStd.first;
 				level_sigma = analogue_meanStd.second;
-				matchProb = eln( normalPDF( level_mu, 0.24, (observations[t] - scalings.shift)/scalings.scale ) );
+				matchProb = eln( normalPDF( level_mu, level_sigma, (observations[t] - scalings.shift)/scalings.scale ) );
 				//matchProb = eln( cauchyPDF( level_mu, level_sigma, (observations[t] - scalings.shift)/scalings.scale ) );				
 				
 				/*
@@ -258,7 +258,7 @@ double sequenceProbability( std::vector <double> &observations,
 				std::pair<double,double> meanStd = Pore_Substrate_Config.pore_model[kmer2index(kmer, k)];
 				level_mu = meanStd.first;
 				level_sigma = meanStd.second;
-				matchProb = eln( normalPDF( level_mu, 0.24, (observations[t] - scalings.shift)/scalings.scale ) );
+				matchProb = eln( normalPDF( level_mu, level_sigma, (observations[t] - scalings.shift)/scalings.scale ) );
 				//matchProb = eln( cauchyPDF( level_mu, level_sigma, (observations[t] - scalings.shift)/scalings.scale ) );				
 			}
 
@@ -399,10 +399,9 @@ HMMdetection llAcrossRead( read &r, unsigned int windowLength){
 					}
 					
 					double ev = (r.events)[(r.eventAlignment)[j].first].mean;
-					std::vector<double> raw = (r.events)[(r.eventAlignment)[j].first].raw;
-					
+				
 					if (ev > 0. and ev < 250.0){
-						eventSnippet.insert(eventSnippet.end(), raw.begin(), raw.end());
+						eventSnippet.push_back(ev);
 					}
 				}
 
@@ -427,10 +426,9 @@ HMMdetection llAcrossRead( read &r, unsigned int windowLength){
 					}
 					
 					double ev = (r.events)[(r.eventAlignment)[j].first].mean;
-					std::vector<double> raw = (r.events)[(r.eventAlignment)[j].first].raw;
 					
 					if (ev > 0. and ev < 250.0){
-						eventSnippet.insert(eventSnippet.end(), raw.begin(), raw.end());
+						eventSnippet.push_back(ev);
 					}
 				}
 
@@ -783,16 +781,12 @@ int detect_main( int argc, char** argv ){
 				
 				std::string readOut;
 
+				
+				HMMdetection hmm_likelihood = llAcrossRead(r, 12);
+				readOut = hmm_likelihood.stdout;
+				
+				
 				/*
-				if (args.useHMM){
-				
-					HMMdetection hmm_likelihood = llAcrossRead(r, 12);
-					readOut = hmm_likelihood.stdout;
-				}
-				*/
-				
-				
-				//else{
 				
 				std::shared_ptr<AlignedRead> ar = eventalign( r, Pore_Substrate_Config.windowLength_align, placeholder_analogueCalls);
 
@@ -805,7 +799,7 @@ int detect_main( int argc, char** argv ){
 				DNNdetection dnn_probabilities = runCNN(ar,session,inputOps);
 				readOut = dnn_probabilities.stdout;
 				
-				//}
+				*/
 
 				prog++;
 				pb.displayProgress( prog, failed, failedEvents );

@@ -4,8 +4,8 @@ matplotlib.use('Agg')
 from matplotlib import pyplot as plt
 
 
-callThreshold = 0. #2.5
-readFractionThreshold = 0.4
+callThreshold = 2.5
+readFractionThreshold = 0.2
 
 f = open(sys.argv[1],'r')
 analogueCalls = 0
@@ -13,7 +13,7 @@ numAttempts = 0
 
 g = open('analoguePositiveIDs.txt','w')
 
-maxReads = 5000
+maxReads = 1000000
 readCount = 0
 
 allFractions = []
@@ -59,10 +59,12 @@ for line in f:
 f.close()
 g.close()
 
+#print(float(analogueCalls)/numAttempts)
+
 plt.figure()
 plt.hist(allFractions,50,alpha=0.3)
 plt.xlabel('Positive Calls/Attempts')
-plt.ylabel('Count')
+plt.ylabel('Number of Reads')
 #plt.yscale("log")
 #plt.legend(framealpha=0.3)
 plt.savefig('callsPerRead_histogram.pdf')
