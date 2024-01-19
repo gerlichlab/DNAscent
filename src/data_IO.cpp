@@ -250,7 +250,7 @@ std::vector< std::pair< double, double > > import_poreModel( std::string poreMod
 
 			/*key the map by the kmer, and convert the mean and std strings to doubles */
 			kmer2MeanStd[ key ] = std::make_pair( atof( mean.c_str() ), atof( std.c_str() ) );
-			//kmer2MeanStd[ key ] = std::make_pair( atof(mean.c_str()), 0.24 );						
+			//kmer2MeanStd[ key ] = std::make_pair( atof(mean.c_str()), 0.14 );						
 		}
 	}
 

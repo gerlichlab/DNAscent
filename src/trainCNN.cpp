@@ -283,7 +283,7 @@ int data_main( int argc, char** argv ){
 				r.readID = s_queryName;
 
 				//iterate on the cigar string to fill up the reference-to-query coordinate map
-				parseCigar(buffer[i], r.refToQuery, r.refStart, r.refEnd);
+				parseCigar(buffer[i], r.refToQuery, r.queryToRef, r.refStart, r.refEnd);
 
 				//get the name of the reference mapped to
 				std::string mappedTo(bam_hdr -> target_name[buffer[i] -> core.tid]);
@@ -318,7 +318,7 @@ int data_main( int argc, char** argv ){
 				
 				//HMM
 				HMMdetection hmm_likelihood = llAcrossRead(r, 12);
-				std::shared_ptr<AlignedRead> ar_annotated = eventalign(r, Pore_Substrate_Config.windowLength_align, hmm_likelihood.refposToLikelihood, true);
+				std::shared_ptr<AlignedRead> ar_annotated = eventalign(r, Pore_Substrate_Config.windowLength_align, hmm_likelihood.refposToLikelihood);
 
 				//DNN
 				//std::shared_ptr<AlignedRead> ar = eventalign( r, Pore_Substrate_Config.windowLength_align, placeholder_analogueCalls, true);

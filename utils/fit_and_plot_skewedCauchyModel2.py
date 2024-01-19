@@ -9,8 +9,8 @@ from joblib import Parallel, delayed
 import itertools
 
 
-f_thym = '/home/mb915/rds/rds-boemo_3-tyMgmffheQw/2023_07_05_MJ_ONT_RPE1_Edu_BrdU_trainingdata_V14_5khz/barcode22/HMMtest/DNAscent_R10.align'
-f_analogue = '/home/mb915/rds/rds-boemo_3-tyMgmffheQw/2023_07_05_MJ_ONT_RPE1_Edu_BrdU_trainingdata_V14_5khz/barcode24/HMMtest/DNAscent_R10.align'
+f_thym = '/home/mb915/rds/rds-boemo_3-tyMgmffheQw/2023_07_05_MJ_ONT_RPE1_Edu_BrdU_trainingdata_V14_5khz/barcode22/DNAscent_R10.theilSen.align'
+f_analogue = '/home/mb915/rds/rds-boemo_3-tyMgmffheQw/2023_07_05_MJ_ONT_RPE1_Edu_BrdU_trainingdata_V14_5khz/barcode24/DNAscent_R10.theilSen.align'
 
 maxEvents = 2000
 maxReads = 50000
@@ -18,6 +18,7 @@ maxReads = 50000
 
 #----------------------------------------------------
 #parse the pore model (unlabelled)
+
 f_poreModel = '/home/mb915/rds/hpc-work/development/DNAscent_R10align/DNAscent_dev/pore_models/r10.4.1_400bps.nucleotide.9mer.model' #'r10.4.1_400bps.nucleotide.9mer.model'
 poreModel = {}
 print('Importing pore model')
@@ -34,6 +35,7 @@ print('Pore model imported')
 
 #----------------------------------------------------
 #parse the pore model (analogue)
+'''
 f_analogueModel = '/home/mb915/rds/hpc-work/development/DNAscent_R10align/DNAscent_dev/pore_models/r10.4.1_BrdU_cauchy.model'
 analogueModel = {}
 print('Importing pore model')
@@ -46,7 +48,7 @@ for line in f:
 	analogueModel[splitLine[0]] = (float(splitLine[1]),float(splitLine[2]))
 f.close()
 print('Pore model imported')
-
+'''
 
 #----------------------------------------------------
 #

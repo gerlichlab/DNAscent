@@ -347,6 +347,6 @@ class AlignedRead{
 
 /*function prototypes */
 int align_main( int argc, char** argv );
-std::shared_ptr<AlignedRead> eventalign( read &, unsigned int , std::map<unsigned int,std::pair<double,double>> &, bool);
+std::shared_ptr<AlignedRead> eventalign( read &, unsigned int , std::map<unsigned int,std::pair<double,double>> &);
 
 #endif

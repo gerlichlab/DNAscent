@@ -58,7 +58,7 @@ struct read{
 	PoreParameters scalings;
 	std::vector< event > events;
 	std::vector< double> raw;
-	std::map< unsigned int, unsigned int > refToQuery;
+	std::map< unsigned int, unsigned int > refToQuery, queryToRef;
 	std::vector< std::pair< unsigned int, unsigned int > > eventAlignment;
 	std::map< unsigned int, std::pair< unsigned int, unsigned int >> eventIdx2rawIdx;
 	std::map<unsigned int, double> posToScore;

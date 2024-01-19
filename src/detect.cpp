@@ -212,7 +212,6 @@ double sequenceProbability( std::vector <double> &observations,
 		level_sigma = meanStd.second;
 
 		matchProb = eln( normalPDF( level_mu, level_sigma, (observations[t] - scalings.shift)/scalings.scale ) );
-		//matchProb = eln( cauchyPDF( level_mu, level_sigma, (observations[t] - scalings.shift)/scalings.scale ) );
 		insProb = 0.0; //log(1) = 0; set probability equal to 1 and use transition probability as weighting
 
 		//first insertion
@@ -244,14 +243,6 @@ double sequenceProbability( std::vector <double> &observations,
 				level_mu = analogue_meanStd.first;
 				level_sigma = analogue_meanStd.second;
 				matchProb = eln( normalPDF( level_mu, level_sigma, (observations[t] - scalings.shift)/scalings.scale ) );
-				//matchProb = eln( cauchyPDF( level_mu, level_sigma, (observations[t] - scalings.shift)/scalings.scale ) );				
-				
-				/*
-				std::pair<double,double> meanStd = Pore_Substrate_Config.pore_model[kmer2index(kmer, k)];
-				level_mu = meanStd.first;
-				level_sigma = meanStd.second;					
-				matchProb = eln( 0.5*normalPDF( level_mu-2.*level_sigma, level_sigma, (observations[t] - scalings.shift)/scalings.scale ) + 0.5*normalPDF( level_mu+2.*level_sigma, level_sigma, (observations[t] - scalings.shift)/scalings.scale ));				
-				*/
 			}
 			else{
 
@@ -259,7 +250,6 @@ double sequenceProbability( std::vector <double> &observations,
 				level_mu = meanStd.first;
 				level_sigma = meanStd.second;
 				matchProb = eln( normalPDF( level_mu, level_sigma, (observations[t] - scalings.shift)/scalings.scale ) );
-				//matchProb = eln( cauchyPDF( level_mu, level_sigma, (observations[t] - scalings.shift)/scalings.scale ) );				
 			}
 
 			//to the insertion
@@ -351,8 +341,8 @@ HMMdetection llAcrossRead( read &r, unsigned int windowLength){
 
 	for ( unsigned int i = 0; i < POIs.size(); i++ ){
 
-		int posOnRef = POIs[i];
-		int posOnQuery = (r.refToQuery).at(posOnRef);
+		unsigned int posOnRef = POIs[i];
+		unsigned int posOnQuery = (r.refToQuery).at(posOnRef);
 
 		std::string readSnippet = (r.referenceSeqMappedTo).substr(posOnRef - windowLength, 2*windowLength);
 
@@ -380,17 +370,21 @@ HMMdetection llAcrossRead( read &r, unsigned int windowLength){
 		std::vector< double > eventSnippet;
 
 		//catch spans with lots of insertions or deletions (this QC was set using results of tests/detect/hmm_falsePositives)
-		unsigned int spanOnQuery = (r.refToQuery)[posOnRef + windowLength-k] - (r.refToQuery)[posOnRef - windowLength];
+		unsigned int spanOnQuery = (r.refToQuery)[posOnRef + windowLength - k + 1] - (r.refToQuery)[posOnRef - windowLength];
 		assert(spanOnQuery >= 0);
 
 		/*get the events that correspond to the read snippet */
 		bool first = true;
 		if ( r.isReverse ){
 
-			for ( unsigned int j = readHead; j >= 0; j-- ){
+			for ( int j = readHead; j >= 0; j-- ){
+
+				assert(j >= 0);
+				assert(posOnRef - windowLength >= 0);
+				assert(posOnRef + windowLength - k + 1 < (r.refToQuery).size());
 
 				/*if an event has been aligned to a position in the window, add it */
-				if ( (r.eventAlignment)[j].second >= (r.refToQuery)[posOnRef - windowLength] and (r.eventAlignment)[j].second < (r.refToQuery)[posOnRef + windowLength-k] ){
+				if ( (r.refToQuery)[posOnRef - windowLength] <= (r.eventAlignment)[j].second and (r.eventAlignment)[j].second < (r.refToQuery)[posOnRef + windowLength - k + 1] ){
 
 					if (first){
 						readHead = j;
@@ -399,10 +393,7 @@ HMMdetection llAcrossRead( read &r, unsigned int windowLength){
 					}
 					
 					double ev = (r.events)[(r.eventAlignment)[j].first].mean;
-				
-					if (ev > 0. and ev < 250.0){
-						eventSnippet.push_back(ev);
-					}
+					eventSnippet.push_back(ev);
 				}
 
 				/*stop once we get to the end of the window */
@@ -416,8 +407,11 @@ HMMdetection llAcrossRead( read &r, unsigned int windowLength){
 		else{
 			for ( unsigned int j = readHead; j < (r.eventAlignment).size(); j++ ){
 
+				assert(posOnRef - windowLength >= 0);
+				assert(posOnRef + windowLength - k + 1 < (r.refToQuery).size());				
+
 				/*if an event has been aligned to a position in the window, add it */
-				if ( (r.eventAlignment)[j].second >= (r.refToQuery)[posOnRef - windowLength] and (r.eventAlignment)[j].second < (r.refToQuery)[posOnRef + windowLength-k] ){
+				if ( (r.refToQuery)[posOnRef - windowLength] <= (r.eventAlignment)[j].second and (r.eventAlignment)[j].second < (r.refToQuery)[posOnRef + windowLength - k + 1] ){
 
 					if (first){
 						readHead = j;
@@ -426,14 +420,11 @@ HMMdetection llAcrossRead( read &r, unsigned int windowLength){
 					}
 					
 					double ev = (r.events)[(r.eventAlignment)[j].first].mean;
-					
-					if (ev > 0. and ev < 250.0){
-						eventSnippet.push_back(ev);
-					}
+					eventSnippet.push_back(ev);
 				}
 
 				/*stop once we get to the end of the window */
-				if ( (r.eventAlignment)[j].second >= (r.refToQuery)[posOnRef + windowLength-k] ) break;
+				if ( (r.eventAlignment)[j].second >= (r.refToQuery)[posOnRef + windowLength - k + 1] ) break;
 			}
 		}
 
@@ -455,7 +446,9 @@ HMMdetection llAcrossRead( read &r, unsigned int windowLength){
 
 		//calculate where we are on the assembly - if we're a reverse complement, we're moving backwards down the reference genome
 		int globalPosOnRef;
+		assert(posOnQuery < (r.basecall).size());
 		std::string kmerQuery = (r.basecall).substr(posOnQuery, k);
+		assert(posOnRef < (r.referenceSeqMappedTo).size());		
 		std::string kmerRef = (r.referenceSeqMappedTo).substr(posOnRef, k);
 		if ( r.isReverse ){
 
@@ -574,7 +567,7 @@ DNNdetection runCNN(std::shared_ptr<AlignedRead> r, std::shared_ptr<ModelSession
 		exit (EXIT_FAILURE);
 	}
 
-	unsigned int outputFields = 3;//2;//3;
+	unsigned int outputFields = 3;
 
 	//get positions on the read reference to write the output
 	std::vector<unsigned int> positions = r -> getPositions();
@@ -747,7 +740,7 @@ int detect_main( int argc, char** argv ){
 				r.readID = s_queryName;
 
 				//iterate on the cigar string to fill up the reference-to-query coordinate map
-				parseCigar(buffer[i], r.refToQuery, r.refStart, r.refEnd);
+				parseCigar(buffer[i], r.refToQuery, r.queryToRef, r.refStart, r.refEnd);
 
 				//get the name of the reference mapped to
 				std::string mappedTo(bam_hdr -> target_name[buffer[i] -> core.tid]);
@@ -781,10 +774,8 @@ int detect_main( int argc, char** argv ){
 				
 				std::string readOut;
 
-				
 				HMMdetection hmm_likelihood = llAcrossRead(r, 12);
 				readOut = hmm_likelihood.stdout;
-				
 				
 				/*
 				

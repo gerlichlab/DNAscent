@@ -37,8 +37,7 @@ static const char *help=
 "  -t,--threads              number of threads (default is 1 thread),\n"
 "  -m,--maxReads             maximum number of reads to consider,\n"
 "  -q,--quality              minimum mapping quality (default is 20),\n"
-"  -l,--length               minimum read length in bp (default is 100),\n"
-"     --printRaw             print raw signal instead of events.\n"
+"  -l,--length               minimum read length in bp (default is 100).\n"
 "Written by Michael Boemo, Department of Pathology, University of Cambridge.\n"
 "Please submit bug reports to GitHub Issues (https://github.com/MBoemo/DNAscent/issues).";
 
@@ -47,7 +46,7 @@ struct Arguments {
 	std::string referenceFilename;
 	std::string outputFilename;
 	std::string indexFilename;
-	bool printRaw, capReads;
+	bool capReads;
 	int minQ, maxReads;
 	int minL;
 	unsigned int threads;
@@ -78,7 +77,6 @@ Arguments parseAlignArguments( int argc, char** argv ){
 	args.threads = 1;
 	args.minQ = 20;
 	args.minL = 100;
-	args.printRaw = false;
 	args.capReads = false;
 	args.maxReads = 0;
 
@@ -136,11 +134,6 @@ Arguments parseAlignArguments( int argc, char** argv ){
 			args.capReads = true;
 			args.maxReads = std::stoi( strArg.c_str() );
 			i+=2;
-		}
-		else if ( flag == "--printRaw" ){
-
-			args.printRaw = true;
-			i+=1;
 		}
 		else throw InvalidOption( flag );
 	}
@@ -531,7 +524,7 @@ bool referenceDefined(std::string &readSnippet){
 }
 
 
-std::shared_ptr<AlignedRead> eventalign( read &r, unsigned int totalWindowLength, std::map<unsigned int, std::pair<double,double>> &analogueCalls, bool printRaw){
+std::shared_ptr<AlignedRead> eventalign( read &r, unsigned int totalWindowLength, std::map<unsigned int, std::pair<double,double>> &analogueCalls){
 
 	//get the positions on the reference subsequence where we could attempt to make a call
 	std::string strand;
@@ -689,35 +682,9 @@ std::shared_ptr<AlignedRead> eventalign( read &r, unsigned int totalWindowLength
 
 			if (label == "M"){
 				std::pair<double,double> meanStd = Pore_Substrate_Config.pore_model[kmer2index(kmerStrand, k)];
-				
-				
-				if (printRaw){
-				
-					for (unsigned int idx_raw = 0; idx_raw < eventSnippet[evIdx].raw.size(); idx_raw++){
-						double scaledEvent = (eventSnippet[evIdx].raw[idx_raw] - r.scalings.shift) / r.scalings.scale;
-						if (analogueCalls.count(evPos) > 0){
-							ar -> stdout += std::to_string(evPos) 
-								      + "\t" + kmerRef 
-								      + "\t" + std::to_string(scaledEvent) 
-								      + "\t" + kmerStrand 
-								      + "\t" + std::to_string(meanStd.first) 
-								      + "\t" + std::to_string(analogueCalls.at(evPos).first) 
-								      + "\t" + std::to_string(analogueCalls.at(evPos).second) 					          
-								      + "\n";
-						}
-						else{
-							ar -> stdout += std::to_string(evPos) 
-								      + "\t" + kmerRef 
-								      + "\t" + std::to_string(scaledEvent) 
-								      + "\t" + kmerStrand 
-								      + "\t" + std::to_string(meanStd.first) 
-								      + "\n";
-							ar -> addSignal(kmerStrand, evPos, scaledEvent, indelScore);
-						}
-					}
-				}
-				else{
-					double scaledEvent = (eventSnippet_means[evIdx] - r.scalings.shift) / r.scalings.scale;
+
+				for (unsigned int idx_raw = 0; idx_raw < eventSnippet[evIdx].raw.size(); idx_raw++){
+					double scaledEvent = (eventSnippet[evIdx].raw[idx_raw] - r.scalings.shift) / r.scalings.scale;
 					if (analogueCalls.count(evPos) > 0){
 						ar -> stdout += std::to_string(evPos) 
 							      + "\t" + kmerRef 
@@ -736,20 +703,14 @@ std::shared_ptr<AlignedRead> eventalign( read &r, unsigned int totalWindowLength
 							      + "\t" + std::to_string(meanStd.first) 
 							      + "\n";
 						ar -> addSignal(kmerStrand, evPos, scaledEvent, indelScore);
-					}				
-				}
-			}
-			else if (label == "I" and evIdx < lastM_ev){ //don't print insertions after the last match because we're going to align these in the next segment
-				if (printRaw){			
-					for (unsigned int idx_raw = 0; idx_raw < eventSnippet[evIdx].raw.size(); idx_raw++){
-						double scaledEvent = (eventSnippet[evIdx].raw[idx_raw] - r.scalings.shift) / r.scalings.scale;
-						ar -> stdout += std::to_string(evPos) + "\t" + kmerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::string(k, 'N') + "\t" + "0" + "\n";
 					}
 				}
-				else{
 
-					double scaledEvent = (eventSnippet_means[evIdx] - r.scalings.shift) / r.scalings.scale;
-					ar -> stdout += std::to_string(evPos) + "\t" + kmerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::string(k, 'N') + "\t" + "0" + "\n";				
+			}
+			else if (label == "I" and evIdx < lastM_ev){ //don't print insertions after the last match because we're going to align these in the next segment
+				for (unsigned int idx_raw = 0; idx_raw < eventSnippet[evIdx].raw.size(); idx_raw++){
+					double scaledEvent = (eventSnippet[evIdx].raw[idx_raw] - r.scalings.shift) / r.scalings.scale;
+					ar -> stdout += std::to_string(evPos) + "\t" + kmerRef + "\t" + std::to_string(scaledEvent) + "\t" + std::string(k, 'N') + "\t" + "0" + "\n";
 				}
 			}
 			
@@ -858,7 +819,7 @@ int align_main( int argc, char** argv ){
 				r.readID = s_queryName;
 
 				//iterate on the cigar string to fill up the reference-to-query coordinate map
-				parseCigar(buffer[i], r.refToQuery, r.refStart, r.refEnd);
+				parseCigar(buffer[i], r.refToQuery, r.queryToRef, r.refStart, r.refEnd);
 
 				//get the name of the reference mapped to
 				std::string mappedTo(bam_hdr -> target_name[buffer[i] -> core.tid]);
@@ -891,7 +852,7 @@ int align_main( int argc, char** argv ){
 					continue;
 				}
 
-				std::shared_ptr<AlignedRead> ar = eventalign( r, Pore_Substrate_Config.windowLength_align, placeholder_analogueCalls, args.printRaw);
+				std::shared_ptr<AlignedRead> ar = eventalign( r, Pore_Substrate_Config.windowLength_align, placeholder_analogueCalls);
 
 				if (not ar -> QCpassed){
 					failed++;
