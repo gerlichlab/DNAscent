@@ -23,31 +23,18 @@ maxRaw = 20
 baseToInt = {'A':0, 'T':1, 'G':2, 'C':3}
 intToBase = {0:'A', 1:'T', 2:'G', 3:'C'}
 
-
 #-------------------------------------------------
 #
 class trainingRead:
 
-	def __init__(self, read_sixMers, read_signals, read_modelMeans, read_positions, read_analogueCalls, readID, label):
-		self.sixMers = read_sixMers[0:maxLen]
+	def __init__(self, read_kmers, read_signals, read_modelMeans, read_positions, read_EdUCalls, read_BrdUCalls, readID, label):
+		self.kmers = read_kmers[0:maxLen]
 		self.signal = read_signals[0:maxLen]
 		self.modelMeans = read_modelMeans[0:maxLen]
-		self.analogueCalls = read_analogueCalls[0:maxLen]
 		self.readID = readID
 		self.label = label
-		
-		#make proto sequence training tensor
-		sequence_tensor = []
-		for i, s in enumerate(self.sixMers):		
-
-			#base
-			oneHot = [0]*4
-			index = baseToInt[s[0]]
-			oneHot[index] = 1
-			oneHot.append(self.modelMeans[i])
-			oneHot.append(float(len(self.signal[i])))
-			sequence_tensor.append(oneHot)
-		self.sequence_tensor = np.array(sequence_tensor)
+		self.BrdUCalls = read_BrdUCalls[0:maxLen]
+		self.EdUCalls = read_EdUCalls[0:maxLen]
 
 		#make proto signal training tensor
 		signal_tensor = []
@@ -83,7 +70,8 @@ read_kmers = []
 read_signals = []
 read_modelSignal = []
 read_positions = []
-read_analogueCalls = []
+read_EdUCalls = []
+read_BrdUCalls = []
 
 pos_signals = []
 
@@ -110,9 +98,9 @@ for line in f:
 				
 					readsLoaded += 1
 					if readsLoaded > maxReads:
-						break
+						sys.exit()
 				
-					tr = trainingRead(read_kmers[maxLen*s:maxLen*(s+1)], read_signals[maxLen*s:maxLen*(s+1)], read_modelSignal[maxLen*s:maxLen*(s+1)], read_positions[maxLen*s:maxLen*(s+1)], read_analogueCalls[maxLen*s:maxLen*(s+1)], prevReadID, label)
+					tr = trainingRead(read_kmers[maxLen*s:maxLen*(s+1)], read_signals[maxLen*s:maxLen*(s+1)], read_modelSignal[maxLen*s:maxLen*(s+1)], read_positions[maxLen*s:maxLen*(s+1)], read_EdUCalls[maxLen*s:maxLen*(s+1)], read_BrdUCalls[maxLen*s:maxLen*(s+1)], prevReadID, label)
 					saveRead(tr, prevReadID+'_slice'+str(s), outputPath)
 
 		#reset for read
@@ -120,11 +108,10 @@ for line in f:
 		read_signals = []
 		read_modelSignal = []
 		read_positions = []
-		read_analogueCalls = []
-
+		read_EdUCalls = []
+		read_BrdUCalls = []
 
 		#reset for position
-		pos_eventMeans = []
 		prevPos = -1
 
 		splitLine = line.rstrip().split()
@@ -157,7 +144,8 @@ for line in f:
 			read_signals.append(pos_signals)
 			read_modelSignal.append(modelSignal)
 			read_positions.append(prevPos)
-			read_analogueCalls.append(analogueCall)
+			read_EdUCalls.append(EdUCall)
+			read_BrdUCalls.append(BrdUCall)
 
 			#reset for position
 			pos_signals = []
@@ -169,9 +157,11 @@ for line in f:
 		prevReadID = readID
 		prevPos = pos
 
-		analogueCall = '-'
+		BrdUCall = '-'
+		EdUCall = '-'
 		if len(splitLine) >= 6:
-			analogueCall = splitLine[5]
+			EdUCall = splitLine[5]
+			BrdUCall = splitLine[6]
 			
 		pos_signals.append(signal)
 

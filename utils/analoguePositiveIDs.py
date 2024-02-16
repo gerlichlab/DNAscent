@@ -4,8 +4,8 @@ matplotlib.use('Agg')
 from matplotlib import pyplot as plt
 
 
-callThreshold = 2.5
-readFractionThreshold = 0.2
+callThreshold = 1.5#1.
+readFractionThreshold = 0.3 #0.1 for EdU, 0.2 for BrdU
 
 f = open(sys.argv[1],'r')
 analogueCalls = 0
@@ -13,7 +13,7 @@ numAttempts = 0
 
 g = open('analoguePositiveIDs.txt','w')
 
-maxReads = 1000000
+maxReads = 5000#5000000
 readCount = 0
 
 allFractions = []

@@ -6,7 +6,8 @@ f_IDs = sys.argv[1]
 IDs = []
 f = open(f_IDs,'r')
 for line in f:
-	IDs.append(line.rstrip())
+	splitLine = line.rstrip().split()
+	IDs.append(splitLine[0])
 f.close()
 
 f_alignment = sys.argv[2]

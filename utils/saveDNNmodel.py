@@ -79,14 +79,22 @@ def convolutional_block(X, f, filters, stage, block, s=1):
 
 #-------------------------------------------------
 #
-def buildModel(input_shape = (64, 64, 3), classes = 6):
+def buildModel(classes, core_embedding_layer, residual_embedding_layer):
     
-    # Define the input as a tensor with shape input_shape
-    sequence_input = Input(shape=(None,5))
+    #core base sequence input
+    core_sequence_input = Input(shape=(1))
+    X_sequence_core = core_embedding_layer(core_sequence_input)
     
-    signal_input = Input(shape=(None,3))
+    #residual base sequence input
+    residual_sequence_input = Input(shape=(1))
+    X_sequence_residual = residual_embedding_layer(residual_sequence_input)    
+    
+    signal_input = Input(shape=(None,maxEvents, 1))
+    X_signal = TimeDistributed(Masking(mask_value=0.0))(signal_input)
+    X_signal = TimeDistributed(GRU(16,return_sequences=True))(X_signal)
+    X_signal = TimeDistributed(GRU(16,return_sequences=False))(X_signal)
 
-    X = Concatenate(axis=-1)([sequence_input,signal_input])
+    X = Concatenate(axis=-1)([X_sequence_core, X_sequence_residual, X_signal])
 
     # Stage 1
     X = Conv1D(64, 3, strides = 1, padding='same', name = 'conv1', kernel_initializer = glorot_uniform(seed=0))(X)
@@ -120,16 +128,30 @@ def buildModel(input_shape = (64, 64, 3), classes = 6):
 
     # Output layer
     X = TimeDistributed(Dense(classes, activation='softmax', name='fc' + str(classes), kernel_initializer = glorot_uniform(seed=0)))(X)
-    
-    
+  
     # Create model
-    model = Model(inputs = [sequence_input, signal_input] , outputs = X, name='R10_BrdU_EdU')
+    model = Model(inputs = [core_sequence_input, residual_sequence_input, signal_input] , outputs = X, name='R10_BrdU_EdU')
 
     return model
 
 #-------------------------------------------------
 #
-model = buildModel((None,15,6), 3)
+
+
+
+
+# core embedding model
+core_embedding_model = tf.keras.models.load_model('/home/mb915/rds/hpc-work/development/DNAscent_R10align/DNAscent_dev/utils/kmer_core_embedding')
+core_embedding_weights = core_embedding_model.get_layer('embedding')
+core_embedding_weights._name = 'embedding_core'
+core_embedding_weights.trainable = False
+
+residual_embedding_model = tf.keras.models.load_model('/home/mb915/rds/hpc-work/development/DNAscent_R10align/DNAscent_dev/utils/kmer_residual_embedding')
+residual_embedding_weights = residual_embedding_model.get_layer('embedding')
+residual_embedding_weights._name = 'embedding_residual'
+residual_embedding_weights.trainable = False
+
+model = buildModel(3, core_embedding_weights, residual_embedding_weights)
 op = Adam(learning_rate=0.0001)
 model.compile(optimizer=op, metrics=['accuracy'], loss='categorical_crossentropy', sample_weight_mode="temporal")
 print(model.summary())

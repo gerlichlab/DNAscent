@@ -102,7 +102,7 @@ void fast5_getSignal( read &r ){
 }
 
 
-PoreParameters estimateScaling_theilSen(std::vector< double > &signals, std::vector<unsigned int> &kmer_ranks, PoreParameters s){
+PoreParameters estimateScaling_theilSen(std::vector< double > &signals, std::vector<unsigned int> &kmer_ranks, PoreParameters s, bool useFitPoreModel){
 
 	assert(signals.size() == kmer_ranks.size());
 
@@ -130,7 +130,13 @@ PoreParameters estimateScaling_theilSen(std::vector< double > &signals, std::vec
 	
 		x.push_back( (signals[i]-s.shift)/s.scale );
 
-		std::pair<double,double> meanStd = Pore_Substrate_Config.pore_model[kmer_ranks[i]];	
+		std::pair<double,double> meanStd;
+		if (useFitPoreModel){
+			meanStd = Pore_Substrate_Config.unlabelled_model[kmer_ranks[i]];		
+		}
+		else{
+			meanStd = Pore_Substrate_Config.pore_model[kmer_ranks[i]];
+		}	
 		double kmer_mean = meanStd.first;
 		y.push_back(kmer_mean);
 		i += skipInterval;
@@ -160,8 +166,14 @@ PoreParameters estimateScaling_theilSen(std::vector< double > &signals, std::vec
 
 	std::sort(intercepts.begin(), intercepts.end());
 	double intercept_median = intercepts[ intercepts.size() / 2 ];
-	
 	PoreParameters params_ts;
+	
+	if (slope_median == 0.){
+	
+		params_ts.shift = -1.;
+		params_ts.scale = -1.;
+		return params_ts;		
+	}
 	
 	double scale_corr_factor = 1. / slope_median;
 	double shift_corr_factor = -intercept_median / slope_median;
@@ -181,9 +193,16 @@ PoreParameters estimateScaling_theilSen(std::vector< double > &signals, std::vec
 //start: adapted from nanopolish (https://github.com/jts/nanopolish)
 //licensed under MIT
 
-inline float logProbabilityMatch(unsigned int kmerIndex, event e, double shift, double scale){
+inline float logProbabilityMatch(unsigned int kmerIndex, event e, double shift, double scale, bool useFitPoreModel){
 
-	std::pair<double,double> meanStd = Pore_Substrate_Config.pore_model[kmerIndex]; 
+	std::pair<double,double> meanStd;
+	if (useFitPoreModel){
+		meanStd = Pore_Substrate_Config.unlabelled_model[kmerIndex];		
+	}
+	else{
+		meanStd = Pore_Substrate_Config.pore_model[kmerIndex];
+	}
+
 	double mu = meanStd.first;
 	double sigma = meanStd.second;
 	
@@ -206,7 +225,7 @@ inline float logProbabilityMatch(unsigned int kmerIndex, event e, double shift, 
 #define move_down(curr_band) { curr_band.event_idx + 1, curr_band.kmer_idx }
 #define move_right(curr_band) { curr_band.event_idx, curr_band.kmer_idx + 1 }
 
-std::pair<std::vector<double>, std::vector<unsigned int>> adaptive_banded_simple_event_align( read &r, std::vector<unsigned int> &kmer_ranks_query, std::vector<unsigned int> &kmer_ranks_ref ){
+std::pair<std::vector<double>, std::vector<unsigned int>> adaptive_banded_simple_event_align( read &r, std::vector<unsigned int> &kmer_ranks_query, std::vector<unsigned int> &kmer_ranks_ref, bool useFitPoreModel ){
 
 	//benchmarking
 	//std::chrono::steady_clock::time_point tp1 = std::chrono::steady_clock::now();
@@ -352,7 +371,7 @@ std::pair<std::vector<double>, std::vector<unsigned int>> adaptive_banded_simple
 			float left = is_offset_valid(offset_left) ? bands[band_idx - 1][offset_left] : -INFINITY;
 			float diag = is_offset_valid(offset_diag) ? bands[band_idx - 2][offset_diag] : -INFINITY;
  
-			float lp_emission = logProbabilityMatch(kmer_rank, r.events[event_idx], r.scalings.shift, r.scalings.scale);
+			float lp_emission = logProbabilityMatch(kmer_rank, r.events[event_idx], r.scalings.shift, r.scalings.scale, useFitPoreModel);
 
 			float score_d = diag + lp_step + lp_emission;
 			float score_u = up + lp_stay + lp_emission;
@@ -421,7 +440,7 @@ std::pair<std::vector<double>, std::vector<unsigned int>> adaptive_banded_simple
 
 		// qc stats
 		unsigned int kmer_rank = kmer_ranks_query[curr_kmer_idx];
-		float logProbability = logProbabilityMatch(kmer_rank, r.events[curr_event_idx], r.scalings.shift, r.scalings.scale);
+		float logProbability = logProbabilityMatch(kmer_rank, r.events[curr_event_idx], r.scalings.shift, r.scalings.scale, useFitPoreModel);
 		sum_emission += logProbability;
 
 		n_aligned_events += 1;
@@ -567,7 +586,7 @@ std::pair<double, double> linear_regression(std::vector<double> x, std::vector<d
 }
 
 
-PoreParameters estimateScaling_quantiles(std::vector< double > &signal_means, std::string &sequence, std::vector<unsigned int> &kmer_ranks ){
+PoreParameters estimateScaling_quantiles(std::vector< double > &signal_means, std::string &sequence, std::vector<unsigned int> &kmer_ranks, bool useFitPoreModel ){
 
 	PoreParameters s;
 
@@ -578,7 +597,15 @@ PoreParameters estimateScaling_quantiles(std::vector< double > &signal_means, st
 	for ( unsigned int i = 0; i < kmer_ranks.size(); i ++ ){
 
 		assert(kmer_ranks[i] < Pore_Substrate_Config.pore_model.size());
-		std::pair<double,double> meanStd = Pore_Substrate_Config.pore_model[kmer_ranks[i]];
+		
+		std::pair<double,double> meanStd;
+		if (useFitPoreModel){
+			meanStd = Pore_Substrate_Config.unlabelled_model[kmer_ranks[i]];		
+		}
+		else{
+			meanStd = Pore_Substrate_Config.pore_model[kmer_ranks[i]];
+		}
+		
 		double kmer_mean = meanStd.first;
 		model_means.push_back(kmer_mean);
 	}
@@ -595,7 +622,7 @@ PoreParameters estimateScaling_quantiles(std::vector< double > &signal_means, st
 }
 
 
-void normaliseEvents( read &r ){
+void normaliseEvents( read &r, bool useFitPoreModel ){
 
 	try{
 
@@ -619,7 +646,7 @@ void normaliseEvents( read &r ){
 		if (et.event[i].mean > 0.) {
 
 			if (i > 0){
-			
+
 				//TESTING
 				/*
 				std::cout << mean << std::endl;
@@ -628,8 +655,7 @@ void normaliseEvents( read &r ){
 					std::cout << "\t" << r.raw[j] << std::endl;
 				}
 				*/
-				
-				
+
 				//build the previous event
 				event e;
 				e.mean = mean;
@@ -646,7 +672,7 @@ void normaliseEvents( read &r ){
 			}
 		}
 	}
-	
+	free(et.event);
 	
 	// Precompute k-mer ranks for rescaling and banded alignment - query sequence
 	size_t k = Pore_Substrate_Config.kmer_len;
@@ -666,13 +692,16 @@ void normaliseEvents( read &r ){
 	}
 
 	//normalise by quantile scaling by comparing the raw signal against the reference sequence
-	r.scalings = estimateScaling_quantiles( event_means, r.referenceSeqMappedTo, kmer_ranks_ref );
+	r.scalings = estimateScaling_quantiles( event_means, r.referenceSeqMappedTo, kmer_ranks_ref, useFitPoreModel );
 
 	// Rough alignment of signals to query sequence
-	std::pair<std::vector<double>, std::vector<unsigned int>> segmentation = adaptive_banded_simple_event_align(r, kmer_ranks_query, kmer_ranks_ref);
+	std::pair<std::vector<double>, std::vector<unsigned int>> segmentation = adaptive_banded_simple_event_align(r, kmer_ranks_query, kmer_ranks_ref, useFitPoreModel);
 
 	//fine tune scaling parameters
-	r.scalings = estimateScaling_theilSen(segmentation.first, segmentation.second, r.scalings );
+	r.scalings = estimateScaling_theilSen(segmentation.first, segmentation.second, r.scalings, useFitPoreModel );
+	
+	//fail the read if it fails scaling refminement
+	if (r.scalings.shift == -1.) r.eventAlignment.clear();
 
 	r.scalings.eventsPerBase = (double) et.n / (double) (r.basecall.size() - k);
 }

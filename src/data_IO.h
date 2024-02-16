@@ -71,13 +71,22 @@ struct read{
 			std::cerr << "shift" << " " << scalings.shift << std::endl;
 			std::cerr << "scale" << " " << scalings.scale << std::endl;
 		}
+		void clean(void){
+			events.clear();
+			raw.clear();
+			eventAlignment.clear();
+			scalings.shift = -1.;
+			scalings.scale = -1.;
+			scalings.eventsPerBase = -1.;
+		}
 };
 
 
 /*function prototypes */
 std::map< std::string, std::string > import_reference( std::string );
 std::map< std::string, std::string > import_reference_pfasta( std::string );
-std::vector< std::pair< double, double > > import_poreModel( std::string, unsigned int);
+std::vector< std::pair< double, double > > import_poreModel_staticStdv( std::string, unsigned int);
+std::vector< std::pair< double, double > > import_poreModel_fitStdv( std::string, unsigned int);
 std::string getExePath(void);
 std::string getGitCommit(void);
 std::string writeDetectHeader(std::string, std::string, std::string, int, bool, unsigned int, unsigned int, bool);

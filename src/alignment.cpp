@@ -842,7 +842,8 @@ int align_main( int argc, char** argv ){
 					r.isReverse = true;
 				}
 
-				normaliseEvents(r);
+				bool useFitPoreModel = false;
+				normaliseEvents(r, useFitPoreModel);
 
 				//catch reads with rough event alignments that fail the QC
 				if ( r.eventAlignment.size() == 0 ){

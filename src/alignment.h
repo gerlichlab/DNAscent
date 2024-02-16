@@ -34,6 +34,7 @@ class AlignedPosition{
 		unsigned int refPos;
 		std::vector<double> signal;
 		double eventAlignQuality;
+		std::map<std::string, int> base2index = {{"A",0}, {"T",1}, {"G",2}, {"C",3}};
 
 	public:
 		AlignedPosition(std::string kmer, unsigned int refPos, int quality){
@@ -51,6 +52,33 @@ class AlignedPosition{
 
 			return kmer;
 		}
+		unsigned int getCoreIndex(void){
+			std::string kmer_subseq = kmer.substr(2,5);
+			unsigned int kmer_len = kmer_subseq.size();
+			unsigned int p = 1;
+			unsigned int r = 0;
+			for (size_t i = 0; i < kmer_len; i++){
+
+				r += base2index[kmer_subseq.substr(kmer_len-i-1,1)] * p;
+				p *= 4;
+			}
+			r += 1;
+			return r;
+		}
+		unsigned int getResidualIndex(void){
+			std::string kmer_subseq = kmer.substr(0,2) + kmer.substr(7,2);
+			assert(kmer_subseq.size() == 4);
+			unsigned int kmer_len = kmer_subseq.size();
+			unsigned int p = 1;
+			unsigned int r = 0;
+			for (size_t i = 0; i < kmer_len; i++){
+
+				r += base2index[kmer_subseq.substr(kmer_len-i-1,1)] * p;
+				p *= 4;
+			}
+			r += 1;
+			return r;
+		}
 		unsigned int getRefPos(void){
 
 			return refPos;
@@ -64,14 +92,6 @@ class AlignedPosition{
 			assert(signal.size() > 0);
 			assert(kmer.substr(0,1) == "A" || kmer.substr(0,1) == "T" || kmer.substr(0,1) == "G" || kmer.substr(0,1) == "C");
 			
-			std::vector<float> signal_stats;
-			double signalMean = vectorMean(signal);
-			signal_stats.push_back(signalMean);
-			signal_stats.push_back(vectorStdv(signal,signalMean));			
-			signal_stats.push_back((float) signal.size());			
-			return signal_stats;
-			
-			/*
 			std::vector<float> padded_signal;
 
 			for (size_t i = 0; i < signal.size(); i++){
@@ -92,7 +112,6 @@ class AlignedPosition{
 
 			assert(padded_signal.size() == RAWDEPTH);
 			return padded_signal;
-			*/
 		}
 		std::vector<float> makeSequenceFeature(void){
 
@@ -200,26 +219,46 @@ class AlignedRead{
 			}
 			return tensor;
 		}
-		std::vector<float> makeSequenceTensor(void){
+		std::vector<float> makeCoreSequenceTensor(void){
 
 			assert(strand == "fwd" || strand == "rev");
 			std::vector<float> tensor;
-			tensor.reserve(NFEATURES * positions.size());
+			tensor.reserve(positions.size());
 
 			if (strand == "fwd"){
 
 				for (auto p = positions.begin(); p != positions.end(); p++){
-
-					std::vector<float> feature = (p -> second) -> makeSequenceFeature();
-					tensor.insert(tensor.end(), feature.begin(), feature.end());
+				
+					tensor.push_back( (p -> second) -> getCoreIndex() );
 				}
 			}
 			else{
 
 				for (auto p = positions.rbegin(); p != positions.rend(); p++){
 
-					std::vector<float> feature = (p -> second) -> makeSequenceFeature();
-					tensor.insert(tensor.end(), feature.begin(), feature.end());
+					tensor.push_back( (p -> second) -> getCoreIndex() );
+				}
+			}
+			return tensor;
+		}
+		std::vector<float> makeResidualSequenceTensor(void){
+
+			assert(strand == "fwd" || strand == "rev");
+			std::vector<float> tensor;
+			tensor.reserve(positions.size());
+
+			if (strand == "fwd"){
+
+				for (auto p = positions.begin(); p != positions.end(); p++){
+				
+					tensor.push_back( (p -> second) -> getResidualIndex() );
+				}
+			}
+			else{
+
+				for (auto p = positions.rbegin(); p != positions.rend(); p++){
+
+					tensor.push_back( (p -> second) -> getResidualIndex() );
 				}
 			}
 			return tensor;
@@ -336,11 +375,11 @@ class AlignedRead{
 		}
 		std::vector<size_t> getSignalShape(void){
 
-			return {positions.size(), 3};
+			return {positions.size(), RAWDEPTH, 1};
 		}
 		std::vector<size_t> getSequenceShape(void){
 
-			return {positions.size(), NFEATURES};
+			return {positions.size()};
 		}
 };
 

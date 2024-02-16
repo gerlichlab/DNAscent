@@ -183,6 +183,7 @@ int data_main( int argc, char** argv ){
 	std::string modelPath = pathExe + Pore_Substrate_Config.fn_dnn_model;
 	std::string input1_layer_name = Pore_Substrate_Config.dnn_model_inputLayer1;
 	std::string input2_layer_name = Pore_Substrate_Config.dnn_model_inputLayer2;
+	std::string input3_layer_name = Pore_Substrate_Config.dnn_model_inputLayer3;
 
 	std::pair< std::shared_ptr<ModelSession>, std::shared_ptr<TF_Graph *> > modelPair;
 
@@ -200,12 +201,13 @@ int data_main( int argc, char** argv ){
 
 	auto input1_op = TF_GraphOperationByName(*(Graph.get()), input1_layer_name.c_str());
 	auto input2_op = TF_GraphOperationByName(*(Graph.get()), input2_layer_name.c_str());
-	if(!input1_op or !input2_op){
+	auto input3_op = TF_GraphOperationByName(*(Graph.get()), input3_layer_name.c_str());
+	if(!input1_op or !input2_op or !input3_op){
 		std::cout << "bad input name" << std::endl;
 		exit(0);
 	}
 
-	std::vector<TF_Output> inputOps = {{input1_op,0}, {input2_op,0}};
+	std::vector<TF_Output> inputOps = {{input1_op,0}, {input2_op,0}, {input3_op,0}};
 
 	//import fasta reference
 	std::map< std::string, std::string > reference = import_reference_pfasta( args.referenceFilename );
@@ -306,24 +308,41 @@ int data_main( int argc, char** argv ){
 					r.isReverse = true;
 				}
 
-				normaliseEvents(r);
+				//use the fit pore model for HMM calling
+				//bool useFitPoreModel = true;
+				//normaliseEvents(r, useFitPoreModel);
+				//if ( r.eventAlignment.size() == 0 ){
+				//	
+				//	failed++;
+				//	prog++;
+				//	continue;
+				//}
+				//HMMdetection hmm_likelihood = llAcrossRead(r, 12);
+				
+				//clear the alignments, scalings, and signals from the read and re-align using cannonical pore model
+				//r.clean();
+				//useFitPoreModel = false;	
+				//normaliseEvents(r, useFitPoreModel);							
+				//if ( r.eventAlignment.size() == 0 ){
 
-				//catch reads with rough event alignments that fail the QC
+				//	failed++;
+				//	prog++;
+				//	continue;
+				//}
+				//std::shared_ptr<AlignedRead> ar_annotated = eventalign(r, Pore_Substrate_Config.windowLength_align, hmm_likelihood.refposToLikelihood);
+
+				//DNN
+				bool useFitPoreModel = false;	
+				normaliseEvents(r, useFitPoreModel);							
 				if ( r.eventAlignment.size() == 0 ){
 
 					failed++;
 					prog++;
 					continue;
 				}
-				
-				//HMM
-				HMMdetection hmm_likelihood = llAcrossRead(r, 12);
-				std::shared_ptr<AlignedRead> ar_annotated = eventalign(r, Pore_Substrate_Config.windowLength_align, hmm_likelihood.refposToLikelihood);
-
-				//DNN
-				//std::shared_ptr<AlignedRead> ar = eventalign( r, Pore_Substrate_Config.windowLength_align, placeholder_analogueCalls, true);
-				//DNNdetection DNN_probabilities = runCNN(ar,session,inputOps);
-				//std::shared_ptr<AlignedRead> ar_annotated = eventalign(r, Pore_Substrate_Config.windowLength_align, DNN_probabilities.refposToProbability, true);				
+				std::shared_ptr<AlignedRead> ar = eventalign( r, Pore_Substrate_Config.windowLength_align, placeholder_analogueCalls);
+				DNNdetection DNN_probabilities = runCNN(ar,session,inputOps);
+				std::shared_ptr<AlignedRead> ar_annotated = eventalign(r, Pore_Substrate_Config.windowLength_align, DNN_probabilities.refposToProbability);				
 
 				if (not ar_annotated -> QCpassed){
 					failed++;

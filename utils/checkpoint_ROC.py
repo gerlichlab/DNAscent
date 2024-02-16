@@ -16,11 +16,14 @@ import os
 import pickle
 import sys
 
+import tensorflow_probability as tfp
+from tensorflow_probability.python.layers import Convolution1DReparameterization, DenseReparameterization
+
 maxReads = 200
 
-dir_BrdUtest = '/home/mb915/rds/rds-boemo_3-tyMgmffheQw/2023_07_11_MJ_ONT_Brdu_48hr_training_v14_5khz_fast5/20_chkpt37/testReads_slices_HMM'
-dir_EdUtest = '/home/mb915/rds/rds-boemo_3-tyMgmffheQw/2023_07_05_MJ_ONT_RPE1_Edu_BrdU_trainingdata_V14_5khz/barcode24/20_chkpt37/testReads_slices_HMM'
-dir_Thymtest = '/home/mb915/rds/rds-boemo_3-tyMgmffheQw/2023_07_05_MJ_ONT_RPE1_Edu_BrdU_trainingdata_V14_5khz/barcode22/20_chkpt37/testReads_slices_HMM'
+dir_BrdUtest = '/home/mb915/rds/rds-boemo_3-tyMgmffheQw/2023_07_11_MJ_ONT_Brdu_48hr_training_v14_5khz_fast5/testReads_raw'
+dir_EdUtest = '/home/mb915/rds/rds-boemo_3-tyMgmffheQw/2023_07_05_MJ_ONT_RPE1_Edu_BrdU_trainingdata_V14_5khz/barcode24/testReads_raw'
+dir_Thymtest = '/home/mb915/rds/rds-boemo_3-tyMgmffheQw/2023_07_05_MJ_ONT_RPE1_Edu_BrdU_trainingdata_V14_5khz/barcode22/testReads_raw'
 
 probThresholds = np.array(range(0,21))/20.
 
@@ -29,6 +32,20 @@ maxEvents = 20
 
 dropout_prob = 0.5
 
+baseToInt = {'A':0, 'T':1, 'G':2, 'C':3}
+
+#-------------------------------------------------
+#
+def kmer2index(kmer,kmer_len):
+
+	p = 1;
+	r = 0;
+	for i in range(kmer_len):
+
+		r += baseToInt[kmer[kmer_len-i-1]] * p;
+		p *= 4;
+	return r+1
+	
 
 #-------------------------------------------------
 #
@@ -128,14 +145,22 @@ def convolutional_block(X, f, filters, stage, block, s=1):
 
 #-------------------------------------------------
 #
-def buildModel(input_shape = (64, 64, 3), classes = 6):
+def buildModel(classes, core_embedding_layer, residual_embedding_layer):
     
-    # Define the input as a tensor with shape input_shape
-    sequence_input = Input(shape=(None,5))
+    #core base sequence input
+    core_sequence_input = Input(shape=(2000))
+    X_sequence_core = core_embedding_layer(core_sequence_input)
     
-    signal_input = Input(shape=(None,3))
+    #residual base sequence input
+    residual_sequence_input = Input(shape=(2000))
+    X_sequence_residual = residual_embedding_layer(residual_sequence_input)    
+    
+    signal_input = Input(shape=(None,maxEvents, 1))
+    X_signal = TimeDistributed(Masking(mask_value=0.0))(signal_input)
+    X_signal = TimeDistributed(GRU(16,return_sequences=True))(X_signal)
+    X_signal = TimeDistributed(GRU(16,return_sequences=False))(X_signal)
 
-    X = Concatenate(axis=-1)([sequence_input,signal_input])
+    X = Concatenate(axis=-1)([X_sequence_core, X_sequence_residual, X_signal])
 
     # Stage 1
     X = Conv1D(64, 3, strides = 1, padding='same', name = 'conv1', kernel_initializer = glorot_uniform(seed=0))(X)
@@ -169,19 +194,26 @@ def buildModel(input_shape = (64, 64, 3), classes = 6):
 
     # Output layer
     X = TimeDistributed(Dense(classes, activation='softmax', name='fc' + str(classes), kernel_initializer = glorot_uniform(seed=0)))(X)
-    
-    
+  
     # Create model
-    model = Model(inputs = [sequence_input, signal_input] , outputs = X, name='R10_BrdU_EdU')
+    model = Model(inputs = [core_sequence_input, residual_sequence_input, signal_input] , outputs = X, name='R10_BrdU_EdU')
 
     return model
 
 
 #-------------------------------------------------
 #
-def testReadToTensor(t):
+def trainingReadToTensor(t):
 
-	return t.sequence_tensor, t.signal_tensor
+	core_seq = []
+	residual_seq = []
+	for kmer in t.kmers:
+		core = kmer[2:7]
+		residual = kmer[0:2] + kmer[7:]
+		core_seq.append(kmer2index(core,5))
+		residual_seq.append(kmer2index(residual,4))		
+
+	return np.array(core_seq).reshape(2000), np.array(residual_seq).reshape(2000), np.array(t.modelMeans).reshape(2000,1), t.signal_tensor
 
 
 #-------------------------------------------------
@@ -212,21 +244,25 @@ def checkTestDirectory(dirName, model):
 		testRead = pickle.load(open(pickledRead, "rb"))
 		
 		#build and shape input tensors
-		sequence_tensor, signal_tensor = testReadToTensor(testRead)
-		sequence_tensor = sequence_tensor.reshape(1,sequence_tensor.shape[0],sequence_tensor.shape[1])
+		core_sequence_tensor, residual_sequence_tensor, model_tensor, signal_tensor = trainingReadToTensor(testRead)
+		core_sequence_tensor = core_sequence_tensor.reshape(1,core_sequence_tensor.shape[0])
+		residual_sequence_tensor = residual_sequence_tensor.reshape(1,residual_sequence_tensor.shape[0])
+		model_tensor = model_tensor.reshape(1,model_tensor.shape[0],model_tensor.shape[1])
+		#print(signal_tensor.shape)
 		signal_tensor = signal_tensor.reshape(1,signal_tensor.shape[0],signal_tensor.shape[1],1)		
 
-		pred = model.predict((sequence_tensor,signal_tensor))
-		pred = pred.reshape(sequence_tensor.shape[1], 3)
+		pred = model.predict((core_sequence_tensor, residual_sequence_tensor, signal_tensor))
+		pred = pred.reshape(pred.shape[1], 3)
 		for i in range(pred.shape[0]):
 		
 			#skip non-thymidine positions
-			if testRead.analogueCalls[i] == '-':
+			if testRead.kmers[i][4] != 'T':
 				continue
 
 			thymProb = pred[i,0]
 			brduProb = pred[i,1]
 			eduProb = pred[i,2]
+			
 
 			for p in probThresholds:
 			
@@ -241,7 +277,18 @@ def checkTestDirectory(dirName, model):
 
 #-------------------------------------------------
 #
-model = buildModel(classes=3)
+# core embedding model
+core_embedding_model = tf.keras.models.load_model('/home/mb915/rds/hpc-work/development/DNAscent_R10align/DNAscent_dev/utils/kmer_core_embedding')
+core_embedding_weights = core_embedding_model.get_layer('embedding')
+core_embedding_weights._name = 'embedding_core'
+core_embedding_weights.trainable = False
+
+residual_embedding_model = tf.keras.models.load_model('/home/mb915/rds/hpc-work/development/DNAscent_R10align/DNAscent_dev/utils/kmer_residual_embedding')
+residual_embedding_weights = residual_embedding_model.get_layer('embedding')
+residual_embedding_weights._name = 'embedding_residual'
+residual_embedding_weights.trainable = False
+
+model = buildModel(3, core_embedding_weights, residual_embedding_weights)
 op = Adam(learning_rate=0.0001)
 model.compile(optimizer=op, metrics=['accuracy'], loss='categorical_crossentropy', sample_weight_mode="temporal")
 print(model.summary())

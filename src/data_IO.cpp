@@ -201,10 +201,9 @@ std::string getGitCommit(void){
 }
 
 
-std::map<std::string, int> base2index = {{"A",0}, {"T",1}, {"G",2}, {"C",3}};
-
-
 unsigned int kmer2index(std::string &kmer, unsigned int kmer_len){
+
+	std::map<std::string, int> base2index = {{"A",0}, {"T",1}, {"G",2}, {"C",3}};
 
 	unsigned int p = 1;
 	unsigned int r = 0;
@@ -217,7 +216,56 @@ unsigned int kmer2index(std::string &kmer, unsigned int kmer_len){
 }
 
 
-std::vector< std::pair< double, double > > import_poreModel( std::string poreModelFilename, unsigned int kmer_len ){
+std::vector< std::pair< double, double > > import_poreModel_staticStdv( std::string poreModelFilename, unsigned int kmer_len ){
+
+	std::string pathExe = getExePath();
+	std::string modelPath = pathExe + "/pore_models/" + poreModelFilename;
+
+	/*map that sends a 5mer or 6mer to the characteristic mean and standard deviation (a pair) */
+	std::map< std::string, std::pair< double, double > > kmer2MeanStd;
+
+	/*file handle, and delimiter between columns (a \t character in the case of ONT model files) */
+	std::ifstream file( modelPath );
+	if ( not file.is_open() ) throw IOerror( modelPath );
+
+	std::string line, key, mean, std;
+	std::string delim = "\t";
+
+	/*while there's a line to read */
+	while ( std::getline( file, line ) ){
+
+		/*and the line isn't part of the header */
+		if ( line[0] != '#' ){ 
+
+			/*the kmer, mean, and standard deviation are the first, second, and third columns, respectively. */
+			/*take the line up to the delimiter (\t), erase that bit, and then move to the next one */
+			key = line.substr( 0, line.find( delim ) );
+			line.erase( 0, line.find( delim ) + delim.length() );
+
+			mean = line.substr( 0, line.find( "\n" ) );
+
+			/*key the map by the kmer, and convert the mean and std strings to doubles */
+			kmer2MeanStd[ key ] = std::make_pair( atof(mean.c_str()), 0.14 );						
+		}
+	}
+
+	std::vector< std::pair< double, double > > indexedPoreModel(pow(4,kmer_len), std::make_pair(0,0));
+	
+	for(auto it = kmer2MeanStd.cbegin(); it != kmer2MeanStd.cend(); ++it){
+
+		std::string kmer = it -> first;
+		kmer2MeanStd[kmer] = std::make_pair(it->second.first, it->second.second);
+
+		indexedPoreModel[kmer2index(kmer, kmer_len)] = std::make_pair(it->second.first, it->second.second);
+
+	    //std::cout << it->first << " " << it->second.first << " " << it->second.second << "\n";
+	}
+
+	return indexedPoreModel;
+}
+
+
+std::vector< std::pair< double, double > > import_poreModel_fitStdv( std::string poreModelFilename, unsigned int kmer_len ){
 
 	std::string pathExe = getExePath();
 	std::string modelPath = pathExe + "/pore_models/" + poreModelFilename;
@@ -250,7 +298,6 @@ std::vector< std::pair< double, double > > import_poreModel( std::string poreMod
 
 			/*key the map by the kmer, and convert the mean and std strings to doubles */
 			kmer2MeanStd[ key ] = std::make_pair( atof( mean.c_str() ), atof( std.c_str() ) );
-			//kmer2MeanStd[ key ] = std::make_pair( atof(mean.c_str()), 0.14 );						
 		}
 	}
 

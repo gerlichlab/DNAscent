@@ -177,7 +177,7 @@ double sequenceProbability( std::vector <double> &observations,
 	double internalM12M1 = eln(1. - (1./scalings.eventsPerBase));
 	double externalM12M1 = eln(1.0 - externalM12D - internalM12I - internalM12M1);
 
-	std::vector< double > I_curr(2*windowSize+1-k, NAN), D_curr(2*windowSize+1-k, NAN), M_curr(2*windowSize+1-k, NAN), I_prev(2*windowSize+1-k, NAN), D_prev(2*windowSize+1-k, NAN), M_prev(2*windowSize+1-k, NAN);
+	std::vector< double > I_curr(2*windowSize, NAN), D_curr(2*windowSize, NAN), M_curr(2*windowSize, NAN), I_prev(2*windowSize, NAN), D_prev(2*windowSize, NAN), M_prev(2*windowSize, NAN);
 	double firstI_curr = NAN, firstI_prev = NAN;
 	double start_curr = NAN, start_prev = 0.0;
 
@@ -206,7 +206,7 @@ double sequenceProbability( std::vector <double> &observations,
 
 		std::string kmer = sequence.substr(0, k);
 
-		std::pair<double,double> meanStd = Pore_Substrate_Config.pore_model[kmer2index(kmer, k)];
+		std::pair<double,double> meanStd = Pore_Substrate_Config.unlabelled_model[kmer2index(kmer, k)];
 		
 		level_mu = meanStd.first;
 		level_sigma = meanStd.second;
@@ -246,7 +246,7 @@ double sequenceProbability( std::vector <double> &observations,
 			}
 			else{
 
-				std::pair<double,double> meanStd = Pore_Substrate_Config.pore_model[kmer2index(kmer, k)];
+				std::pair<double,double> meanStd = Pore_Substrate_Config.unlabelled_model[kmer2index(kmer, k)];
 				level_mu = meanStd.first;
 				level_sigma = meanStd.second;
 				matchProb = eln( normalPDF( level_mu, level_sigma, (observations[t] - scalings.shift)/scalings.scale ) );
@@ -344,7 +344,7 @@ HMMdetection llAcrossRead( read &r, unsigned int windowLength){
 		unsigned int posOnRef = POIs[i];
 		unsigned int posOnQuery = (r.refToQuery).at(posOnRef);
 
-		std::string readSnippet = (r.referenceSeqMappedTo).substr(posOnRef - windowLength, 2*windowLength);
+		std::string readSnippet = (r.referenceSeqMappedTo).substr(posOnRef - windowLength, 2*windowLength + k);
 
 		//make sure the read snippet is fully defined as A/T/G/C in reference
 		unsigned int As = 0, Ts = 0, Cs = 0, Gs = 0;
@@ -370,7 +370,7 @@ HMMdetection llAcrossRead( read &r, unsigned int windowLength){
 		std::vector< double > eventSnippet;
 
 		//catch spans with lots of insertions or deletions (this QC was set using results of tests/detect/hmm_falsePositives)
-		unsigned int spanOnQuery = (r.refToQuery)[posOnRef + windowLength - k + 1] - (r.refToQuery)[posOnRef - windowLength];
+		unsigned int spanOnQuery = (r.refToQuery)[posOnRef + windowLength] - (r.refToQuery)[posOnRef - windowLength];
 		assert(spanOnQuery >= 0);
 
 		/*get the events that correspond to the read snippet */
@@ -381,10 +381,10 @@ HMMdetection llAcrossRead( read &r, unsigned int windowLength){
 
 				assert(j >= 0);
 				assert(posOnRef - windowLength >= 0);
-				assert(posOnRef + windowLength - k + 1 < (r.refToQuery).size());
+				assert(posOnRef + windowLength < (r.refToQuery).size());
 
 				/*if an event has been aligned to a position in the window, add it */
-				if ( (r.refToQuery)[posOnRef - windowLength] <= (r.eventAlignment)[j].second and (r.eventAlignment)[j].second < (r.refToQuery)[posOnRef + windowLength - k + 1] ){
+				if ( (r.refToQuery)[posOnRef - windowLength] <= (r.eventAlignment)[j].second and (r.eventAlignment)[j].second < (r.refToQuery)[posOnRef + windowLength] ){
 
 					if (first){
 						readHead = j;
@@ -393,7 +393,10 @@ HMMdetection llAcrossRead( read &r, unsigned int windowLength){
 					}
 					
 					double ev = (r.events)[(r.eventAlignment)[j].first].mean;
-					eventSnippet.push_back(ev);
+					if (ev > 0. and ev < 250.0){
+
+						eventSnippet.push_back(ev);
+					}
 				}
 
 				/*stop once we get to the end of the window */
@@ -408,10 +411,10 @@ HMMdetection llAcrossRead( read &r, unsigned int windowLength){
 			for ( unsigned int j = readHead; j < (r.eventAlignment).size(); j++ ){
 
 				assert(posOnRef - windowLength >= 0);
-				assert(posOnRef + windowLength - k + 1 < (r.refToQuery).size());				
+				assert(posOnRef + windowLength < (r.refToQuery).size());				
 
 				/*if an event has been aligned to a position in the window, add it */
-				if ( (r.refToQuery)[posOnRef - windowLength] <= (r.eventAlignment)[j].second and (r.eventAlignment)[j].second < (r.refToQuery)[posOnRef + windowLength - k + 1] ){
+				if ( (r.refToQuery)[posOnRef - windowLength] <= (r.eventAlignment)[j].second and (r.eventAlignment)[j].second < (r.refToQuery)[posOnRef + windowLength] ){
 
 					if (first){
 						readHead = j;
@@ -420,11 +423,13 @@ HMMdetection llAcrossRead( read &r, unsigned int windowLength){
 					}
 					
 					double ev = (r.events)[(r.eventAlignment)[j].first].mean;
-					eventSnippet.push_back(ev);
+					if (ev > 0. and ev < 250.0){
+						eventSnippet.push_back(ev);
+					}
 				}
 
 				/*stop once we get to the end of the window */
-				if ( (r.eventAlignment)[j].second >= (r.refToQuery)[posOnRef + windowLength - k + 1] ) break;
+				if ( (r.eventAlignment)[j].second >= (r.refToQuery)[posOnRef + windowLength] ) break;
 			}
 		}
 
@@ -462,12 +467,13 @@ HMMdetection llAcrossRead( read &r, unsigned int windowLength){
 		}
 
 		//make the BrdU call
-		std::string kOI = (r.referenceSeqMappedTo).substr(posOnRef,k);
-		size_t BrdUStart = kOI.find('T') + windowLength - k + 1;
-		size_t BrdUEnd = windowLength;
+		std::string kOI = (r.referenceSeqMappedTo).substr(posOnRef-4,k);
+		size_t BrdUStart = windowLength - (int) k/2;
+		size_t BrdUEnd = windowLength + (int) k/2;
 		double logProbAnalogue = sequenceProbability( eventSnippet, readSnippet, windowLength, true, r.scalings, BrdUStart, BrdUEnd );
 		double logProbThymidine = sequenceProbability( eventSnippet, readSnippet, windowLength, false, r.scalings, 0, 0 );
 		double logLikelihoodRatio = logProbAnalogue - logProbThymidine;
+
 
 #if TEST_LL
 double runningKL = 0.0;
@@ -489,6 +495,17 @@ std::cerr << logLikelihoodRatio << std::endl;
 #endif
 
 		hmm_out.stdout += std::to_string(globalPosOnRef) + "\t" + std::to_string(logLikelihoodRatio) + "\t" + kmerRef + "\t" + kmerQuery + "\n";
+
+		//adjust reference position so that we make the call at the middle of the kmer
+		if ( r.isReverse ){
+
+			globalPosOnRef += (int) k/2;
+		}
+		else{
+
+			globalPosOnRef -= (int) k/2;
+		}
+		
 		hmm_out.refposToLikelihood[globalPosOnRef] = std::make_pair(logLikelihoodRatio,0.);
 	}
 	return hmm_out;
@@ -499,39 +516,57 @@ DNNdetection runCNN(std::shared_ptr<AlignedRead> r, std::shared_ptr<ModelSession
 
 	DNNdetection read_out;
 
-	int NumInputs = 2;
+	int NumInputs = 3;
 	int NumOutputs = 1;
 
 	std::vector<TF_Tensor*> input_tensors;
 	TF_Tensor* OutputValues;
 
-	//sequence input
+	//core sequence input
 	std::vector<size_t> protoSequenceShape = r -> getSequenceShape();
-	TensorShape input_sequenceShape={{1, (int64_t) protoSequenceShape[0], (int64_t) protoSequenceShape[1]}, 3};
+	TensorShape input_sequenceShape={{1, (int64_t) protoSequenceShape[0]}, 2};
 
-	std::vector<float> unformattedSequenceTensor = r -> makeSequenceTensor();
+	std::vector<float> unformattedCoreSequenceTensor = r -> makeCoreSequenceTensor();
 
-	size_t sizeSequence = unformattedSequenceTensor.size();
+	size_t sizeSequence = unformattedCoreSequenceTensor.size();
 	assert(sizeSequence > 0);
 
-	float *tmp_sequenceArray = (float *)malloc(sizeSequence*sizeof(float));
+	float *tmp_coreSequenceArray = (float *)malloc(sizeSequence*sizeof(float));
 	for(size_t i = 0; i < sizeSequence; i++){
-		tmp_sequenceArray[i] = unformattedSequenceTensor[i];
+		tmp_coreSequenceArray[i] = unformattedCoreSequenceTensor[i];
 	}
 
-	TF_Tensor* SequenceInputTensor = TF_NewTensor(TF_FLOAT,
+	TF_Tensor* CoreSequenceInputTensor = TF_NewTensor(TF_FLOAT,
 		input_sequenceShape.values,
 		input_sequenceShape.dim,
-		(void *)tmp_sequenceArray,
+		(void *)tmp_coreSequenceArray,
 		sizeSequence*sizeof(float),
 		cpp_array_deallocator<float>,
 		nullptr);
 
-	input_tensors.push_back(SequenceInputTensor);
+	input_tensors.push_back(CoreSequenceInputTensor);
+	
+	//residual sequence input (inherits the same shape as core sequence)
+	std::vector<float> unformattedResidualSequenceTensor = r -> makeResidualSequenceTensor();
+
+	float *tmp_resSequenceArray = (float *)malloc(sizeSequence*sizeof(float));
+	for(size_t i = 0; i < sizeSequence; i++){
+		tmp_resSequenceArray[i] = unformattedResidualSequenceTensor[i];
+	}
+
+	TF_Tensor* ResidualSequenceInputTensor = TF_NewTensor(TF_FLOAT,
+		input_sequenceShape.values,
+		input_sequenceShape.dim,
+		(void *)tmp_resSequenceArray,
+		sizeSequence*sizeof(float),
+		cpp_array_deallocator<float>,
+		nullptr);
+
+	input_tensors.push_back(ResidualSequenceInputTensor);
 
 	//signal input
 	std::vector<size_t> protoSignalShape = r -> getSignalShape();
-	TensorShape input_signalShape={{1, (int64_t) protoSignalShape[0], (int64_t) protoSignalShape[1]}, 3};
+	TensorShape input_signalShape={{1, (int64_t) protoSignalShape[0], (int64_t) protoSignalShape[1], (int64_t) protoSignalShape[2]}, 4};
 
 	std::vector<float> unformattedSignalTensor = r -> makeSignalTensor();
 
@@ -571,7 +606,7 @@ DNNdetection runCNN(std::shared_ptr<AlignedRead> r, std::shared_ptr<ModelSession
 
 	//get positions on the read reference to write the output
 	std::vector<unsigned int> positions = r -> getPositions();
-	std::vector<std::string> sixMers = r -> getKmers();
+	std::vector<std::string> kmers = r -> getKmers();
 
 	size_t output_size = TF_TensorByteSize(OutputValues) / sizeof(float);
 	assert(output_size == protoSequenceShape[0] * outputFields);
@@ -587,8 +622,8 @@ DNNdetection runCNN(std::shared_ptr<AlignedRead> r, std::shared_ptr<ModelSession
 	for(size_t i = 0; i < output_size; i++){
 		if((i+1)%outputFields==0){
 
-			//only output T positions
-			if (sixMers[pos].substr(0,1) != "T"){
+			//only output kmers where the middle position is a T
+			if (kmers[pos].substr(4,1) != "T"){ 
 				pos++;
 				continue;
 			}
@@ -596,8 +631,8 @@ DNNdetection runCNN(std::shared_ptr<AlignedRead> r, std::shared_ptr<ModelSession
 			read_out.refposToProbability[thisPosition] = std::make_pair(output_array[i], output_array[i-1]);
 
 			str_line += std::to_string(thisPosition) + "\t" + std::to_string(output_array[i])+ "\t" + std::to_string(output_array[i-1]);
-			if (r -> getStrand() == "rev") str_line += "\t" + reverseComplement(sixMers[pos]);
-			else str_line += "\t" + sixMers[pos];
+			if (r -> getStrand() == "rev") str_line += "\t" + reverseComplement(kmers[pos]);
+			else str_line += "\t" + kmers[pos];
 			lines.push_back(str_line);
 			str_line = "";
 			pos++;
@@ -608,7 +643,8 @@ DNNdetection runCNN(std::shared_ptr<AlignedRead> r, std::shared_ptr<ModelSession
 	}
 
 	TF_DeleteTensor(OutputValues);
-	TF_DeleteTensor(SequenceInputTensor);
+	TF_DeleteTensor(CoreSequenceInputTensor);
+	TF_DeleteTensor(ResidualSequenceInputTensor);
 	TF_DeleteTensor(SignalInputTensor);
 
 	if (r -> getStrand() == "rev") std::reverse(lines.begin(),lines.end());
@@ -634,6 +670,7 @@ int detect_main( int argc, char** argv ){
 	std::string modelPath = pathExe + Pore_Substrate_Config.fn_dnn_model;
 	std::string input1_layer_name = Pore_Substrate_Config.dnn_model_inputLayer1;
 	std::string input2_layer_name = Pore_Substrate_Config.dnn_model_inputLayer2;
+	std::string input3_layer_name = Pore_Substrate_Config.dnn_model_inputLayer3;
 
 	std::pair< std::shared_ptr<ModelSession>, std::shared_ptr<TF_Graph *> > modelPair;
 
@@ -651,12 +688,13 @@ int detect_main( int argc, char** argv ){
 
 	auto input1_op = TF_GraphOperationByName(*(Graph.get()), input1_layer_name.c_str());
 	auto input2_op = TF_GraphOperationByName(*(Graph.get()), input2_layer_name.c_str());
-	if(!input1_op or !input2_op){
+	auto input3_op = TF_GraphOperationByName(*(Graph.get()), input3_layer_name.c_str());
+	if(!input1_op or !input2_op or !input3_op){
 		std::cout << "bad input name" << std::endl;
 		exit(0);
 	}
 
-	std::vector<TF_Output> inputOps = {{input1_op,0}, {input2_op,0}};
+	std::vector<TF_Output> inputOps = {{input1_op,0}, {input2_op,0}, {input3_op,0}};
 
 	//import fasta reference
 	std::map< std::string, std::string > reference = import_reference_pfasta( args.referenceFilename );
@@ -763,7 +801,13 @@ int detect_main( int argc, char** argv ){
 					r.isReverse = true;
 				}
 
-				normaliseEvents(r);
+				//for HMM
+				//bool useFitPoreModel = true;
+				//normaliseEvents(r, useFitPoreModel);
+
+				//for DNN
+				bool useFitPoreModel = false;
+				normaliseEvents(r, useFitPoreModel);
 
 				//catch reads with rough event alignments that fail the QC
 				if ( r.eventAlignment.size() == 0 ){
@@ -774,10 +818,8 @@ int detect_main( int argc, char** argv ){
 				
 				std::string readOut;
 
-				HMMdetection hmm_likelihood = llAcrossRead(r, 12);
-				readOut = hmm_likelihood.stdout;
-				
-				/*
+				//HMMdetection hmm_likelihood = llAcrossRead(r, 12);
+				//readOut = hmm_likelihood.stdout;
 				
 				std::shared_ptr<AlignedRead> ar = eventalign( r, Pore_Substrate_Config.windowLength_align, placeholder_analogueCalls);
 
@@ -789,8 +831,6 @@ int detect_main( int argc, char** argv ){
 
 				DNNdetection dnn_probabilities = runCNN(ar,session,inputOps);
 				readOut = dnn_probabilities.stdout;
-				
-				*/
 
 				prog++;
 				pb.displayProgress( prog, failed, failedEvents );
