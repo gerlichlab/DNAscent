@@ -279,9 +279,9 @@ void callSegmentation(DetectedRead &r){
 
 			if ( abs(endCoord - startCoord) >= minLength ){
 
-				std::pair<int, int> trim = segmentationTrim(r.positions, r.eduCalls, r.brduCalls, startIdx, endIdx);
-				startIdx += trim.first;
-				endIdx -= trim.second;
+				//std::pair<int, int> trim = segmentationTrim(r.positions, r.eduCalls, r.brduCalls, startIdx, endIdx);
+				//startIdx += trim.first;
+				//endIdx -= trim.second;
 				startCoord = r.positions[startIdx];
 				endCoord = r.positions[endIdx];
 				
@@ -309,9 +309,9 @@ void callSegmentation(DetectedRead &r){
 
 		if ( abs(endCoord - startCoord) >= minLength ){
 
-			std::pair<int, int> trim = segmentationTrim(r.positions, r.eduCalls, r.brduCalls, startIdx, endIdx);
-			startIdx += trim.first;
-			endIdx -= trim.second;
+			//std::pair<int, int> trim = segmentationTrim(r.positions, r.eduCalls, r.brduCalls, startIdx, endIdx);
+			//startIdx += trim.first;
+			//endIdx -= trim.second;
 			startCoord = r.positions[startIdx];
 			endCoord = r.positions[endIdx];
 			
@@ -345,9 +345,9 @@ void callSegmentation(DetectedRead &r){
 
 			if ( abs(endCoord - startCoord) >= minLength ){
 			
-				std::pair<int, int> trim = segmentationTrim(r.positions, r.brduCalls, r.eduCalls, startIdx, endIdx);
-				startIdx += trim.first;
-				endIdx -= trim.second;
+				//std::pair<int, int> trim = segmentationTrim(r.positions, r.brduCalls, r.eduCalls, startIdx, endIdx);
+				//startIdx += trim.first;
+				//endIdx -= trim.second;
 				startCoord = r.positions[startIdx];
 				endCoord = r.positions[endIdx];
 				
@@ -375,9 +375,9 @@ void callSegmentation(DetectedRead &r){
 
 		if ( abs(endCoord - startCoord) >= minLength ){
 		
-			std::pair<int, int> trim = segmentationTrim(r.positions, r.brduCalls, r.eduCalls, startIdx, endIdx);
-			startIdx += trim.first;
-			endIdx -= trim.second;
+			//std::pair<int, int> trim = segmentationTrim(r.positions, r.brduCalls, r.eduCalls, startIdx, endIdx);
+			//startIdx += trim.first;
+			//endIdx -= trim.second;
 			startCoord = r.positions[startIdx];
 			endCoord = r.positions[endIdx];
 			
@@ -863,11 +863,6 @@ std::pair< std::vector<int>, int > findNeighbours_mod( std::vector<int> &positio
 
 std::map<int,int> DBSCAN_mod( std::vector< int > &positions, std::vector< double > &calls, std::vector< double > &altCalls, int epsilon, double minDensity ){
 
-	//labels
-	//-2 := undefined
-	//-1 := noise
-	// 0 <= cluster int
-
 	//initialise labels
 	std::map< int, int > index2label;
 	for ( size_t i = 0; i < positions.size(); i++ ) index2label[i] = -2;
@@ -893,7 +888,7 @@ std::map<int,int> DBSCAN_mod( std::vector< int > &positions, std::vector< double
 
 void runDBSCAN(DetectedRead &r, KMeansResult analougeIncorporation, std::string analogueOrder){
 	
-	int epsilon = 1000;
+	int epsilon = 500;
 	
 	double minBrdUDensity, minEdUDensity;
 	
@@ -1005,6 +1000,7 @@ std::pair<int, int> segmentationTrim(std::vector< int > &positions, std::vector<
 void callStalls(DetectedRead &r, std::string analogueOrder, KMeansResult analougeIncorporation){
 
 	int filterSize = 2000;
+	int travelFromTip = 0;
 	
 	std::vector< double > secondAnalogueCalls;
 	if (analogueOrder == "EdU,BrdU"){
@@ -1015,6 +1011,10 @@ void callStalls(DetectedRead &r, std::string analogueOrder, KMeansResult analoug
 	
 		secondAnalogueCalls = r.eduCalls;
 	}
+
+	//non-linear scaling parameters for stall score
+	double alpha = 1.46;
+	double beta = 5;
 
 	//check right forks
 	for (auto s = r.rightForks.begin(); s < r.rightForks.end(); s++){
@@ -1031,10 +1031,11 @@ void callStalls(DetectedRead &r, std::string analogueOrder, KMeansResult analoug
 		double maximumScore = -3.0;
 		bool failOnAlignment = false;
 
-		if (forkTipIdx > 500 and (numPositions - forkTipIdx) > 1000){
+		if (forkTipIdx > travelFromTip + filterSize and forkTipIdx < numPositions-forkTipIdx-filterSize){
 		
-			for (int i = std::max(forkTipIdx - filterSize,500); i < std::min(forkTipIdx + filterSize,numPositions-500); i++){
+			for (int i = forkTipIdx-travelFromTip; i <= forkTipIdx+travelFromTip; i++){
 			
+				//guard against deletions
 				if ( std::abs(r.positions[i] - forkTipCoord) > filterSize) continue;
 			
 				int positiveCalls = 0;
@@ -1055,7 +1056,7 @@ void callStalls(DetectedRead &r, std::string analogueOrder, KMeansResult analoug
 				double LHS = (double) positiveCalls / (double) attempts;
 				
 				//guard against low denominators
-				if (LHS < 0.3) continue;
+				if (LHS < 0.2) continue;
 				
 				positiveCalls = 0;
 				attempts = 0;
@@ -1077,7 +1078,7 @@ void callStalls(DetectedRead &r, std::string analogueOrder, KMeansResult analoug
 				double score;
 				if (LHS - RHS > 0.){
 					score = (LHS-RHS)/LHS;
-					score = 1.55*log(1+exp(3.*(score-1))) - 1.55*log(1+exp(3.*(-1)));
+					score = alpha*log(1+exp(beta*(score-1))) - alpha*log(1+exp(beta*(-1)));
 				}
 				else{
 					score = -2.0;
@@ -1091,7 +1092,7 @@ void callStalls(DetectedRead &r, std::string analogueOrder, KMeansResult analoug
 		}
 
 		if (failOnAlignment){
-			s -> score = -4.0; //PLP&SY: check with Mike
+			s -> score = -4.0; 
 			continue;
 		}
 
@@ -1113,9 +1114,9 @@ void callStalls(DetectedRead &r, std::string analogueOrder, KMeansResult analoug
 		double maximumScore = -3.0;
 		bool failOnAlignment = false;
 
-		if (forkTipIdx > 500 and (numPositions - forkTipIdx) > 1000){
+		if (forkTipIdx > travelFromTip + filterSize and forkTipIdx < numPositions-forkTipIdx-filterSize){
 		
-			for (int i = std::max(forkTipIdx - filterSize, 500); i < std::min(forkTipIdx + filterSize, numPositions - 500); i++){
+			for (int i = forkTipIdx-travelFromTip; i <= forkTipIdx+travelFromTip; i++){
 			
 				if ( std::abs(r.positions[i] - forkTipCoord) > filterSize) continue;
 			
@@ -1155,12 +1156,12 @@ void callStalls(DetectedRead &r, std::string analogueOrder, KMeansResult analoug
 				
 				double RHS = (double) positiveCalls / (double) attempts;
 				
-				if (RHS < 0.3) continue;
+				if (RHS < 0.2) continue;
 			
 				double score;
 				if (RHS - LHS > 0.){
 					score = (RHS-LHS)/RHS;
-					score = 1.55*log(1+exp(3.*(score-1))) - 1.55*log(1+exp(3.*(-1)));
+					score = alpha*log(1+exp(beta*(score-1))) - alpha*log(1+exp(beta*(-1)));
 				}
 				else{
 					score = -2.0;
@@ -1173,7 +1174,7 @@ void callStalls(DetectedRead &r, std::string analogueOrder, KMeansResult analoug
 		}
 
 		if (failOnAlignment){
-			s -> score = -4.0; //PLP&SY: check with Mike
+			s -> score = -4.0;
 			continue;
 		}
 
@@ -1423,7 +1424,7 @@ KMeansResult estimateAnalogueIncorporation(std::string detectFilename, int readC
 
 	std::vector< double > BrdU_callFractions, EdU_callFractions;
 	
-	int resolution = 2000; //look in 2 kb segments
+	int resolution = 1000; //look in 1 kb segments
 	
 	int startingPos = -1;
 	int progress = 0;
