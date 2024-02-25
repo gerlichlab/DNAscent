@@ -1000,7 +1000,6 @@ std::pair<int, int> segmentationTrim(std::vector< int > &positions, std::vector<
 void callStalls(DetectedRead &r, std::string analogueOrder, KMeansResult analougeIncorporation){
 
 	int filterSize = 2000;
-	int travelFromTip = 0;
 	
 	std::vector< double > secondAnalogueCalls;
 	if (analogueOrder == "EdU,BrdU"){
@@ -1013,8 +1012,8 @@ void callStalls(DetectedRead &r, std::string analogueOrder, KMeansResult analoug
 	}
 
 	//non-linear scaling parameters for stall score
-	double alpha = 1.46;
-	double beta = 5;
+	double beta = 10.; //higher values of beta mean more conservative stall scores
+	double alpha = 1./log(2./(1.+exp(-1.*beta))); //set alpha so that non-linear scaling of 1 is equal to 1
 
 	//check right forks
 	for (auto s = r.rightForks.begin(); s < r.rightForks.end(); s++){
@@ -1031,63 +1030,57 @@ void callStalls(DetectedRead &r, std::string analogueOrder, KMeansResult analoug
 		double maximumScore = -3.0;
 		bool failOnAlignment = false;
 
-		if (forkTipIdx > travelFromTip + filterSize and forkTipIdx < numPositions-forkTipIdx-filterSize){
+		if (forkTipIdx > filterSize and forkTipIdx < numPositions-filterSize){
+			
+			int positiveCalls = 0;
+			int attempts = 0;
+			for (int j = forkTipIdx-filterSize; j < forkTipIdx; j++){
+			
+				if (std::abs(r.positions[forkTipIdx] - r.positions[j]) < filterSize){
+
+					if (not r.alignmentQuality[j]) failOnAlignment = true;
+			
+					if (secondAnalogueCalls[j] > 0.5){
+						positiveCalls++;
+					}
+					attempts++;
+				}
+			}
+			if (attempts < 50) continue;
+			double LHS = (double) positiveCalls / (double) attempts;
+			
+			//guard against low denominators
+			if (LHS < 0.2) continue;
+			
+			positiveCalls = 0;
+			attempts = 0;
+			for (int j = forkTipIdx; j < forkTipIdx+filterSize; j++){
+			
+				if (std::abs(r.positions[forkTipIdx] - r.positions[j]) < filterSize){
+
+					if (not r.alignmentQuality[j]) failOnAlignment = true;
+			
+					if (secondAnalogueCalls[j] > 0.5){
+						positiveCalls++;
+					}
+					attempts++;
+				}
+			}
+			if (attempts < 50) continue;
+			double RHS = (double) positiveCalls / (double) attempts;
 		
-			for (int i = forkTipIdx-travelFromTip; i <= forkTipIdx+travelFromTip; i++){
+			double score;
+			if (LHS - RHS > 0.){
+				score = (LHS-RHS)/LHS;
+				score = alpha*log(1+exp(beta*(score-1))) - alpha*log(1+exp(beta*(-1)));
+			}
+			else{
+				score = -2.0;
+			}
 			
-				//guard against deletions
-				if ( std::abs(r.positions[i] - forkTipCoord) > filterSize) continue;
-			
-				int positiveCalls = 0;
-				int attempts = 0;
-				for (int j = std::max(i - filterSize,0); j < i; j++){
-				
-					if (std::abs(r.positions[i] - r.positions[j]) < filterSize){
-
-						if (not r.alignmentQuality[j]) failOnAlignment = true;
-				
-						if (secondAnalogueCalls[j] > 0.5){
-							positiveCalls++;
-						}
-						attempts++;
-					}
-				}
-				if (attempts < 100) continue;
-				double LHS = (double) positiveCalls / (double) attempts;
-				
-				//guard against low denominators
-				if (LHS < 0.2) continue;
-				
-				positiveCalls = 0;
-				attempts = 0;
-				for (int j = i; j < std::min(i + filterSize, numPositions); j++){
-				
-					if (std::abs(r.positions[i] - r.positions[j]) < filterSize){
-
-						if (not r.alignmentQuality[j]) failOnAlignment = true;
-				
-						if (secondAnalogueCalls[j] > 0.5){
-							positiveCalls++;
-						}
-						attempts++;
-					}
-				}
-				if (attempts < 100) continue;
-				double RHS = (double) positiveCalls / (double) attempts;
-			
-				double score;
-				if (LHS - RHS > 0.){
-					score = (LHS-RHS)/LHS;
-					score = alpha*log(1+exp(beta*(score-1))) - alpha*log(1+exp(beta*(-1)));
-				}
-				else{
-					score = -2.0;
-				}
-				
-				r.stallScore[i] = score;
-				if (score > maximumScore){
-					maximumScore = score;
-				}
+			r.stallScore[forkTipIdx] = score;
+			if (score > maximumScore){
+				maximumScore = score;
 			}
 		}
 
@@ -1114,62 +1107,57 @@ void callStalls(DetectedRead &r, std::string analogueOrder, KMeansResult analoug
 		double maximumScore = -3.0;
 		bool failOnAlignment = false;
 
-		if (forkTipIdx > travelFromTip + filterSize and forkTipIdx < numPositions-forkTipIdx-filterSize){
+		if (forkTipIdx > filterSize and forkTipIdx < numPositions-filterSize){
+			
+			int positiveCalls = 0;
+			int attempts = 0;
+			for (int j = forkTipIdx-filterSize; j < forkTipIdx; j++){
+			
+				if (std::abs(r.positions[forkTipIdx] - r.positions[j]) < filterSize){
+
+					if (not r.alignmentQuality[j]) failOnAlignment = true;
+				
+					if (secondAnalogueCalls[j] > 0.5){
+						positiveCalls++;
+					}
+					attempts++;
+				}
+			}
+			if (attempts < 50) continue;
+			
+			double LHS = (double) positiveCalls / (double) attempts;
+			
+			positiveCalls = 0;
+			attempts = 0;
+			for (int j = forkTipIdx; j < forkTipIdx+filterSize; j++){
+			
+				if (std::abs(r.positions[forkTipIdx] - r.positions[j]) < filterSize){
+
+					if (not r.alignmentQuality[j]) failOnAlignment = true;
+			
+					if (secondAnalogueCalls[j] > 0.5){
+						positiveCalls++;
+					}
+					attempts++;
+				}
+			}
+			if (attempts < 50) continue;
+			
+			double RHS = (double) positiveCalls / (double) attempts;
+			
+			if (RHS < 0.2) continue;
 		
-			for (int i = forkTipIdx-travelFromTip; i <= forkTipIdx+travelFromTip; i++){
-			
-				if ( std::abs(r.positions[i] - forkTipCoord) > filterSize) continue;
-			
-				int positiveCalls = 0;
-				int attempts = 0;
-				for (int j = std::max(i - filterSize,0); j < i; j++){
-				
-					if (std::abs(r.positions[i] - r.positions[j]) < filterSize){
-
-						if (not r.alignmentQuality[j]) failOnAlignment = true;
-					
-						if (secondAnalogueCalls[j] > 0.5){
-							positiveCalls++;
-						}
-						attempts++;
-					}
-				}
-				if (attempts < 100) continue;
-				
-				double LHS = (double) positiveCalls / (double) attempts;
-				
-				positiveCalls = 0;
-				attempts = 0;
-				for (int j = i; j < std::min(i + filterSize, numPositions); j++){
-				
-					if (std::abs(r.positions[i] - r.positions[j]) < filterSize){
-
-						if (not r.alignmentQuality[j]) failOnAlignment = true;
-				
-						if (secondAnalogueCalls[j] > 0.5){
-							positiveCalls++;
-						}
-						attempts++;
-					}
-				}
-				if (attempts < 100) continue;
-				
-				double RHS = (double) positiveCalls / (double) attempts;
-				
-				if (RHS < 0.2) continue;
-			
-				double score;
-				if (RHS - LHS > 0.){
-					score = (RHS-LHS)/RHS;
-					score = alpha*log(1+exp(beta*(score-1))) - alpha*log(1+exp(beta*(-1)));
-				}
-				else{
-					score = -2.0;
-				}
-				r.stallScore[i] = score;
-				if (score > maximumScore){
-					maximumScore = score;
-				}
+			double score;
+			if (RHS - LHS > 0.){
+				score = (RHS-LHS)/RHS;
+				score = alpha*log(1+exp(beta*(score-1))) - alpha*log(1+exp(beta*(-1)));
+			}
+			else{
+				score = -2.0;
+			}
+			r.stallScore[forkTipIdx] = score;
+			if (score > maximumScore){
+				maximumScore = score;
 			}
 		}
 
