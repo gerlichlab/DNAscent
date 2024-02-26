@@ -106,12 +106,13 @@ PoreParameters estimateScaling_theilSen(std::vector< double > &signals, std::vec
 
 	assert(signals.size() == kmer_ranks.size());
 
-	//for short reads, exit without doing refinement of scaling parameters
-	size_t minLength = 2000;
-	if (kmer_ranks.size() < minLength) return s;
-
 	size_t maxPoints = 1000;
 	size_t trimSize = 50;
+	size_t minLength = maxPoints;
+	
+	//for short reads, exit without doing refinement of scaling parameters	
+	if (kmer_ranks.size() < minLength) return s;
+
 	size_t effectiveSize = signals.size() - 2*trimSize;
 	
 	size_t skipInterval = 1;
@@ -151,7 +152,6 @@ PoreParameters estimateScaling_theilSen(std::vector< double > &signals, std::vec
 			double dx = x[i] - x[j];
 
 			slopes.push_back( dy /dx );
-
 		}	
 	}
 	
@@ -175,16 +175,17 @@ PoreParameters estimateScaling_theilSen(std::vector< double > &signals, std::vec
 		return params_ts;		
 	}
 	
-	double scale_corr_factor = 1. / slope_median;
-	double shift_corr_factor = -intercept_median / slope_median;
-	double new_shift = s.shift + (shift_corr_factor * s.scale);
-	double new_scale = s.scale * scale_corr_factor;
+	//use TS parameters to refine shift and scale similar to Remora
+	double scale_correlation = 1. / slope_median;
+	double shift_correlation = -intercept_median / slope_median;
+	double shift_TSrefined = s.shift + (shift_correlation * s.scale);
+	double scale_TSrefined = s.scale * scale_correlation;
 
-	//std::cerr << "ROUGH TO TS: " << s.scale << " " << new_scale << " " << s.shift << " " << new_shift << std::endl;
-	//std::cerr << s.scale << " " << new_scale << " " << s.shift << " " << new_shift << std::endl;
+	//std::cerr << "ROUGH TO TS: " << s.scale << " " << scale_TSrefined << " " << s.shift << " " << shift_TSrefined << std::endl;
+	//std::cerr << s.scale << " " << scale_TSrefined << " " << s.shift << " " << shift_TSrefined << std::endl;
 
-	params_ts.shift = new_shift;
-	params_ts.scale = new_scale;
+	params_ts.shift = shift_TSrefined;
+	params_ts.scale = scale_TSrefined;
 
 	return params_ts;
 }
@@ -556,6 +557,7 @@ std::vector<double> quantileMedians(std::vector<double> &data, int nquantiles){
 
 
 std::pair<double, double> linear_regression(std::vector<double> x, std::vector<double> y){
+//adapted from https://stackoverflow.com/questions/5083465/fast-efficient-least-squares-fit-algorithm-in-c
 
 	assert(x.size() == y.size());
 	
@@ -589,8 +591,6 @@ std::pair<double, double> linear_regression(std::vector<double> x, std::vector<d
 PoreParameters estimateScaling_quantiles(std::vector< double > &signal_means, std::string &sequence, std::vector<unsigned int> &kmer_ranks, bool useFitPoreModel ){
 
 	PoreParameters s;
-
-	size_t k = Pore_Substrate_Config.kmer_len;
 
 	std::vector<double> model_means;
 	model_means.reserve(kmer_ranks.size());
@@ -633,7 +633,6 @@ void normaliseEvents( read &r, bool useFitPoreModel ){
 		return;
 	}
 	
-	
 	event_table et = detect_events(&(r.raw)[0], (r.raw).size(), event_detection_defaults);
 	assert(et.n > 0);
 	
@@ -646,15 +645,6 @@ void normaliseEvents( read &r, bool useFitPoreModel ){
 		if (et.event[i].mean > 0.) {
 
 			if (i > 0){
-
-				//TESTING
-				/*
-				std::cout << mean << std::endl;
-				for (unsigned int j = rawStart; j <= et.event[i].start-1; j++){
-				
-					std::cout << "\t" << r.raw[j] << std::endl;
-				}
-				*/
 
 				//build the previous event
 				event e;

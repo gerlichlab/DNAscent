@@ -1024,7 +1024,6 @@ void callStalls(DetectedRead &r, std::string analogueOrder, KMeansResult analoug
 		}
 	
 		int forkTipIdx = s -> rightmostIdx;
-		int forkTipCoord = s -> rightmostCoord;
 		int numPositions = r.positions.size();
 		assert( forkTipIdx < numPositions);
 		double maximumScore = -3.0;
@@ -1101,7 +1100,6 @@ void callStalls(DetectedRead &r, std::string analogueOrder, KMeansResult analoug
 		}
 	
 		int forkTipIdx = s -> leftmostIdx;
-		int forkTipCoord = s -> leftmostCoord;
 		int numPositions = r.positions.size();
 		assert( forkTipIdx < numPositions);
 		double maximumScore = -3.0;

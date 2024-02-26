@@ -45,8 +45,7 @@ static const char *help=
 "  -t,--threads              number of threads (default is 1 thread),\n"
 "  --GPU                     use the GPU device indicated for prediction (default is CPU),\n"
 "  -q,--quality              minimum mapping quality (default is 20),\n"
-"  -l,--length               minimum read length in bp (default is 1000),\n"
-"     --HMM                  use hidden Markov detection instead of neural network.\n"
+"  -l,--length               minimum read length in bp (default is 1000).\n"
 "Written by Michael Boemo, Department of Pathology, University of Cambridge.\n"
 "Please submit bug reports to GitHub Issues (https://github.com/MBoemo/DNAscent/issues).";
 
@@ -112,12 +111,19 @@ Arguments parseDetectArguments( int argc, char** argv ){
 
 			std::string strArg( argv[ i + 1 ] );
 			args.minQ = std::stoi( strArg.c_str() );
+			
+			if (args.minQ < 0) throw InvalidMappingThreshold();
+			
 			i+=2;
 		}
 		else if ( flag == "-l" or flag == "--length" ){
 
 			std::string strArg( argv[ i + 1 ] );
 			args.minL = std::stoi( strArg.c_str() );
+			
+			if (args.minL < 100) throw InvalidLengthThreshold();
+			if (args.minL < 1000) std::cerr << "Warning: DNAscent detect may show inaccuracies or high fail rates on short reads (< 1 kb)." << std::endl;
+			
 			i+=2;
 		}
 		else if ( flag == "-i" or flag == "--index" ){

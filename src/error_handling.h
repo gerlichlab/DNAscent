@@ -167,5 +167,17 @@ struct UnrecognisedBase : public std::exception {
 	}
 };
 
+struct InvalidMappingThreshold : public std::exception {
+	const char * what () const throw () {
+		return "Mapping quality passed with -q must be an integer >= 0.";
+	}
+};
+
+struct InvalidLengthThreshold : public std::exception {
+	const char * what () const throw () {
+		return "Minimum read mapping length passed with -l must be an integer >= 100.";
+	}
+};
+
 #endif
 

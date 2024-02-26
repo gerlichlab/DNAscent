@@ -595,9 +595,7 @@ std::shared_ptr<AlignedRead> eventalign( read &r, unsigned int totalWindowLength
 		/*get the events that correspond to the read snippet */
 		//ar -> stdout += "readHead at start: " + std::to_string(readHead) + "\n";
 		bool firstMatch = true;
-		std::map<int,int> rawIdx2eventIdx;
 		int eventIdx = 0;
-		int rawIdx = 0;
 		for ( unsigned int j = readHead; j < (r.eventAlignment).size(); j++ ){
 
 			/*if an event has been aligned to a position in the window, add it */
