@@ -19,7 +19,8 @@
 #include "common.h"
 #include "config.h"
 #include <chrono>
-
+#include <iostream>
+#include <stdexcept>
 
 PoreParameters estimateScaling_theilSen(std::vector< double > &signals, std::vector<unsigned int> &kmer_ranks, PoreParameters s, bool useFitPoreModel){
 
@@ -434,8 +435,8 @@ std::pair<std::vector<double>, std::vector<unsigned int>> adaptive_banded_simple
 		r.eventAlignment.clear();
 		return aligned_segmentation;
 	}
-	
-	if ( cleanedSignals.size() < 1000 or cleanedRanks.size() < 1000){
+	// default:1000
+	if ( cleanedSignals.size() < 250 or cleanedRanks.size() < 250){
 		r.eventAlignment.clear();
 		return aligned_segmentation;
 	}
@@ -540,11 +541,30 @@ PoreParameters estimateScaling_quantiles(std::vector< double > &signal_means, st
 	return s;
 }
 
+//
+void custom_assert(bool condition, const char* message) {
+    if (!condition) {
+        throw std::runtime_error(message);
+    }
+}
+//
 
 void normaliseEvents( DNAscent::read &r, bool useFitPoreModel ){
 
 	event_table et = detect_events(&(r.raw)[0], (r.raw).size(), event_detection_defaults);
-	assert(et.n > 0);
+	// assert(et.n > 0);
+	//
+	
+    try {
+        custom_assert(et.n > 0, "Assertion failed");
+        
+    } catch (const std::runtime_error& e) {
+        std::cerr << "Caught an exception: " << e.what() << std::endl;
+		r.eventAlignment.clear();
+		return;
+    }
+
+	//
 	
 	r.events.reserve(et.n);
 	unsigned int rawStart = 0;
