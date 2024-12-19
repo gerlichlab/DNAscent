@@ -556,7 +556,7 @@ void normaliseEvents( DNAscent::read &r, bool useFitPoreModel ){
 	//
 	
     try {
-        custom_assert(et.n > 0, "Assertion failed");
+        custom_assert(et.n > 0, "Assertion failed: assert(et.n > 0) in event_handling.cpp");
         
     } catch (const std::runtime_error& e) {
         std::cerr << "Caught an exception: " << e.what() << std::endl;

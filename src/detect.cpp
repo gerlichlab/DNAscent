@@ -30,6 +30,8 @@
 #include "error_handling.h"
 #include "config.h"
 #include <omp.h>
+#include <iostream>
+#include <stdexcept>
 
 
 static const char *help=
@@ -547,6 +549,14 @@ std::cerr << logLikelihoodRatio << std::endl;
 	return hmm_out;
 }
 
+//
+void custom_assert_2(bool condition, const char* message) {
+    if (!condition) {
+        throw std::runtime_error(message);
+    }
+}
+//
+
 
 void runCNN(DNAscent::read &r, std::shared_ptr<ModelSession> session, std::vector<TF_Output> inputOps, bool humanReadable){
 
@@ -563,7 +573,21 @@ void runCNN(DNAscent::read &r, std::shared_ptr<ModelSession> session, std::vecto
 	std::vector<float> unformattedCoreSequenceTensor = r.makeCoreSequenceTensor();
 
 	size_t sizeSequence = unformattedCoreSequenceTensor.size();
-	assert(sizeSequence > 0);
+	// assert(sizeSequence > 0);
+
+	//
+	
+    try {
+        custom_assert_2(sizeSequence > 0, "Assertion failed: assert(sizeSequence > 0) in runCNN, detect.cpp");
+        
+    } catch (const std::runtime_error& e) {
+        std::cerr << "Caught an exception: " << e.what() << std::endl;
+		r.QCpassed = false;
+		return;
+    }
+
+	//
+
 
 	float *tmp_coreSequenceArray = (float *)malloc(sizeSequence*sizeof(float));
 	for(size_t i = 0; i < sizeSequence; i++){
@@ -855,6 +879,12 @@ int detect_main( int argc, char** argv ){
 				}
 
 				runCNN(r,session,inputOps,args.humanReadable);
+
+				if (not r.QCpassed){
+					failed++;
+					prog++;
+					continue;
+				}
 
 				prog++;
 				pb.displayProgress( prog, failed, failedEvents );
